@@ -1,0 +1,42 @@
+{
+  "name": "frontrun",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.12.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @frontrun/api --filter @frontrun/workers --filter @frontrun/web dev",
+    "dev:api": "pnpm --filter @frontrun/api dev",
+    "dev:workers": "pnpm --filter @frontrun/workers dev",
+    "dev:web": "pnpm --filter @frontrun/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:live": "vitest run --project live",
+    "db:generate": "pnpm --filter @frontrun/server db:generate",
+    "db:migrate": "pnpm --filter @frontrun/server db:migrate",
+    "privy:policy": "pnpm --filter @frontrun/server privy:policy",
+    "keys:check": "pnpm --filter @frontrun/server keys:check",
+    "signer:test": "pnpm --filter @frontrun/server signer:test",
+    "registry:deploy": "pnpm --filter @frontrun/server registry:deploy",
+    "registry:smoke": "pnpm --filter @frontrun/server registry:smoke",
+    "live:test": "pnpm --filter @frontrun/server live:test",
+    "sponsor:test": "pnpm --filter @frontrun/server sponsor:test"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.0",
+    "tsx": "^4.20.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp",
+      "unrs-resolver"
+    ]
+  }
+}
