@@ -74,18 +74,15 @@ pnpm sponsor:test
 
 It sends real sponsored transactions from empty wallets on Arc and Base, and confirms Flash accepts an upgraded wallet's signature.
 
-### Move the database off this machine
+### The database
 
-Everything lives in a local Postgres until this is done, so losing this laptop loses the data. Any hosted Postgres works, and the deck suggests Neon or Supabase.
+The app's data lives in Neon, a hosted Postgres. `DATABASE_URL` has to be Neon's **direct** connection, with no `-pooler` in the hostname: the API and workers take a Postgres advisory lock when they migrate on boot, and a pooler can drop that lock between statements. Set `sslmode=verify-full` so the driver checks the certificate and stays quiet about it.
 
-1. Create a project and copy its connection string, with `sslmode=require`.
-2. Stop the API and workers, then copy the data across:
+To move to another Postgres later, stop the API and workers, then copy the data across:
 
 ```bash
 pg_dump --no-owner --no-acl "$OLD_DATABASE_URL" | psql "$NEW_DATABASE_URL"
 ```
-
-3. Put the new string in `.env` as `DATABASE_URL`, and start the API and workers. They apply any new migrations on boot.
 
 ## 3. Switch to live
 
