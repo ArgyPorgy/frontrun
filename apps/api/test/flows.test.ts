@@ -210,6 +210,15 @@ describe("closing a position", () => {
     expect((await client.thesis(thesis.id)).outcome).toBe("pending");
   });
 
+  it("marks only the sale that closes a position", async () => {
+    const { client } = await loginFunded("closeflag");
+    await buy(client, TOKEN_A, "100");
+    const partial = await sell(client, TOKEN_A, 25);
+    expect(partial.trade.closedPosition).toBe(false);
+    const rest = await sell(client, TOKEN_A, 100);
+    expect(rest.trade.closedPosition).toBe(true);
+  });
+
   it("reports what a sale made on the trade itself", async () => {
     const { client } = await loginFunded("pnlcard");
     await buy(client, TOKEN_A, "100");

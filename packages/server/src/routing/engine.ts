@@ -57,6 +57,15 @@ function recordEvents(events: Array<{ provider: string; kind: "quote_ok" | "quot
  * Quotes every provider serving the route at once, then keeps the best score. The user only ever sees
  * one price. A provider that misses the race window simply doesn't take part in this trade.
  */
+/**
+ * Takes quotes best first. LI.FI can't collect the app's fee until a fee wallet is set up with them, so
+ * until then it only wins when nothing else can do the trade.
+ */
+export function pickWinner(best: ProviderQuote[], lifiCollectsFee: boolean): ProviderQuote | null {
+  if (lifiCollectsFee) return best[0] ?? null;
+  return best.find((q) => q.provider !== "lifi") ?? best[0] ?? null;
+}
+
 export async function raceQuotes(req: RouteRequest, opts: { liquidityUsd: string | null }): Promise<RaceResult> {
   const providers = providersFor(req);
   const rates = await failureRates().catch(() => ({} as Record<string, number>));
@@ -97,7 +106,7 @@ export async function raceQuotes(req: RouteRequest, opts: { liquidityUsd: string
   recordEvents(events);
 
   candidates.sort((a, b) => b.score - a.score);
-  let winner = candidates[0]?.quote ?? null;
+  let winner = pickWinner(candidates.map((c) => c.quote), !!env().LIFI_FEE);
 
   if (!winner && env().TRADING_MODE === "paper") {
     winner = syntheticQuote(req, opts.liquidityUsd);

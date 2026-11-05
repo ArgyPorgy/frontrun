@@ -2,24 +2,18 @@
 
 import { APP_NAME, D, explorerTxUrl, formatPct, formatPrice, formatQty, formatUsd, type TradeView } from "@frontrun/core";
 import { useState } from "react";
-import { useLivePrice } from "@/lib/socket";
 import { Button, ChainLogo, Sheet, TokenIcon } from "./ui";
 
-/** A sell has its real result. A buy shows how it's doing right now, so it needs the live price. */
-function useTradePnl(trade: TradeView): { usd: number; pct: number | null; label: string } | null {
-  const tick = useLivePrice(trade.token.chain, trade.token.address);
-  if (trade.status !== "filled") return null;
-  if (trade.side === "sell") {
-    if (trade.pnlUsd === null || !trade.usdOut) return null;
-    const usd = D(trade.pnlUsd).toNumber();
-    const cost = D(trade.usdOut).toNumber() - usd;
-    return { usd, pct: cost > 0 ? (usd / cost) * 100 : null, label: "Realized PnL" };
-  }
-  const price = tick?.priceUsd ?? trade.priceUsd;
-  if (!price || !trade.qty || !trade.usdIn) return null;
-  const spent = D(trade.usdIn).toNumber();
-  const usd = D(trade.qty).mul(price).toNumber() - spent;
-  return { usd, pct: spent > 0 ? (usd / spent) * 100 : null, label: "PnL so far" };
+/** The card marks a closed position, or says why a trade failed. An open position has its own panel. */
+export function earnsTradeCard(trade: TradeView): boolean {
+  return trade.status === "failed" || trade.status === "refunded" || (trade.side === "sell" && trade.status === "filled" && trade.closedPosition);
+}
+
+function tradePnl(trade: TradeView): { usd: number; pct: number | null } | null {
+  if (trade.pnlUsd === null || !trade.usdOut) return null;
+  const usd = D(trade.pnlUsd).toNumber();
+  const cost = D(trade.usdOut).toNumber() - usd;
+  return { usd, pct: cost > 0 ? (usd / cost) * 100 : null };
 }
 
 function shareTrade(trade: TradeView, pnl: { usd: number; pct: number | null } | null) {
@@ -32,7 +26,7 @@ function shareTrade(trade: TradeView, pnl: { usd: number; pct: number | null } |
 }
 
 function FilledCard({ trade }: { trade: TradeView }) {
-  const pnl = useTradePnl(trade);
+  const pnl = tradePnl(trade);
   const [details, setDetails] = useState(false);
   const isBuy = trade.side === "buy";
   const up = (pnl?.usd ?? 0) >= 0;
@@ -55,7 +49,7 @@ function FilledCard({ trade }: { trade: TradeView }) {
         </div>
         {pnl && (
           <div className="mt-4">
-            <p className="text-xs text-muted">{pnl.label}</p>
+            <p className="text-xs text-muted">Realized PnL</p>
             <p className={`num mt-0.5 text-3xl font-semibold tracking-tight ${up ? "text-up" : "text-down"}`}>{formatUsd(pnl.usd, { sign: true })}</p>
             {pnl.pct !== null && <p className={`num text-sm font-medium ${up ? "text-up" : "text-down"}`}>{formatPct(pnl.pct)}</p>}
           </div>

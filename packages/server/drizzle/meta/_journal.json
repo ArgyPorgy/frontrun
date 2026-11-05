@@ -22,6 +22,13 @@
       "when": 1793918605000,
       "tag": "0002_trade_pnl_and_links",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793922203405,
+      "tag": "0003_trade_closed_position",
+      "breakpoints": true
     }
   ]
 }

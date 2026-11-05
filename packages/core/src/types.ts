@@ -297,6 +297,7 @@ export interface TradeView {
   priceUsd: string | null;
   feeUsd: string | null;
   pnlUsd: string | null;
+  closedPosition: boolean;
   provider: ProviderId;
   srcChain: ChainKey;
   srcTx: string | null;

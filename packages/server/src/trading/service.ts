@@ -349,6 +349,7 @@ export function tradeToView(row: typeof schema.trades.$inferSelect, token: Token
     priceUsd: row.priceUsd,
     feeUsd: row.feeUsd,
     pnlUsd: row.pnlUsd,
+    closedPosition: row.closedPosition,
     provider: row.provider as ProviderId,
     srcChain: row.srcChain as ChainKey,
     srcTx: row.srcTx,
@@ -630,8 +631,11 @@ export async function applyStatus(tradeId: string, update: StatusUpdate): Promis
         fields.applied = true;
         if (update.usdIn) fields.usdIn = update.usdIn;
         if (update.usdOut) fields.usdOut = update.usdOut;
-        const pnl = await applyFillToPosition(tx as unknown as Db, trade, update);
-        if (pnl !== null) fields.pnlUsd = pnl;
+        const sale = await applyFillToPosition(tx as unknown as Db, trade, update);
+        if (sale) {
+          fields.pnlUsd = sale.pnlUsd;
+          fields.closedPosition = sale.closed;
+        }
       }
     }
     await tx.update(schema.trades).set(fields).where(eq(schema.trades.id, tradeId));
@@ -650,8 +654,8 @@ export async function applyStatus(tradeId: string, update: StatusUpdate): Promis
   }
 }
 
-/** Returns what a sale realized, or null when there's nothing to report. */
-async function applyFillToPosition(tx: Db, trade: typeof schema.trades.$inferSelect, update: StatusUpdate): Promise<string | null> {
+/** Returns what a sale realized and whether it closed the position. Null when there's nothing to report. */
+async function applyFillToPosition(tx: Db, trade: typeof schema.trades.$inferSelect, update: StatusUpdate): Promise<{ pnlUsd: string; closed: boolean } | null> {
   const [row] = await tx
     .select()
     .from(schema.positions)
@@ -691,7 +695,7 @@ async function applyFillToPosition(tx: Db, trade: typeof schema.trades.$inferSel
     return null;
   }
   const usdOut = update.usdOut ?? "0";
-  let realized: string | null = null;
+  let sale: { pnlUsd: string; closed: boolean } | null = null;
   if (row) {
     const result = applySell(state, { qty: update.qty!, usdReceived: usdOut, feesUsd: update.extraCostUsd });
     await tx
@@ -703,7 +707,7 @@ async function applyFillToPosition(tx: Db, trade: typeof schema.trades.$inferSel
         ...(result.closed ? { closedAt: new Date() } : {}),
       })
       .where(eq(schema.positions.id, row.id));
-    realized = D(result.state.realizedPnlUsd).sub(state.realizedPnlUsd).toFixed();
+    sale = { pnlUsd: D(result.state.realizedPnlUsd).sub(state.realizedPnlUsd).toFixed(), closed: result.closed };
   }
   if (trade.isPaper) {
     await tx
@@ -711,7 +715,7 @@ async function applyFillToPosition(tx: Db, trade: typeof schema.trades.$inferSel
       .set({ paperBalanceUsd: sql`${schema.users.paperBalanceUsd} + ${usdOut}::numeric` })
       .where(eq(schema.users.id, trade.userId));
   }
-  return realized;
+  return sale;
 }
 
 async function notifyTradeResult(trade: typeof schema.trades.$inferSelect, status: TradeStatus) {

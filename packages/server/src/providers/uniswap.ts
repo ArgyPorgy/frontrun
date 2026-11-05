@@ -57,6 +57,7 @@ interface UniswapQuoteResponse {
   isTokenApprovalApplicable?: boolean;
   quote: {
     output?: { amount?: string };
+    aggregatedOutputs?: Array<{ amount: string; recipient: string; fee?: string }>;
     gasFeeUSD?: string;
     priceImpact?: number | string;
   };
@@ -137,6 +138,7 @@ export const uniswapProvider: RouteProvider = {
     const { tokenIn, tokenOut } = tokensFor(req);
     const amountIn = req.side === "buy" ? toBaseUnits(req.usdcIn!, CHAINS.arc.usdcDecimals) : toBaseUnits(req.qtyIn!, decimals);
     const decimalsOut = req.side === "buy" ? decimals : CHAINS.arc.usdcDecimals;
+    const { FLASH_INTEGRATOR_FEE_BPS: feeBps, FEE_RECIPIENT_ADDRESS: feeRecipient } = env();
     const response = await fetchJson<UniswapQuoteResponse>(`${API}/quote`, {
       method: "POST",
       headers: apiHeaders(),
@@ -152,13 +154,17 @@ export const uniswapProvider: RouteProvider = {
         routingPreference: "BEST_PRICE",
         // UniswapX isn't part of the plan's Arc route, so AMM protocols only.
         protocols: ["V2", "V3", "V4"],
+        ...(feeBps > 0 && feeRecipient ? { integratorFees: [{ bips: feeBps, recipient: feeRecipient }] } : {}),
       },
       timeoutMs: 4_000,
       signal,
     });
     if (response.routing !== "CLASSIC") throw new Error(`Unsupported Uniswap routing: ${response.routing}`);
-    const outRaw = response.quote.output?.amount;
+    // With a fee, `output` stays gross and the split is in aggregatedOutputs. The user gets their own line.
+    const swapper = req.evmAddress.toLowerCase();
+    const outRaw = response.quote.aggregatedOutputs?.find((o) => o.recipient.toLowerCase() === swapper)?.amount ?? response.quote.output?.amount;
     if (!outRaw) throw new Error("Uniswap returned no output amount");
+    const charged = response.quote.aggregatedOutputs?.some((o) => o.fee === "INTEGRATOR");
     const out = fromBaseUnits(BigInt(outRaw), decimalsOut);
     const gas = gaslessEnabled() ? "0" : (response.quote.gasFeeUSD ?? "0");
     const impact = response.quote.priceImpact != null ? Number(response.quote.priceImpact) / 100 : null;
@@ -167,7 +173,7 @@ export const uniswapProvider: RouteProvider = {
       provider: "uniswap",
       netOutputUsd: D(valueOut(req, out)).sub(gas).toFixed(),
       expectedOut: out,
-      feeUsd: "0",
+      feeUsd: charged ? D(req.notionalUsd).mul(feeBps).div(10_000).toFixed() : "0",
       gasUsd: gas,
       etaSeconds: 2,
       priceImpact: impact,

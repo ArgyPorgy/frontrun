@@ -10,6 +10,8 @@ vi.hoisted(() => {
 import { BaseError, ContractFunctionRevertedError, HttpRequestError } from "viem";
 import { THESIS_REGISTRY_ABI, anchorArgs, canonicalThesis, isThesisSpecificFailure, thesisHash } from "../src/anchoring";
 import { assertSafeForProduction, resetEnvForTests, type Env } from "../src/env";
+import { pickWinner } from "../src/routing/engine";
+import type { ProviderQuote } from "../src/providers/types";
 import { gaslessEnabled, sponsorshipConfigured } from "../src/trading/sponsor";
 import { pairToSnapshot, bestSnapshot, type DexPair } from "../src/market/dexscreener";
 import { parseSwapReceipt } from "../src/onchain";
@@ -539,5 +541,26 @@ describe("gas sponsorship", () => {
       expect(sponsorshipConfigured("hyperevm")).toBe(false);
       expect(sponsorshipConfigured("solana")).toBe(false);
     });
+  });
+});
+
+describe("the app's fee", () => {
+  const quote = (provider: string) => ({ provider }) as ProviderQuote;
+
+  it("skips a route that can't collect the fee when another can do the trade", () => {
+    expect(pickWinner([quote("lifi"), quote("flash")], false)?.provider).toBe("flash");
+  });
+
+  it("still uses that route when it's the only way to trade", () => {
+    expect(pickWinner([quote("lifi")], false)?.provider).toBe("lifi");
+  });
+
+  it("lets it compete on price once it can collect", () => {
+    expect(pickWinner([quote("lifi"), quote("flash")], true)?.provider).toBe("lifi");
+  });
+
+  it("sends the fee to Flash on quotes and orders", () => {
+    const request = { side: "buy", chain: "base", address: TOKEN, decimals: 18, usdcIn: "10", evmAddress: WALLET, solanaAddress: null, priceUsd: "1", notionalUsd: "10" } as const;
+    expect(buildFlashParams(request, 50).flashIntegratorFeeBps).toBe("50");
   });
 });

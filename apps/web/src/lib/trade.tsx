@@ -3,7 +3,7 @@
 import { ApiError, D, TERMINAL_STATUSES, type ChainKey, type PortfolioView, type QuoteView, type TradeView } from "@frontrun/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { TradeCardSheet } from "@/components/trade-card";
+import { TradeCardSheet, earnsTradeCard } from "@/components/trade-card";
 import { api, errorMessage } from "./api";
 import { useAuth } from "./auth";
 import { useSocket } from "./socket";
@@ -70,7 +70,7 @@ export function TradeRunnerProvider({ children }: { children: ReactNode }) {
       if (terminal) {
         watching.current.delete(t.id);
         claimed.current.delete(t.id);
-        setReceipt(t);
+        if (earnsTradeCard(t)) setReceipt(t);
         void queryClient.invalidateQueries({ queryKey: ["portfolio"] });
         void queryClient.invalidateQueries({ queryKey: ["balance"] });
         void queryClient.invalidateQueries({ queryKey: ["position"] });

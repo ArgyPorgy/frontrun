@@ -57,6 +57,7 @@ export const lifiProvider: RouteProvider = {
       slippage: String(GUARDRAILS.crossChainSlippage),
       integrator: env().LIFI_INTEGRATOR,
       order: "RECOMMENDED",
+      ...(env().LIFI_FEE ? { fee: env().LIFI_FEE! } : {}),
     });
     const raw = await fetchJson<LifiQuote>(`${BASE}/quote?${params}`, { headers: headers(), timeoutMs: 4_000, signal });
     const out = fromBaseUnits(BigInt(raw.estimate.toAmount), raw.action.toToken.decimals);

@@ -80,6 +80,8 @@ export const trades = pgTable("trades", {
   priceUsd: usd("price_usd"),
   /** What this sale made or lost against its cost basis. Null on buys. */
   pnlUsd: usd("pnl_usd"),
+  /** This sale sold the whole position, which is what earns a PnL card. */
+  closedPosition: boolean("closed_position").notNull().default(false),
   feeUsd: usd("fee_usd"),
   provider: text("provider").notNull(),
   providerOrderId: text("provider_order_id"),

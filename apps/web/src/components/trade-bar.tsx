@@ -74,6 +74,12 @@ function ConfirmSheet({
           <dt className="text-muted">Max slippage</dt>
           <dd>{(quote.slippage * 100).toFixed(0)}%</dd>
         </div>
+        {D(quote.feeUsd).gt(0) && (
+          <div className="flex justify-between">
+            <dt className="text-muted">Fee</dt>
+            <dd>{formatUsd(quote.feeUsd)}</dd>
+          </div>
+        )}
         {quote.priceImpact !== null && (
           <div className="flex justify-between">
             <dt className="text-muted">Price impact</dt>

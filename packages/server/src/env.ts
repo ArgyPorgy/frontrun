@@ -45,7 +45,12 @@ const schema = z.object({
   PRIVY_SOLANA_POLICY_IDS: optional,
 
   FLASH_API_KEY: optional,
-  FLASH_INTEGRATOR_FEE_BPS: z.coerce.number().min(0).max(1000).default(0),
+  /** The app's fee on every trade, in basis points. It applies on every route that can collect one. */
+  FLASH_INTEGRATOR_FEE_BPS: z.coerce.number().min(0).max(1000).default(50),
+  /** Receives the fee on Uniswap trades. Flash pays its fee into the Definitive account instead. */
+  FEE_RECIPIENT_ADDRESS: optional,
+  /** Set to 0.005 once a fee wallet is set up at portal.li.fi. Until then LI.FI is only a last resort. */
+  LIFI_FEE: optional,
   UNISWAP_API_KEY: optional,
   LIFI_API_KEY: optional,
   LIFI_INTEGRATOR: z.string().default("frontrun"),

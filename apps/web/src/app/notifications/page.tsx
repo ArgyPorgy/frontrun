@@ -4,7 +4,8 @@ import { timeAgo, type NotificationView, type TradeView } from "@frontrun/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { TradeCardSheet } from "@/components/trade-card";
+import { useRouter } from "next/navigation";
+import { TradeCardSheet, earnsTradeCard } from "@/components/trade-card";
 import { Avatar, Button, EmptyState, PageTitle, RowSkeletons, TokenIcon } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -33,6 +34,12 @@ export default function NotificationsPage() {
   const query = useQuery({ queryKey: ["notifications"], queryFn: () => api.notifications(), enabled: status === "in" });
   const unread = query.data?.unread ?? 0;
   const [openTrade, setOpenTrade] = useState<TradeView | null>(null);
+  const router = useRouter();
+  const openNotification = async (n: NotificationView) => {
+    const trade = await api.trade(n.tradeId!);
+    if (earnsTradeCard(trade)) setOpenTrade(trade);
+    else router.push(hrefFor(n));
+  };
   useEffect(() => {
     if (unread > 0) {
       void api.markNotificationsRead().then(() => queryClient.invalidateQueries({ queryKey: ["notifications"] }));
@@ -50,7 +57,7 @@ export default function NotificationsPage() {
           {query.data.items.map((n) => (
             <li key={n.id}>
               {n.tradeId ? (
-                <button onClick={() => void api.trade(n.tradeId!).then(setOpenTrade)} className={`flex w-full items-center gap-3 px-4 py-3 text-left ${n.read ? "" : "bg-signal/5"}`}>
+                <button onClick={() => void openNotification(n)} className={`flex w-full items-center gap-3 px-4 py-3 text-left ${n.read ? "" : "bg-signal/5"}`}>
                   <NotificationBody n={n} />
                 </button>
               ) : (
