@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "entries": {
+    "contracts/ThesisRegistry.sol": {
+      "hash": "9a966e11ac2c210bbc72e058878e563369f03d7b7b1551adff5b40c84ec21147",
+      "pulledAt": "2026-11-05T18:46:38.396Z"
+    },
+    "contracts/contract-metadata/.gitkeep": {
+      "hash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "pulledAt": "2026-11-05T18:46:38.397Z"
+    },
+    "contracts/contract-metadata/ThesisRegistry.json": {
+      "hash": "894ced8509a64ada5eb2112c3f008ac5513cec595b182a5f30f799710b07880a",
+      "pulledAt": "2026-11-05T18:46:38.398Z"
+    },
+    "contracts/test/.gitkeep": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "pulledAt": "2026-11-05T18:46:38.398Z"
+    },
+    "contracts/test/ThesisRegistry.t.sol": {
+      "hash": "1e3b417eaf018cbef2dc6c19a3d092278c7a1746a3c24abb060fc7d9da07925c",
+      "pulledAt": "2026-11-05T18:46:38.399Z"
+    }
+  }
+}

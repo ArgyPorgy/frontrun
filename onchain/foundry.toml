@@ -1,0 +1,11 @@
+# ThesisRegistry was written, tested and reviewed in Arc Studio, then pulled here to deploy to mainnet.
+[profile.default]
+src = "contracts"
+test = "contracts/test"
+script = "contracts/script"
+out = "out"
+libs = ["lib"]
+solc = "0.8.30"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 200
