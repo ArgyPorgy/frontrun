@@ -113,9 +113,37 @@ export function TradeRunnerProvider({ children }: { children: ReactNode }) {
       if (TERMINAL_STATUSES.includes(trade.status) || trade.status === "awaiting_signature") return;
       claimed.current.add(trade.id);
       toast(`${trade.side === "buy" ? "Bought" : "Sold"} ${trade.token.symbol}`, { key: `trade:${trade.id}`, tone: "good" });
-      if (trade.side !== "sell") return;
-      // A full sale leaves the position straight away too. A failure refetches it, which puts it back.
       const { chain, address } = trade.token;
+      if (trade.side === "buy") {
+        // A new position shows straight away too, from the quote, until the fill brings the real one.
+        queryClient.setQueryData<PortfolioView>(["portfolio"], (p) =>
+          !p || p.open.some((o) => o.token.chain === chain && o.token.address === address)
+            ? p
+            : {
+                ...p,
+                open: [
+                  {
+                    id: `pending:${trade.id}`,
+                    token: trade.token,
+                    qty: quote.expectedQty,
+                    costBasisUsd: quote.amountInUsd,
+                    avgEntryUsd: quote.priceUsd,
+                    realizedPnlUsd: "0",
+                    openedAt: new Date().toISOString(),
+                    closedAt: null,
+                    priceUsd: quote.priceUsd,
+                    marketCapUsd: null,
+                    valueUsd: quote.amountInUsd,
+                    unrealizedPnlUsd: "0",
+                    returnPct: 0,
+                  },
+                  ...p.open,
+                ],
+              },
+        );
+        return;
+      }
+      // A full sale leaves the position straight away too. A failure refetches it, which puts it back.
       const key = ["position", chain, address];
       const held = queryClient.getQueryData<{ position: { qty: string } | null }>(key)?.position;
       if (!held || !quote.qtyIn || D(quote.qtyIn).lt(D(held.qty).mul("0.999"))) return;

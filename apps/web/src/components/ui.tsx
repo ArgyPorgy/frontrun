@@ -224,7 +224,7 @@ export function PillFilter<T extends string | number>({
   onChange,
   className = "",
 }: {
-  options: Array<{ value: NoInfer<T>; label: string }>;
+  options: Array<{ value: NoInfer<T>; label: string; icon?: ReactNode }>;
   value: T;
   onChange(value: NoInfer<T>): void;
   className?: string;
@@ -236,10 +236,11 @@ export function PillFilter<T extends string | number>({
           key={String(o.value)}
           onClick={() => onChange(o.value)}
           aria-pressed={o.value === value}
-          className={`shrink-0 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
+          className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
             o.value === value ? "border-ink/50 bg-raised text-ink" : "border-line text-muted hover:text-ink"
           }`}
         >
+          {o.icon}
           {o.label}
         </button>
       ))}

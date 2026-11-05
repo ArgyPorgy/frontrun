@@ -74,6 +74,19 @@ pnpm sponsor:test
 
 It sends real sponsored transactions from empty wallets on Arc and Base, and confirms Flash accepts an upgraded wallet's signature.
 
+### Move the database off this machine
+
+Everything lives in a local Postgres until this is done, so losing this laptop loses the data. Any hosted Postgres works, and the deck suggests Neon or Supabase.
+
+1. Create a project and copy its connection string, with `sslmode=require`.
+2. Stop the API and workers, then copy the data across:
+
+```bash
+pg_dump --no-owner --no-acl "$OLD_DATABASE_URL" | psql "$NEW_DATABASE_URL"
+```
+
+3. Put the new string in `.env` as `DATABASE_URL`, and start the API and workers. They apply any new migrations on boot.
+
 ## 3. Switch to live
 
 **Already done on this machine.** `TRADING_MODE=live`, and `DATABASE_URL` points at a fresh `frontrun_live`, so paper data can never show as real. The old paper data is still in `frontrun_dev`.

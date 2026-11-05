@@ -1,17 +1,13 @@
 "use client";
 
-import { CHAINS, CHAIN_KEYS, type ChainKey } from "@frontrun/core";
+import type { ChainKey } from "@frontrun/core";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { CHAIN_OPTIONS } from "@/components/thesis-feed";
 import { TokenRow } from "@/components/token-row";
 import { EmptyState, PillFilter, RowSkeletons } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useDebounced } from "@/lib/hooks";
-
-const CHAIN_OPTIONS: Array<{ value: ChainKey | "all"; label: string }> = [
-  { value: "all", label: "All chains" },
-  ...CHAIN_KEYS.map((k) => ({ value: k as ChainKey | "all", label: CHAINS[k].name })),
-];
 
 export default function SearchPage() {
   const [text, setText] = useState("");

@@ -1,12 +1,13 @@
 "use client";
 
+import { APP_NAME, D, formatUsd } from "@frontrun/core";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useConfig, useMe } from "@/lib/hooks";
+import { useBalance, useConfig, useMe } from "@/lib/hooks";
 import { Avatar } from "./ui";
 
 type IconName = "trending" | "search" | "portfolio" | "profile" | "bell";
@@ -65,10 +66,9 @@ function TabBar() {
   return (
     <nav
       aria-label="Main"
-      className="pad-bottom fixed inset-x-0 bottom-0 z-30 border-t border-line bg-bg/95 backdrop-blur md:inset-x-auto md:top-0 md:bottom-0 md:left-0 md:w-52 md:border-t-0 md:border-r md:pt-4"
+      className="pad-bottom fixed inset-x-0 bottom-0 z-30 border-t border-line bg-bg/95 backdrop-blur md:hidden"
     >
-      <p className="hidden px-5 pb-5 text-lg font-semibold tracking-tight md:block">Front Run</p>
-      <ul className="flex md:flex-col md:gap-1 md:px-2">
+      <ul className="flex">
         {TABS.map((tab) => {
           const active = tab.match(pathname);
           return (
@@ -76,9 +76,7 @@ function TabBar() {
               <Link
                 href={tab.href}
                 aria-current={active ? "page" : undefined}
-                className={`flex flex-col items-center gap-0.5 py-2 text-[11px] font-medium md:flex-row md:gap-3 md:rounded-lg md:px-3 md:py-2.5 md:text-sm ${
-                  active ? "text-ink md:bg-raised" : "text-faint hover:text-muted"
-                }`}
+                className={`flex flex-col items-center gap-0.5 py-2 text-[11px] font-medium ${active ? "text-ink" : "text-faint hover:text-muted"}`}
               >
                 <Icon name={tab.icon} active={active} />
                 {tab.label}
@@ -88,6 +86,48 @@ function TabBar() {
         })}
       </ul>
     </nav>
+  );
+}
+
+const WIDE_NAV: Array<{ href: string; label: string; match: (p: string) => boolean }> = [
+  { href: "/", label: "Discover", match: (p) => p === "/" || p.startsWith("/token") || p.startsWith("/thesis") },
+  { href: "/portfolio", label: "Portfolio", match: (p) => p.startsWith("/portfolio") },
+  { href: "/leaderboard", label: "Leaderboard", match: (p) => p.startsWith("/leaderboard") },
+];
+
+function Logo() {
+  return (
+    <Link href="/" className="hidden shrink-0 items-center gap-2 md:flex" aria-label={APP_NAME}>
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden className="text-signal">
+        <path fill="currentColor" d="M13.5 2 4 13.5h6.2L9 22l10-12.5h-6.4L13.5 2Z" />
+      </svg>
+      <span className="text-lg font-semibold tracking-tight">{APP_NAME}</span>
+    </Link>
+  );
+}
+
+/** Cash to trade with, and what's in positions, always in view on a wide screen. */
+function WalletPills() {
+  const { status } = useAuth();
+  const balance = useBalance();
+  const portfolio = useQuery({ queryKey: ["portfolio"], queryFn: () => api.portfolio(), enabled: status === "in", refetchInterval: 30_000 });
+  if (status !== "in") return null;
+  const allTime = portfolio.data ? D(portfolio.data.totals.allTimeUsd) : null;
+  return (
+    <div className="hidden shrink-0 items-stretch gap-2 md:flex">
+      <div className="flex h-10 flex-col justify-center rounded-xl bg-surface px-3 leading-tight">
+        <span className="num text-sm font-medium">
+          {formatUsd(balance.data?.usdc)} <span className="font-normal text-muted">cash</span>
+        </span>
+        <Link href="/deposit" className="text-xs font-medium text-signal">
+          Deposit
+        </Link>
+      </div>
+      <Link href="/portfolio" className="flex h-10 flex-col justify-center rounded-xl bg-surface px-3 leading-tight">
+        <span className="num text-sm font-medium">{formatUsd(portfolio.data?.totals.valueUsd)}</span>
+        <span className={`num text-xs ${allTime === null ? "text-faint" : allTime.gte(0) ? "text-up" : "text-down"}`}>{allTime === null ? "—" : `${formatUsd(allTime.toFixed(), { sign: true })} all time`}</span>
+      </Link>
+    </div>
   );
 }
 
@@ -102,13 +142,23 @@ function TopBar() {
     refetchInterval: 60_000,
   });
   const unread = notifications.data?.unread ?? 0;
+  const pathname = usePathname();
   return (
     <header className="pad-top sticky top-0 z-20 border-b border-line/70 bg-bg/95 backdrop-blur">
-      <div className="flex items-center gap-2.5 px-4 py-2">
-        <Link href="/search" className="flex h-9 flex-1 items-center gap-2 rounded-xl bg-surface px-3 text-sm text-faint">
+      <div className="flex items-center gap-2.5 px-4 py-2 md:gap-4">
+        <Logo />
+        <nav aria-label="Main" className="hidden shrink-0 items-center gap-1 md:flex">
+          {WIDE_NAV.map((item) => (
+            <Link key={item.href} href={item.href} className={`rounded-lg px-2.5 py-1.5 text-sm font-medium ${item.match(pathname) ? "text-ink" : "text-muted hover:text-ink"}`}>
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+        <Link href="/search" className="flex h-9 flex-1 items-center gap-2 rounded-xl bg-surface px-3 text-sm text-faint md:h-10">
           <Icon name="search" />
           <span className="truncate">Search any token</span>
         </Link>
+        <WalletPills />
         {status === "in" ? (
           <>
             <Link href="/notifications" aria-label={unread ? `${unread} unread notifications` : "Notifications"} className="relative flex h-9 w-9 items-center justify-center text-muted">
@@ -197,13 +247,16 @@ function InstallHint() {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  // The front page runs edge to edge on a wide screen, with its own columns.
+  const wideHome = pathname === "/";
   return (
-    <div className="min-h-dvh md:pl-52">
+    <div className="min-h-dvh">
       <TabBar />
       <TopBar />
       <PaperBanner />
       <InstallHint />
-      <main className="mx-auto max-w-5xl pb-[calc(env(safe-area-inset-bottom)+72px)] md:pb-10">{children}</main>
+      <main className={`mx-auto max-w-5xl pb-[calc(env(safe-area-inset-bottom)+72px)] md:pb-10 ${wideHome ? "lg:max-w-none lg:pb-0" : ""}`}>{children}</main>
     </div>
   );
 }
