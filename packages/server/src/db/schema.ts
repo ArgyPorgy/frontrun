@@ -130,6 +130,21 @@ export const orders = pgTable("orders", {
   closedAt: ts("closed_at"),
 }, (t) => [index("orders_user").on(t.userId, t.status), index("orders_open").on(t.status, t.engine)]);
 
+export const trackerPosts = pgTable("tracker_posts", {
+  /** The source's own id, so reading a post twice can't save it twice. */
+  id: text("id").primaryKey(),
+  source: text("source", { enum: ["x", "telegram"] }).notNull(),
+  authorHandle: text("author_handle").notNull(),
+  authorName: text("author_name").notNull(),
+  authorAvatar: text("author_avatar"),
+  kind: text("kind").notNull(),
+  body: text("body").notNull(),
+  url: text("url").notNull(),
+  tokens: jsonb("tokens").$type<string[]>().notNull().default([]),
+  postedAt: ts("posted_at").notNull(),
+  createdAt: ts("created_at").notNull().defaultNow(),
+}, (t) => [index("tracker_posts_feed").on(t.source, t.postedAt)]);
+
 export const positions = pgTable("positions", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),

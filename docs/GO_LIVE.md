@@ -74,6 +74,16 @@ pnpm sponsor:test
 
 It sends real sponsored transactions from empty wallets on Arc and Base, and confirms Flash accepts an upgraded wallet's signature.
 
+### Fees
+
+Every trade carries a 0.5% fee, set by `FLASH_INTEGRATOR_FEE_BPS`. Flash pays its share into the Flash Portfolio of your Definitive account, where you withdraw it from app.definitive.fi. Uniswap sends it to `FEE_RECIPIENT_ADDRESS`, in whichever token the trade pays out. LI.FI can't collect until you add a fee wallet at portal.li.fi and set `LIFI_FEE=0.005`, so until then it only runs when nothing else can do the trade.
+
+Flash also charges its own fee on limit and stop orders that rest on it, on top of yours: 0.10% through 2026 and 0.20% after. The deck flags trade fees for legal review.
+
+### The trackers
+
+The TG tracker reads Telegram's public web preview, and needs no key. The X tracker needs `X_BEARER_TOKEN` from developer.x.com, and X bills per post read, at about $0.005 a post. Set a spending limit in X's console. The lists of who's tracked are at the top of `packages/server/src/trackers.ts`.
+
 ### The database
 
 The app's data lives in Neon, a hosted Postgres. `DATABASE_URL` has to be Neon's **direct** connection, with no `-pooler` in the hostname: the API and workers take a Postgres advisory lock when they migrate on boot, and a pooler can drop that lock between statements. Set `sslmode=verify-full` so the driver checks the certificate and stays quiet about it.

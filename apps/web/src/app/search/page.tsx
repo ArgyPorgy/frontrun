@@ -2,7 +2,7 @@
 
 import type { ChainKey } from "@frontrun/core";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CHAIN_OPTIONS } from "@/components/thesis-feed";
 import { TokenRow } from "@/components/token-row";
 import { EmptyState, PillFilter, RowSkeletons } from "@/components/ui";
@@ -12,6 +12,11 @@ import { useDebounced } from "@/lib/hooks";
 export default function SearchPage() {
   const [text, setText] = useState("");
   const [chain, setChain] = useState<ChainKey | "all">("all");
+  // Links from the trackers arrive with the token already filled in.
+  useEffect(() => {
+    const incoming = new URLSearchParams(window.location.search).get("q");
+    if (incoming) setText(incoming);
+  }, []);
   const q = useDebounced(text.trim(), 300);
   const results = useQuery({
     queryKey: ["search", q, chain],

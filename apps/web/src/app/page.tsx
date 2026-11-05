@@ -6,12 +6,13 @@ import { useEffect, useState } from "react";
 import { HomeDesktop } from "@/components/home-desktop";
 import { CHAIN_OPTIONS, ThesisFeed } from "@/components/thesis-feed";
 import { TokenRow } from "@/components/token-row";
+import { TrackerFeed } from "@/components/tracker-feed";
 import { Button, EmptyState, LinkButton, PillFilter, RowSkeletons, Segmented } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useMe } from "@/lib/hooks";
 
-type Tab = "trending" | "new" | "top" | "following";
+type Tab = "trending" | "new" | "top" | "following" | "x" | "telegram";
 
 const LIVE_ROWS = 20;
 
@@ -127,12 +128,16 @@ function HomeMobile() {
             { value: "new", label: "New" },
             { value: "top", label: "Top thesis" },
             { value: "following", label: "Following" },
+            { value: "x", label: "X tracker" },
+            { value: "telegram", label: "TG tracker" },
           ]}
         />
-        <PillFilter className="mt-2 px-4" value={chain} onChange={setChain} options={CHAIN_OPTIONS} />
+        {tab !== "x" && tab !== "telegram" && <PillFilter className="mt-2 px-4" value={chain} onChange={setChain} options={CHAIN_OPTIONS} />}
       </div>
 
-      {tab === "top" || tab === "following" ? (
+      {tab === "x" || tab === "telegram" ? (
+        <TrackerFeed source={tab} />
+      ) : tab === "top" || tab === "following" ? (
         <ThesisFeed tab={tab} chain={chain} />
       ) : market.isLoading ? (
         <RowSkeletons />

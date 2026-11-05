@@ -75,7 +75,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       socket.on("price", (p: { chain: ChainKey; address: string; priceUsd: string }) => {
         const key = tokenKey(p.chain, p.address);
         if (store.get(key)) return;
-        store.set(key, { chain: p.chain, address: p.address, priceUsd: p.priceUsd, priceChange24h: 0, liquidityUsd: null, marketCapUsd: null, volume24hUsd: 0, at: Date.now() });
+        store.set(key, { chain: p.chain, address: p.address, priceUsd: p.priceUsd, priceChange24h: null, liquidityUsd: null, marketCapUsd: null, volume24hUsd: 0, at: Date.now() });
       });
       socket.on("thesis", (t: ThesisView) => thesisListeners.current.forEach((l) => l(t)));
       socket.on("trade", (e: { trade: TradeView }) => {

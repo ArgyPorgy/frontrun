@@ -1,5 +1,6 @@
 import { chainKeySchema, isValidAddress, normalizeAddress, timeframeSchema, type ChainKey } from "@frontrun/core";
 import {
+  listTrackerPosts,
   GECKO_ATTRIBUTION,
   AppError,
   getCandles,
@@ -33,6 +34,12 @@ export async function registerMarketRoutes(app: FastifyInstance) {
   app.get("/v1/market/search", { config: { rateLimit: { max: 120, timeWindow: "1 minute" } } }, async (req) => {
     const query = z.object({ q: z.string().min(1).max(80), chain: chainKeySchema.optional() }).parse(req.query);
     return { items: await searchTokens(query.q, query.chain) };
+  });
+
+  app.get("/v1/trackers/:source", async (req) => {
+    const { source } = z.object({ source: z.enum(["x", "telegram"]) }).parse(req.params);
+    const { before } = z.object({ before: z.string().datetime().optional() }).parse(req.query);
+    return listTrackerPosts(source, { before });
   });
 
   app.get("/v1/tokens/:chain/:address", async (req) => {

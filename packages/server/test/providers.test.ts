@@ -10,6 +10,7 @@ vi.hoisted(() => {
 import { BaseError, ContractFunctionRevertedError, HttpRequestError } from "viem";
 import { THESIS_REGISTRY_ABI, anchorArgs, canonicalThesis, isThesisSpecificFailure, thesisHash } from "../src/anchoring";
 import { assertSafeForProduction, resetEnvForTests, type Env } from "../src/env";
+import { extractTokens, isRelevant, parseTelegramPage, parseXResponse } from "../src/trackers";
 import { pickWinner } from "../src/routing/engine";
 import type { ProviderQuote } from "../src/providers/types";
 import { gaslessEnabled, sponsorshipConfigured } from "../src/trading/sponsor";
@@ -562,5 +563,46 @@ describe("the app's fee", () => {
   it("sends the fee to Flash on quotes and orders", () => {
     const request = { side: "buy", chain: "base", address: TOKEN, decimals: 18, usdcIn: "10", evmAddress: WALLET, solanaAddress: null, priceUsd: "1", notionalUsd: "10" } as const;
     expect(buildFlashParams(request, 50).flashIntegratorFeeBps).toBe("50");
+  });
+});
+
+describe("trackers", () => {
+  it("keeps posts that name a token or are about crypto, and drops the rest", () => {
+    expect(isRelevant("Just bought more $WIF, looks strong")).toBe(true);
+    expect(isRelevant("Bitcoin ETF flows are picking up again")).toBe(true);
+    expect(isRelevant("Check 0x4200000000000000000000000000000000000006 today")).toBe(true);
+    expect(isRelevant("Had a great dinner with friends tonight")).toBe(false);
+    expect(isRelevant("gm")).toBe(false);
+  });
+
+  it("finds tickers and addresses in a post", () => {
+    expect(extractTokens("$wif and $BONK on 0x4200000000000000000000000000000000000006")).toEqual(["$WIF", "$BONK", "0x4200000000000000000000000000000000000006"]);
+    expect(extractTokens("Costs $100 today")).toEqual([]);
+  });
+
+  it("reads X's response, and labels quotes", () => {
+    const posts = parseXResponse({
+      data: [
+        { id: "1", text: "hello", author_id: "a", created_at: "2026-11-06T00:00:00Z" },
+        { id: "2", text: "quoted", author_id: "a", created_at: "2026-11-06T00:00:00Z", referenced_tweets: [{ type: "quoted" }] },
+        { id: "3", text: "no author", author_id: "missing", created_at: "2026-11-06T00:00:00Z" },
+      ],
+      includes: { users: [{ id: "a", name: "Ann", username: "ann" }] },
+    });
+    expect(posts.map((p) => [p.id, p.kind, p.url])).toEqual([
+      ["x:1", "post", "https://x.com/ann/status/1"],
+      ["x:2", "quote", "https://x.com/ann/status/2"],
+    ]);
+  });
+
+  it("reads Telegram's preview page as plain text, with no markup left", () => {
+    const html = `<meta property="og:title" content="Guru &amp; Co">
+      <div class="tgme_widget_message_wrap js-widget_message_wrap"><div class="tgme_widget_message" data-post="guru/42">
+      <div class="tgme_widget_message_text js-message_text" dir="auto"><b>JUST IN:</b> $BTC &gt; 100k<br/>wow <script>alert(1)</script></div>
+      <div class="tgme_widget_message_footer"><time datetime="2026-11-06T01:02:03+00:00">x</time></div></div></div>`;
+    const [post] = parseTelegramPage(html, "guru");
+    expect(post).toMatchObject({ id: "telegram:guru:42", authorName: "Guru & Co", url: "https://t.me/guru/42" });
+    expect(post!.body.startsWith("JUST IN: $BTC > 100k\nwow")).toBe(true);
+    expect(post!.body).not.toContain("<");
   });
 });

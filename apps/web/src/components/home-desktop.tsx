@@ -12,6 +12,7 @@ import { useToast } from "@/lib/toast";
 import { useTradeRunner } from "@/lib/trade";
 import { OpenOrders } from "./orders-list";
 import { CHAIN_OPTIONS, ThesisFeed } from "./thesis-feed";
+import { TrackerFeed } from "./tracker-feed";
 import { Button, ChainLogo, EmptyState, LiveNumber, Pct, PillFilter, RowSkeletons, Segmented, TokenIcon } from "./ui";
 
 const LIVE_ROWS = 20;
@@ -44,22 +45,42 @@ function Panel({ title, right, children, className = "" }: { title?: string; rig
 }
 
 function SocialPanel() {
+  const [feed, setFeed] = useState<"thesis" | "x" | "telegram">("thesis");
   const [tab, setTab] = useState<"top" | "recent" | "following">("top");
   return (
-    <Panel title="Thesis feed" className="h-full">
-      <Segmented
-        className="shrink-0 px-3 pb-2"
-        value={tab}
-        onChange={setTab}
-        options={[
-          { value: "top", label: "Top" },
-          { value: "recent", label: "Latest" },
-          { value: "following", label: "Following" },
-        ]}
-      />
-      <div className="min-h-0 flex-1 overflow-y-auto border-t border-line/60">
-        <ThesisFeed tab={tab} chain="all" />
+    <Panel className="h-full">
+      <div className="flex shrink-0 gap-1 border-b border-line/60 px-2 pt-2" role="tablist" aria-label="Feed">
+        {(
+          [
+            { value: "thesis", label: "Thesis feed" },
+            { value: "x", label: "X tracker" },
+            { value: "telegram", label: "TG tracker" },
+          ] as const
+        ).map((f) => (
+          <button
+            key={f.value}
+            role="tab"
+            aria-selected={feed === f.value}
+            onClick={() => setFeed(f.value)}
+            className={`flex-1 border-b-2 px-1 pb-2 pt-1 text-sm font-semibold whitespace-nowrap transition-colors ${feed === f.value ? "border-signal text-ink" : "border-transparent text-muted hover:text-ink"}`}
+          >
+            {f.label}
+          </button>
+        ))}
       </div>
+      {feed === "thesis" && (
+        <Segmented
+          className="shrink-0 px-3 py-2"
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: "top", label: "Top" },
+            { value: "recent", label: "Latest" },
+            { value: "following", label: "Following" },
+          ]}
+        />
+      )}
+      <div className="min-h-0 flex-1 overflow-y-auto border-t border-line/60">{feed === "thesis" ? <ThesisFeed tab={tab} chain="all" /> : <TrackerFeed source={feed} />}</div>
     </Panel>
   );
 }
@@ -89,7 +110,7 @@ function TokenTableRow({ token, live, onBuy, buying, amountLabel }: { token: Tok
 
 function LiveRow(props: { token: TokenListItem; onBuy(t: TokenListItem): void; buying: boolean; amountLabel: string }) {
   const tick = useLivePrice(props.token.chain, props.token.address);
-  return <RowBody {...props} priceUsd={tick?.priceUsd} change={tick?.priceChange24h} marketCap={tick?.marketCapUsd} />;
+  return <RowBody {...props} priceUsd={tick?.priceUsd} change={tick?.priceChange24h ?? undefined} marketCap={tick?.marketCapUsd} />;
 }
 
 function RowBody({ token, onBuy, buying, amountLabel, priceUsd, change, marketCap }: { token: TokenListItem; onBuy(t: TokenListItem): void; buying: boolean; amountLabel: string; priceUsd?: string; change?: number; marketCap?: string | null }) {
@@ -262,21 +283,17 @@ function PositionsPanel() {
   const rows = view === "open" ? portfolio.data?.open : view === "closed" ? portfolio.data?.closed : [];
   const allTime = portfolio.data ? D(portfolio.data.totals.allTimeUsd) : null;
   return (
-    <Panel
-      title="Your positions"
-      className="h-full"
-      right={
-        <Segmented
-          value={view}
-          onChange={setView}
-          options={[
-            { value: "open", label: "Open" },
-            { value: "closed", label: "Closed" },
-            { value: "orders", label: "Orders" },
-          ]}
-        />
-      }
-    >
+    <Panel title="Your positions" className="h-full">
+      <Segmented
+        className="shrink-0 px-3 pb-2"
+        value={view}
+        onChange={setView}
+        options={[
+          { value: "open", label: "Open" },
+          { value: "closed", label: "Closed" },
+          { value: "orders", label: "Orders" },
+        ]}
+      />
       {status !== "in" ? (
         <EmptyState title="Your positions live here" body="Sign in to trade any token from one USDC balance." action={<Button onClick={login}>Sign in</Button>} />
       ) : portfolio.isLoading ? (

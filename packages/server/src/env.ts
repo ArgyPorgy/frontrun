@@ -74,6 +74,9 @@ const schema = z.object({
   /** Optional spending limits, set up in Pimlico's dashboard. */
   PIMLICO_SPONSORSHIP_POLICY_ID: optional,
 
+  /** Reads the X tracker's accounts. X bills per post read. While unset, that tab says it isn't connected. */
+  X_BEARER_TOKEN: optional,
+
   /** ThesisRegistry on Arc. While unset, theses simply aren't anchored. */
   THESIS_REGISTRY_ADDRESS: optional,
   /** Pays to anchor theses. Falls back to the gas top-up wallet. */

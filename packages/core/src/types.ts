@@ -83,7 +83,8 @@ export interface PriceTick {
   chain: ChainKey;
   address: string;
   priceUsd: string;
-  priceChange24h: number;
+  /** Null when only the price is known so far, so the caller keeps the figure it already has. */
+  priceChange24h: number | null;
   liquidityUsd: string | null;
   marketCapUsd: string | null;
   volume24hUsd: number;
@@ -308,6 +309,22 @@ export interface TradeView {
   filledAt: string | null;
   /** Present while the wallet must sign something. */
   pendingSteps: ExecStep[] | null;
+}
+
+export type TrackerSource = "x" | "telegram";
+
+export interface TrackerPostView {
+  id: string;
+  source: TrackerSource;
+  authorHandle: string;
+  authorName: string;
+  authorAvatar: string | null;
+  kind: "post" | "quote" | "reply" | "repost";
+  body: string;
+  url: string;
+  /** Tickers like $WIF and contract addresses found in the text. */
+  tokens: string[];
+  postedAt: string;
 }
 
 export interface OrderView {

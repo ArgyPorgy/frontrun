@@ -12,7 +12,7 @@ export function TokenRow({ token, live }: { token: TokenListItem; live: boolean 
 
 function LiveRow({ token }: { token: TokenListItem }) {
   const tick = useLivePrice(token.chain, token.address);
-  return <RowBody token={token} priceUsd={tick?.priceUsd} change={tick?.priceChange24h} marketCap={tick?.marketCapUsd} />;
+  return <RowBody token={token} priceUsd={tick?.priceUsd} change={tick?.priceChange24h ?? undefined} marketCap={tick?.marketCapUsd} />;
 }
 
 function RowBody({ token, priceUsd, change, marketCap }: { token: TokenListItem; priceUsd?: string; change?: number; marketCap?: string | null }) {

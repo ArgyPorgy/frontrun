@@ -19,6 +19,9 @@ import {
   anchorPendingTheses,
   arcUsdcBalances,
   checkWatchedOrders,
+  pollTelegramTracker,
+  pollXTracker,
+  pruneTrackerPosts,
   pollFlashOrders,
   closeDb,
   closeRedis,
@@ -201,6 +204,11 @@ async function main() {
   every("trade-indexer", 1_500, () => pollActiveTrades(), { leaseMs: 20_000 });
   every("balances", 5_000, watchBalances);
   // A stop-loss should fire promptly, and these runs can wait on a trade, so the lease is long.
+  // One Telegram channel every 20 seconds, so each is read every few minutes.
+  every("tracker-telegram", 20_000, () => pollTelegramTracker());
+  // One group of X accounts a minute. X bills per post read, so this sets the running cost.
+  every("tracker-x", 60_000, () => pollXTracker());
+  every("tracker-prune", 3_600_000, () => pruneTrackerPosts());
   every("orders-watch", 3_000, () => checkWatchedOrders(), { leaseMs: 2 * 60_000 });
   every("orders-flash", 15_000, () => pollFlashOrders(), { leaseMs: 2 * 60_000 });
   every("reconcile", 5 * 60_000, () => reconcilePositions(), { leaseMs: 10 * 60_000 });
