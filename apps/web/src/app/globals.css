@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0a0c0b;
+  --color-surface: #121513;
+  --color-raised: #1a1e1b;
+  --color-line: #252a26;
+  --color-ink: #f1f4ef;
+  --color-muted: #8f978f;
+  --color-faint: #5f675f;
+  --color-signal: #c8f135;
+  --color-signal-ink: #10140a;
+  --color-up: #35d990;
+  --color-down: #ff5d5d;
+  --color-warn: #f5b945;
+
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --radius-card: 16px;
+
+  --animate-flash-up: flash-up 700ms ease-out;
+  --animate-flash-down: flash-down 700ms ease-out;
+  --animate-sheet: sheet-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-toast: toast-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-tape: tape 60s linear infinite;
+  --animate-shimmer: shimmer 1.4s ease-in-out infinite;
+
+  @keyframes flash-up {
+    0% { color: var(--color-up); }
+    100% { color: inherit; }
+  }
+  @keyframes flash-down {
+    0% { color: var(--color-down); }
+    100% { color: inherit; }
+  }
+  @keyframes sheet-in {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  @keyframes toast-in {
+    from { transform: translateY(-8px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes tape {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  @keyframes shimmer {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+  }
+}
+
+html {
+  color-scheme: dark;
+  background: var(--color-bg);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* Prices and PnL line up in columns and don't jitter as digits change. */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.pad-top {
+  padding-top: env(safe-area-inset-top);
+}
+.pad-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+button,
+a {
+  touch-action: manipulation;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-signal);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* The amount field's label draws the ring, around the $ or % as well as the number. */
+.amount-input:focus-visible {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
