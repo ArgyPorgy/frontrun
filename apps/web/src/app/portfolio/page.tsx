@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Button, ChainBadge, EmptyState, LinkButton, LiveNumber, PageTitle, Pct, RowSkeletons, Segmented, Stat, TokenIcon } from "@/components/ui";
+import { OpenOrders } from "@/components/orders-list";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useSocket } from "@/lib/socket";
@@ -129,6 +130,7 @@ export default function PortfolioPage() {
           { value: "closed", label: `Closed ${query.data.closed.length}` },
         ]}
       />
+      <OpenOrders showToken />
       {tab === "open" ? (
         open.length ? (
           <div className="divide-y divide-line/60">

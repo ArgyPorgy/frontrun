@@ -32,6 +32,7 @@ import { ApiClient, ApiError, THESIS_RESOLVE_HOURS, tokenKey, type ChainKey, typ
 import {
   DEX_BACKGROUND_PER_MINUTE,
   DexBusyError,
+  checkWatchedOrders,
   KEYS,
   CHANNELS,
   closeDb,
@@ -187,6 +188,92 @@ async function expectApiError(promise: Promise<unknown>, code: string) {
   expect((err as ApiError).code).toBe(code);
   return err as ApiError;
 }
+
+describe("orders", () => {
+  const setPrice = async (address: string, price: string) => {
+    const key = tokenKey("arc", address);
+    await redis().set(KEYS.price(key), price, "EX", 3600);
+    await redis().set(KEYS.snapshot(key), JSON.stringify(snapshot("arc", address, price, "5000000", "AAA")), "EX", 3600);
+  };
+
+  it("holds a limit buy until the price falls to it, then fills it", async () => {
+    const { client } = await loginFunded("limitbuy");
+    await setPrice(TOKEN_A, "1");
+    const order = await client.createOrder({ chain: "arc", address: TOKEN_A, type: "limit_buy", triggerPriceUsd: "0.8", amountUsd: "50" });
+    expect(order.status).toBe("open");
+    await checkWatchedOrders();
+    expect((await client.orders({ status: "open" })).items).toHaveLength(1);
+
+    await setPrice(TOKEN_A, "0.75");
+    await checkWatchedOrders();
+    await settle();
+    expect((await client.orders({ status: "open" })).items).toHaveLength(0);
+    const [done] = (await client.orders({ status: "all" })).items;
+    expect(done?.status).toBe("filled");
+    expect((await client.myPosition("arc", TOKEN_A)).position).not.toBeNull();
+  });
+
+  it("fires a stop-loss when the price drops, and closes the position", async () => {
+    const { client } = await loginFunded("stoploss");
+    await setPrice(TOKEN_A, "1");
+    await buy(client, TOKEN_A, "100");
+    await client.createOrder({ chain: "arc", address: TOKEN_A, type: "stop_loss", triggerPriceUsd: "0.7", sellPct: 100 });
+    await setPrice(TOKEN_A, "0.9");
+    await checkWatchedOrders();
+    expect((await client.myPosition("arc", TOKEN_A)).position).not.toBeNull();
+    await setPrice(TOKEN_A, "0.65");
+    await checkWatchedOrders();
+    await settle();
+    expect((await client.myPosition("arc", TOKEN_A)).position).toBeNull();
+    expect((await client.orders({ status: "all" })).items[0]?.status).toBe("filled");
+  });
+
+  it("fires once only, however often it's checked", async () => {
+    const { client } = await loginFunded("fireonce");
+    await setPrice(TOKEN_A, "1");
+    await client.createOrder({ chain: "arc", address: TOKEN_A, type: "stop_buy", triggerPriceUsd: "1.2", amountUsd: "10" });
+    await setPrice(TOKEN_A, "1.3");
+    await Promise.all([checkWatchedOrders(), checkWatchedOrders()]);
+    await settle();
+    const me = await client.me();
+    const trades = await db().select().from(schema.trades).where(eq(schema.trades.userId, me.id));
+    expect(trades).toHaveLength(1);
+  });
+
+  it("refuses a trigger on the wrong side of the market", async () => {
+    const { client } = await loginFunded("badtrigger");
+    await setPrice(TOKEN_A, "1");
+    await expectApiError(client.createOrder({ chain: "arc", address: TOKEN_A, type: "limit_buy", triggerPriceUsd: "1.5", amountUsd: "10" }), "bad_trigger");
+  });
+
+  it("won't take a sell order on a token you don't hold, or a buy you can't afford", async () => {
+    const { client } = await loginFunded("nohold");
+    await setPrice(TOKEN_A, "1");
+    await expectApiError(client.createOrder({ chain: "arc", address: TOKEN_A, type: "take_profit", triggerPriceUsd: "2", sellPct: 100 }), "no_position");
+    await expectApiError(client.createOrder({ chain: "arc", address: TOKEN_A, type: "limit_buy", triggerPriceUsd: "0.5", amountUsd: "99999" }), "insufficient_balance");
+  });
+
+  it("stops watching a cancelled order", async () => {
+    const { client } = await loginFunded("cancels");
+    await setPrice(TOKEN_A, "1");
+    const order = await client.createOrder({ chain: "arc", address: TOKEN_A, type: "limit_buy", triggerPriceUsd: "0.8", amountUsd: "10" });
+    expect((await client.cancelOrder(order.id)).status).toBe("cancelled");
+    await setPrice(TOKEN_A, "0.5");
+    await checkWatchedOrders();
+    await settle();
+    expect((await client.myPosition("arc", TOKEN_A)).position).toBeNull();
+    await expectApiError(client.cancelOrder(order.id), "not_open");
+  });
+
+  it("keeps each person's orders private", async () => {
+    const a = await loginFunded("ordera");
+    const b = await loginFunded("orderb");
+    await setPrice(TOKEN_A, "1");
+    const order = await a.client.createOrder({ chain: "arc", address: TOKEN_A, type: "limit_buy", triggerPriceUsd: "0.8", amountUsd: "10" });
+    expect((await b.client.orders({ status: "all" })).items).toHaveLength(0);
+    await expect(b.client.cancelOrder(order.id)).rejects.toBeInstanceOf(ApiError);
+  });
+});
 
 describe("closing a position", () => {
   it("closes its thesis at the sale price, and counts toward accuracy", async () => {

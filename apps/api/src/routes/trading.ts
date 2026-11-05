@@ -1,10 +1,13 @@
-import { executeTradeSchema, isValidAddress, quoteRequestSchema, submitStepsSchema, type Page, type TradeView } from "@frontrun/core";
+import { chainKeySchema, createOrderSchema, executeTradeSchema, isValidAddress, quoteRequestSchema, submitStepsSchema, type Page, type TradeView } from "@frontrun/core";
 import {
   AppError,
+  cancelOrder,
   createQuote,
   db,
   executeTrade,
+  listOrders,
   notFound,
+  placeOrder,
   schema,
   submitWalletSteps,
   tokenRefFor,
@@ -33,6 +36,23 @@ export async function registerTradingRoutes(app: FastifyInstance) {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const { results } = submitStepsSchema.parse(req.body);
     return submitWalletSteps(user.id, id, results);
+  });
+
+  app.post("/v1/orders", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req) => {
+    const user = await requireUser(req);
+    return placeOrder(user.id, createOrderSchema.parse(req.body));
+  });
+
+  app.get("/v1/orders", async (req) => {
+    const user = await requireUser(req);
+    const query = z.object({ status: z.enum(["open", "all"]).optional(), chain: chainKeySchema.optional(), address: z.string().max(64).optional() }).parse(req.query);
+    return { items: await listOrders(user.id, query) };
+  });
+
+  app.delete("/v1/orders/:id", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req) => {
+    const user = await requireUser(req);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    return cancelOrder(user.id, id);
   });
 
   app.get("/v1/trades/:id", async (req) => {

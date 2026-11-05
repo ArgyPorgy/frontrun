@@ -49,6 +49,12 @@ const COMPUTE_BUDGET = "ComputeBudget111111111111111111111111111111";
 
 const evmRules = () => [
   {
+    name: "Cancel Flash orders",
+    method: "personal_sign" as const,
+    action: "ALLOW" as const,
+    conditions: [{ field_source: "message" as const, field: "content" as const, operator: "starts_with" as const, value: "Definitive Flash v1 \u2014 Cancel Order\nOrder: " }],
+  },
+  {
     // Gasless wallets upgrade to this one contract, and nothing else.
     name: "Upgrade to the known account only",
     method: "eth_sign7702Authorization" as const,

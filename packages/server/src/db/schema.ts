@@ -108,6 +108,28 @@ export const trades = pgTable("trades", {
   index("trades_token").on(t.tokenChain, t.tokenAddr),
 ]);
 
+export const orders = pgTable("orders", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tokenChain: text("token_chain").notNull(),
+  tokenAddr: text("token_addr").notNull(),
+  type: text("type").notNull(),
+  side: text("side", { enum: ["buy", "sell"] }).notNull(),
+  amountUsd: usd("amount_usd"),
+  sellPct: real("sell_pct"),
+  triggerPriceUsd: usd("trigger_price_usd").notNull(),
+  /** "flash" rests on the venue. "app" is watched here, and fires a market order when it hits. */
+  engine: text("engine", { enum: ["flash", "app"] }).notNull(),
+  providerOrderId: text("provider_order_id"),
+  status: text("status", { enum: ["open", "triggered", "filled", "cancelled", "failed"] }).notNull().default("open"),
+  tradeId: uuid("trade_id").references(() => trades.id, { onDelete: "set null" }),
+  attempts: integer("attempts").notNull().default(0),
+  error: text("error"),
+  createdAt: ts("created_at").notNull().defaultNow(),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+  closedAt: ts("closed_at"),
+}, (t) => [index("orders_user").on(t.userId, t.status), index("orders_open").on(t.status, t.engine)]);
+
 export const positions = pgTable("positions", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),

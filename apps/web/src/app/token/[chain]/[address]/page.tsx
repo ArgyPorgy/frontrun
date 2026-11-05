@@ -24,6 +24,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { PriceChart } from "@/components/chart";
 import { ThesisCard, ThesisComposer } from "@/components/thesis-card";
+import { OpenOrders } from "@/components/orders-list";
 import { TradeBar } from "@/components/trade-bar";
 import { Button, ChainBadge, CopyButton, EmptyState, LiveNumber, Pct, PillFilter, RowSkeletons, Segmented, Sheet, Skeleton, Stat, TokenIcon } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -316,7 +317,7 @@ function TokenScreen({ chain, address }: { chain: ChainKey; address: string }) {
   const change = tick?.priceChange24h ?? t.priceChangePct.h24;
 
   return (
-    <div className="pb-48 md:grid md:grid-cols-[1fr_360px] md:gap-4 md:p-4 md:pb-4">
+    <div className="pb-64 md:grid md:grid-cols-[1fr_360px] md:gap-4 md:p-4 md:pb-4">
       <div className="min-w-0">
         <header className="flex items-start gap-2 px-3 pt-3">
           <button onClick={() => router.back()} aria-label="Back" className="flex h-9 w-7 items-center text-muted">
@@ -354,6 +355,9 @@ function TokenScreen({ chain, address }: { chain: ChainKey; address: string }) {
 
         <RiskFlags token={t} />
         <PositionCard chain={chain} address={address} symbol={t.symbol} onPost={() => setComposer(true)} />
+        <div className="mx-4 my-2 overflow-hidden rounded-2xl bg-surface empty:hidden">
+          <OpenOrders chain={t.chain} address={t.address} />
+        </div>
         <StatsPanel token={t} />
 
         <div className="flex items-center justify-between border-t border-line/70 px-3 pt-2">

@@ -10,7 +10,7 @@ import {
   toBaseUnits,
   usdc6ToArcNative,
 } from "../src/money";
-import { checkSpendCaps, evaluateGuardrails, resolveSlippage, scoreQuote, smoothedFailureRate } from "../src/routing";
+import { checkSpendCaps, evaluateGuardrails, orderDirection, orderSide, resolveSlippage, triggerHit, triggerProblem, scoreQuote, smoothedFailureRate } from "../src/routing";
 import { accuracyPct, checkBody, positionTier, resolveOutcome, returnSincePost, thesisRankScore } from "../src/thesis";
 import { computeRiskFlags } from "../src/risk";
 import { formatCompactUsd, formatPct, formatPrice, formatUsd, shortAddress, timeAgo } from "../src/format";
@@ -316,5 +316,33 @@ describe("small trades", () => {
   it("keeps the price impact wording on a normal size", () => {
     const { blocked } = evaluateGuardrails({ ...base, notionalUsd: "500", priceImpact: 0.08 });
     expect(blocked[0]?.message).toBe("Price impact is 8.0%, above the 5% limit.");
+  });
+});
+
+describe("order rules", () => {
+  it("knows which way each order waits", () => {
+    expect(orderDirection("limit_buy")).toBe("lower");
+    expect(orderDirection("stop_loss")).toBe("lower");
+    expect(orderDirection("limit_sell")).toBe("upper");
+    expect(orderDirection("take_profit")).toBe("upper");
+    expect(orderDirection("stop_buy")).toBe("upper");
+    expect(orderSide("stop_buy")).toBe("buy");
+    expect(orderSide("stop_loss")).toBe("sell");
+  });
+
+  it("fires at the trigger, not before", () => {
+    expect(triggerHit("lower", "10", "10.01")).toBe(false);
+    expect(triggerHit("lower", "10", "10")).toBe(true);
+    expect(triggerHit("upper", "10", "9.99")).toBe(false);
+    expect(triggerHit("upper", "10", "10.5")).toBe(true);
+  });
+
+  it("refuses a trigger that would run straight away", () => {
+    expect(triggerProblem("limit_buy", "9", "10")).toBeNull();
+    expect(triggerProblem("limit_buy", "11", "10")).toMatch(/below the current price/);
+    expect(triggerProblem("stop_loss", "11", "10")).toMatch(/set it lower/);
+    expect(triggerProblem("take_profit", "9", "10")).toMatch(/set it higher/);
+    expect(triggerProblem("stop_buy", "9", "10")).toMatch(/above the current price/);
+    expect(triggerProblem("limit_sell", "10", "10")).toMatch(/above the current price/);
   });
 });

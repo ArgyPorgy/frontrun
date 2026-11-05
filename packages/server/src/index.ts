@@ -18,6 +18,7 @@ export * from "./routing/engine";
 export * from "./trading/service";
 export * from "./trading/signer";
 export * from "./trading/sponsor";
+export * from "./trading/orders";
 export * from "./market/service";
 export { DEX_BACKGROUND_PER_MINUTE, DEX_BATCH_SIZE, DexBusyError, fetchTokens } from "./market/dexscreener";
 export { GeckoBusyError, geckoRefreshMs, fetchCandles, fetchTape, fetchTokenInfo, trendingPools, newPools } from "./market/geckoterminal";

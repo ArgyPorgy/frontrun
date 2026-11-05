@@ -72,6 +72,7 @@ export function TradeRunnerProvider({ children }: { children: ReactNode }) {
         claimed.current.delete(t.id);
         if (earnsTradeCard(t)) setReceipt(t);
         void queryClient.invalidateQueries({ queryKey: ["portfolio"] });
+        void queryClient.invalidateQueries({ queryKey: ["orders"] });
         void queryClient.invalidateQueries({ queryKey: ["balance"] });
         void queryClient.invalidateQueries({ queryKey: ["position"] });
         void queryClient.invalidateQueries({ queryKey: ["me"] });

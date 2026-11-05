@@ -165,3 +165,29 @@ export function checkSpendCaps(input: {
   if (amount.add(input.spentTodayUsd).gt(input.dailyCapUsd)) return { allowed: false, reason: "daily" };
   return { allowed: true };
 }
+
+export type OrderType = "limit_buy" | "limit_sell" | "stop_buy" | "stop_loss" | "take_profit";
+
+export function orderSide(type: OrderType): "buy" | "sell" {
+  return type === "limit_buy" || type === "stop_buy" ? "buy" : "sell";
+}
+
+/** Whether the order waits for the price to fall to its trigger, or to rise to it. */
+export function orderDirection(type: OrderType): "lower" | "upper" {
+  return type === "limit_buy" || type === "stop_loss" ? "lower" : "upper";
+}
+
+export function triggerHit(direction: "lower" | "upper", trigger: Numeric, price: Numeric): boolean {
+  return direction === "lower" ? D(price).lte(trigger) : D(price).gte(trigger);
+}
+
+/** An order set on the wrong side of the market would run straight away, which is never what was meant. */
+export function triggerProblem(type: OrderType, trigger: Numeric, market: Numeric): string | null {
+  if (orderDirection(type) === "lower") {
+    if (D(trigger).lt(market)) return null;
+    return type === "limit_buy" ? "A limit buy waits for a lower price, so set it below the current price." : "A stop-loss sits below the current price, so set it lower.";
+  }
+  if (D(trigger).gt(market)) return null;
+  if (type === "stop_buy") return "A stop-buy waits for the price to rise, so set it above the current price.";
+  return type === "take_profit" ? "A take-profit sits above the current price, so set it higher." : "A limit sell waits for a higher price, so set it above the current price.";
+}

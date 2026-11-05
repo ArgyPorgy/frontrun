@@ -36,6 +36,20 @@ export const quoteRequestSchema = z
   });
 export type QuoteRequest = z.infer<typeof quoteRequestSchema>;
 
+export const createOrderSchema = z
+  .object({
+    chain: chainKeySchema,
+    address: z.string().min(16).max(64),
+    type: z.enum(["limit_buy", "limit_sell", "stop_buy", "stop_loss", "take_profit"]),
+    triggerPriceUsd: positiveDecimal,
+    amountUsd: positiveDecimal.optional(),
+    sellPct: z.number().gt(0).max(100).optional(),
+  })
+  .refine((o) => (o.type === "limit_buy" || o.type === "stop_buy" ? !!o.amountUsd : o.sellPct !== undefined), {
+    message: "buy orders need amountUsd, sell orders need sellPct",
+  });
+export type CreateOrderInput = z.infer<typeof createOrderSchema>;
+
 export const executeTradeSchema = z.object({
   quoteId: z.string().min(8).max(64),
   /** Client-generated per tap, so a double tap or retry can't place two orders. */

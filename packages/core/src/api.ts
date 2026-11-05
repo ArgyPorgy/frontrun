@@ -1,4 +1,5 @@
 import type { ChainKey } from "./chains";
+import type { OrderType } from "./routing";
 import type {
   ApiErrorBody,
   BalanceView,
@@ -6,6 +7,7 @@ import type {
   LeaderboardRow,
   MeView,
   NotificationView,
+  OrderView,
   Page,
   PortfolioView,
   ProfileView,
@@ -107,6 +109,12 @@ export class ApiClient {
   trades = (query: { cursor?: string } = {}) => this.request<Page<TradeView>>("GET", "/v1/trades", { query });
 
   portfolio = () => this.request<PortfolioView>("GET", "/v1/portfolio");
+
+  orders = (query: { status?: "open" | "all"; chain?: ChainKey; address?: string } = {}) =>
+    this.request<{ items: OrderView[] }>("GET", "/v1/orders", { query });
+  createOrder = (body: { chain: ChainKey; address: string; type: OrderType; triggerPriceUsd: string; amountUsd?: string; sellPct?: number }) =>
+    this.request<OrderView>("POST", "/v1/orders", { body });
+  cancelOrder = (id: string) => this.request<OrderView>("DELETE", `/v1/orders/${id}`);
 
   theses = (query: {
     tab?: "top" | "recent" | "following";

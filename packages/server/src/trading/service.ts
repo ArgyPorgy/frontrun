@@ -642,6 +642,12 @@ export async function applyStatus(tradeId: string, update: StatusUpdate): Promis
     return { trade, status: fields.status as TradeStatus, terminal };
   });
   if (!outcome) return;
+  if (outcome.terminal) {
+    await db()
+      .update(schema.orders)
+      .set({ status: outcome.status === "filled" ? "filled" : "failed", error: outcome.status === "filled" ? null : (update.error ?? "The trade didn't go through."), closedAt: new Date(), updatedAt: new Date() })
+      .where(eq(schema.orders.tradeId, tradeId));
+  }
   if (outcome.status === "filled" && outcome.trade.side === "sell") {
     await resolveClosedTheses({ userId: outcome.trade.userId }).catch((err: unknown) => logger.warn({ tradeId, err: err instanceof Error ? err.message : err }, "thesis resolve failed"));
   }

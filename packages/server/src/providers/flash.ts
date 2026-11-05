@@ -308,6 +308,53 @@ export const flashProvider: RouteProvider = {
   },
 };
 
+export interface RestingOrderParams {
+  targetChain: string;
+  contraChain: string;
+  targetAsset: string;
+  contraAsset: string;
+  side: "buy" | "sell";
+  qty: string;
+  orderType: "limit" | "stop-loss" | "take-profit" | "stop";
+  funderAddress: string;
+  maxPriceImpact: string;
+  limitNotionalPrice?: string;
+  triggers?: Array<{ notionalPrice: string; triggerType: "lower" | "upper" }>;
+  flashIntegratorFeeBps?: string;
+}
+
+export async function requestRestingQuote(params: RestingOrderParams): Promise<FlashQuoteRaw> {
+  await quoteLimiter.acquire();
+  return fetchJson<FlashQuoteRaw>(`${BASE}/quote`, { method: "POST", headers: headers(), body: params, timeoutMs: 6_000 });
+}
+
+export async function submitRestingOrder(params: RestingOrderParams, raw: FlashQuoteRaw, signature: string, permitSignature?: string): Promise<string> {
+  await orderLimiter.acquire();
+  const res = await fetchJson<{ orderId: string }>(`${BASE}/order`, {
+    method: "POST",
+    headers: headers(),
+    body: {
+      ...params,
+      quoteId: raw.quoteId,
+      userSignature: signature,
+      evmOrderTypedData: raw.evm?.orderTypedData,
+      ...(permitSignature ? { evmPermitTypedData: raw.evm?.permitTypedData, evmPermitSignature: permitSignature } : {}),
+    },
+    timeoutMs: 15_000,
+  });
+  return res.orderId;
+}
+
+export async function getFlashOrder(orderId: string, funder: string): Promise<FlashOrderDetail> {
+  await statusLimiter.acquire();
+  return fetchJson<FlashOrderDetail>(`${BASE}/orders/${orderId}?funderAddress=${encodeURIComponent(funder)}`, { headers: headers(), timeoutMs: 6_000, retries: 1 });
+}
+
+export async function cancelFlashOrder(orderId: string, cancelMessage: string, userSignature: string): Promise<void> {
+  await orderLimiter.acquire();
+  await fetchJson(`${BASE}/orders/${orderId}/cancel`, { method: "POST", headers: headers(), body: { cancelMessage, userSignature }, timeoutMs: 10_000 });
+}
+
 export interface FlashOrderDetail {
   order: {
     status: string;

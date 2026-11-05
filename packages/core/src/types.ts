@@ -310,6 +310,23 @@ export interface TradeView {
   pendingSteps: ExecStep[] | null;
 }
 
+export interface OrderView {
+  id: string;
+  type: import("./routing").OrderType;
+  side: "buy" | "sell";
+  token: TokenRef;
+  amountUsd: string | null;
+  sellPct: number | null;
+  triggerPriceUsd: string;
+  status: "open" | "triggered" | "filled" | "cancelled" | "failed";
+  error: string | null;
+  tradeId: string | null;
+  /** True when it rests on the venue itself, and doesn't depend on this app staying up. */
+  restsOnChain: boolean;
+  createdAt: string;
+  closedAt: string | null;
+}
+
 export interface PublicConfig {
   appName: string;
   tradingMode: "live" | "paper";

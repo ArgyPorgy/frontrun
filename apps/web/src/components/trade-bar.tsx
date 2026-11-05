@@ -6,6 +6,10 @@ import {
   D,
   SELL_PRESETS_PCT,
   cleanAmountInput,
+  formatPct,
+  orderDirection,
+  triggerProblem,
+  type OrderType,
   formatPrice,
   formatQty,
   formatUsd,
@@ -21,7 +25,9 @@ import { useCallback, useEffect, useState } from "react";
 import { api, errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useBalance, useConfig, useDebounced, useMe } from "@/lib/hooks";
+import { useToast } from "@/lib/toast";
 import { useTradeRunner } from "@/lib/trade";
+import { ORDER_LABELS } from "./orders-list";
 import { Button, Sheet } from "./ui";
 
 type Side = "buy" | "sell";
@@ -148,14 +154,34 @@ export function TradeBar({
   const [confirming, setConfirming] = useState<QuoteView | null>(null);
   const [busy, setBusy] = useState(false);
   const canSell = !!position && D(position.qty).gt(0);
+  const [mode, setMode] = useState<OrderType | "market">("market");
+  const [triggerText, setTriggerText] = useState("");
+  const [placing, setPlacing] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (side === "sell" && !canSell) setSide("buy");
   }, [canSell, side]);
 
   useEffect(() => {
-    if (copyThesis) setSide("buy");
+    if (copyThesis) {
+      setSide("buy");
+      setMode("market");
+    }
   }, [copyThesis]);
+
+  const chooseSide = (next: Side) => {
+    setSide(next);
+    setMode("market");
+  };
+
+  const chooseMode = (next: OrderType | "market") => {
+    setMode(next);
+    if (next === "market" || !token.priceUsd) return;
+    // A starting point on the right side of the market, ready to adjust.
+    const offset = orderDirection(next) === "lower" ? "0.9" : next === "take_profit" ? "1.25" : "1.1";
+    setTriggerText(D(token.priceUsd).mul(offset).toSignificantDigits(6).toFixed());
+  };
 
   const spendable = balance.data ? D(balance.data.spendable) : null;
   const hasFunds = spendable !== null && spendable.gt(0);
@@ -170,7 +196,8 @@ export function TradeBar({
   const settled = settledAmount === typed;
 
   const quoteKey = ["quote", token.chain, token.address, side, settledAmount, copyThesis?.id];
-  const quoteEnabled = status === "in" && settled && !!settledAmount && !overBalance && (side === "sell" ? canSell : hasFunds);
+  const isMarket = mode === "market";
+  const quoteEnabled = isMarket && status === "in" && settled && !!settledAmount && !overBalance && (side === "sell" ? canSell : hasFunds);
   const quote = useQuery({
     queryKey: quoteKey,
     queryFn: () =>
@@ -230,9 +257,37 @@ export function TradeBar({
     }
   };
 
+  const trigger = parseAmountInput(triggerText);
+  const triggerIssue = !isMarket && trigger && token.priceUsd ? triggerProblem(mode, trigger.toFixed(), token.priceUsd) : null;
+
+  const placeOrder = async () => {
+    if (isMarket || !amount || !trigger) return;
+    setPlacing(true);
+    try {
+      await api.createOrder({
+        chain: token.chain,
+        address: token.address,
+        type: mode,
+        triggerPriceUsd: trigger.toFixed(),
+        ...(side === "buy" ? { amountUsd: amount.toFixed() } : { sellPct: amount.toNumber() }),
+      });
+      toast(`${ORDER_LABELS[mode]} placed`, { tone: "good" });
+      await queryClient.invalidateQueries({ queryKey: ["orders"] });
+      setMode("market");
+    } catch (err) {
+      toast(errorMessage(err), { tone: "bad" });
+    } finally {
+      setPlacing(false);
+    }
+  };
+
   const press = () => {
     if (status !== "in") {
       login();
+      return;
+    }
+    if (!isMarket) {
+      void placeOrder();
       return;
     }
     if (!q || q.blocked.length) return;
@@ -250,9 +305,13 @@ export function TradeBar({
       ? "Sign in to trade"
       : !amount
         ? "Enter an amount"
-        : side === "buy"
-          ? `Buy ${formatUsd(q?.amountInUsd ?? amount.toFixed())}`
-          : `Sell ${amount.toFixed()}%`;
+        : !isMarket
+          ? !trigger
+            ? "Enter a price"
+            : `Place ${ORDER_LABELS[mode].toLowerCase()}`
+          : side === "buy"
+            ? `Buy ${formatUsd(q?.amountInUsd ?? amount.toFixed())}`
+            : `Sell ${amount.toFixed()}%`;
 
   const changeAmount = (raw: string) => {
     if (side === "buy") {
@@ -264,7 +323,12 @@ export function TradeBar({
   };
 
   let subline: string | null = null;
-  if (blocked) subline = blocked;
+  if (!isMarket && trigger && !triggerIssue && amount && !overBalance) {
+    const away = token.priceUsd ? ` (${formatPct(trigger.div(token.priceUsd).sub(1).mul(100).toNumber())})` : "";
+    const what = side === "buy" ? `Buys ${formatUsd(amount.toFixed())}` : `Sells ${amount.toFixed()}%`;
+    subline = `${what} ${orderDirection(mode) === "lower" ? "if the price falls to" : "if the price rises to"} ${formatPrice(trigger.toFixed())}${away}`;
+  } else if (triggerIssue) subline = triggerIssue;
+  else if (blocked) subline = blocked;
   else if (overBalance) {
     subline = `You can spend up to ${formatUsd(spendable!.toFixed())}.`;
   } else if (quoteError) subline = quoteError;
@@ -288,14 +352,14 @@ export function TradeBar({
           )}
           <div className="flex items-center gap-2">
             <div className="flex shrink-0 rounded-lg bg-raised p-0.5" role="tablist" aria-label="Side">
-              <button role="tab" aria-selected={side === "buy"} onClick={() => setSide("buy")} className={`h-8 rounded-md px-3 text-sm font-semibold ${side === "buy" ? "bg-up text-bg" : "text-muted"}`}>
+              <button role="tab" aria-selected={side === "buy"} onClick={() => chooseSide("buy")} className={`h-8 rounded-md px-3 text-sm font-semibold ${side === "buy" ? "bg-up text-bg" : "text-muted"}`}>
                 Buy
               </button>
               <button
                 role="tab"
                 aria-selected={side === "sell"}
                 disabled={!canSell}
-                onClick={() => setSide("sell")}
+                onClick={() => chooseSide("sell")}
                 className={`h-8 rounded-md px-3 text-sm font-semibold disabled:opacity-30 ${side === "sell" ? "bg-down text-bg" : "text-muted"}`}
               >
                 Sell
@@ -327,6 +391,38 @@ export function TradeBar({
               )}
             </label>
           </div>
+          {!copyThesis && (
+            <div className="no-scrollbar mt-1.5 flex gap-1 overflow-x-auto" role="tablist" aria-label="Order type">
+              {(side === "buy" ? (["market", "limit_buy", "stop_buy"] as const) : (["market", "limit_sell", "stop_loss", "take_profit"] as const)).map((m) => (
+                <button
+                  key={m}
+                  role="tab"
+                  aria-selected={mode === m}
+                  onClick={() => chooseMode(m)}
+                  className={`h-7 shrink-0 rounded-md px-2.5 text-xs font-medium transition-colors ${mode === m ? "bg-raised text-ink" : "text-muted hover:text-ink"}`}
+                >
+                  {m === "market" ? "Market" : m === "limit_buy" || m === "limit_sell" ? "Limit" : ORDER_LABELS[m]}
+                </button>
+              ))}
+            </div>
+          )}
+          {!isMarket && (
+            <label className="mt-1.5 flex h-9 items-center gap-1 rounded-lg bg-raised px-3 focus-within:outline-2 focus-within:outline-signal focus-within:outline-solid">
+              <span className="text-xs text-muted">Price</span>
+              <span aria-hidden className="num ml-auto text-sm text-muted">
+                $
+              </span>
+              <input
+                value={triggerText}
+                onChange={(e) => setTriggerText(cleanAmountInput(e.target.value, 18))}
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="0"
+                aria-label="Order price in dollars"
+                className="amount-input num w-full min-w-0 max-w-[60%] bg-transparent text-right text-base font-medium placeholder:text-faint"
+              />
+            </label>
+          )}
           <div className="mt-1.5 flex gap-1">
             {side === "buy" ? (
               <>
@@ -359,22 +455,22 @@ export function TradeBar({
           ) : (
             <button
               onClick={press}
-              disabled={busy || (status === "in" && (!q || !!blocked))}
+              disabled={busy || placing || (status === "in" && (isMarket ? !q || !!blocked : !amount || !trigger || !!triggerIssue || overBalance))}
               className={`mt-2 w-full rounded-xl py-3 font-semibold transition-opacity disabled:opacity-40 ${
                 side === "buy" ? "bg-up text-bg" : "bg-down text-bg"
               }`}
             >
-              {busy ? (
+              {busy || placing ? (
                 <span className="inline-flex items-center justify-center gap-2">
                   <span aria-hidden className="h-4 w-4 animate-spin rounded-full border-2 border-bg/30 border-t-bg" />
-                  {side === "buy" ? "Buying…" : "Selling…"}
+                  {placing ? "Placing…" : side === "buy" ? "Buying…" : "Selling…"}
                 </span>
               ) : (
                 label
               )}
             </button>
           )}
-          <p className={`num mt-1 min-h-4 text-center text-xs ${blocked || quoteError || overBalance || enableError ? "text-down" : "text-muted"}`}>
+          <p className={`num mt-1 min-h-4 text-center text-xs ${blocked || quoteError || overBalance || enableError || triggerIssue ? "text-down" : "text-muted"}`}>
             {enableError ?? subline ?? (status === "in" && balance.data ? `${formatUsd(balance.data.usdc)} USDC available` : "")}
           </p>
         </div>

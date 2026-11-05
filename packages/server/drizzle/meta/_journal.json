@@ -29,6 +29,13 @@
       "when": 1793922203405,
       "tag": "0003_trade_closed_position",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793922453154,
+      "tag": "0004_orders",
+      "breakpoints": true
     }
   ]
 }

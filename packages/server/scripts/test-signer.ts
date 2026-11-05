@@ -27,7 +27,7 @@ import { encodeFunctionData, erc20Abi, parseAbi, parseTransaction, recoverTransa
 import { env } from "../src/env";
 import { SMART_ACCOUNT_IMPLEMENTATION } from "../src/trading/sponsor";
 import { HttpError } from "../src/http";
-import { assertOrderMatches, flashProvider, type FlashQuoteRaw } from "../src/providers/flash";
+import { assertOrderMatches, flashProvider, requestRestingQuote, submitRestingOrder, type FlashQuoteRaw, type RestingOrderParams } from "../src/providers/flash";
 import { lifiProvider } from "../src/providers/lifi";
 import type { RouteRequest } from "../src/providers/types";
 import { uniswapProvider } from "../src/providers/uniswap";
@@ -269,6 +269,33 @@ async function evmSuite() {
   const upgrade = (contract: string) => client.wallets().ethereum().sign7702Authorization(wallet.id, { params: { chain_id: ARC_ID, contract, nonce: 0 }, authorization_context });
   await allowed("Gasless: upgrade the wallet to the known account", () => upgrade(SMART_ACCOUNT_IMPLEMENTATION));
   await denied("Gasless: upgrade the wallet to any other contract", () => upgrade("0xe6Cae83BdE06E4c305530e199D7217f42808555B"));
+
+  // Orders that rest on Flash: real limit and stop orders, signed under the policy, refused only for the balance.
+  for (const [name, extra] of [
+    ["limit buy", { side: "buy", qty: "5", orderType: "limit", limitNotionalPrice: "1000" }],
+    ["stop buy", { side: "buy", qty: "5", orderType: "stop", triggers: [{ notionalPrice: "9000", triggerType: "upper" }] }],
+    ["stop-loss", { side: "sell", qty: "0.01", orderType: "stop-loss", triggers: [{ notionalPrice: "1000", triggerType: "lower" }] }],
+    ["take-profit", { side: "sell", qty: "0.01", orderType: "take-profit", triggers: [{ notionalPrice: "9000", triggerType: "upper" }] }],
+  ] as const) {
+    try {
+      const params = { targetChain: "arc", contraChain: "arc", targetAsset: ARC_WETH, contraAsset: ARC_USDC, funderAddress: addr, maxPriceImpact: "0.5", flashIntegratorFeeBps: "50", ...extra } as RestingOrderParams;
+      const raw = await requestRestingQuote(params);
+      const signed = await allowed(`Sign a real ${name} order`, () => signTyped(wallet.id, raw.evm!.orderTypedData!));
+      if (signed) {
+        const refusal = await submitRestingOrder(params, raw, signed.signature).then(() => "accepted", (err: unknown) => (err instanceof HttpError ? err.body : String(err)));
+        const onlyBalance = /balance|allowance/i.test(refusal) && !/signature|validation/i.test(refusal);
+        console.log(`  ${onlyBalance ? "PASS" : "FAIL"}  Flash takes the ${name}, refusing it only for the empty wallet: ${refusal.slice(0, 110)}`);
+        if (!onlyBalance) failures++;
+      }
+    } catch (err) {
+      failures++;
+      console.log(`  FAIL  ${name}: ${explain(err)}`);
+    }
+  }
+  const signMessage = (message: string) => client.wallets().ethereum().signMessage(wallet.id, { message, authorization_context });
+  await allowed("Sign Flash's exact cancel message", () => signMessage(`Definitive Flash v1 \u2014 Cancel Order\nOrder: ${randomUUID()}`));
+  await denied("Sign a message that only looks like a cancel", () => signMessage("Definitive Flash v1 - Cancel Order\nOrder: 1"));
+  await denied("Sign a message that starts differently", () => signMessage(`Transfer everything \nDefinitive Flash v1 \u2014 Cancel Order\nOrder: ${randomUUID()}`));
 
   // LI.FI: its contract can change by route, so this shows whether the allowlist still fits.
   try {

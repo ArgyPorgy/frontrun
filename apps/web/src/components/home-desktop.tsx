@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { useLivePrice } from "@/lib/socket";
 import { useToast } from "@/lib/toast";
 import { useTradeRunner } from "@/lib/trade";
+import { OpenOrders } from "./orders-list";
 import { CHAIN_OPTIONS, ThesisFeed } from "./thesis-feed";
 import { Button, ChainLogo, EmptyState, LiveNumber, Pct, PillFilter, RowSkeletons, Segmented, TokenIcon } from "./ui";
 
@@ -256,9 +257,9 @@ function PositionRow({ p }: { p: PositionView }) {
 
 function PositionsPanel() {
   const { status, login } = useAuth();
-  const [view, setView] = useState<"open" | "closed">("open");
+  const [view, setView] = useState<"open" | "closed" | "orders">("open");
   const portfolio = useQuery({ queryKey: ["portfolio"], queryFn: () => api.portfolio(), enabled: status === "in", refetchInterval: 30_000 });
-  const rows = view === "open" ? portfolio.data?.open : portfolio.data?.closed;
+  const rows = view === "open" ? portfolio.data?.open : view === "closed" ? portfolio.data?.closed : [];
   const allTime = portfolio.data ? D(portfolio.data.totals.allTimeUsd) : null;
   return (
     <Panel
@@ -271,6 +272,7 @@ function PositionsPanel() {
           options={[
             { value: "open", label: "Open" },
             { value: "closed", label: "Closed" },
+            { value: "orders", label: "Orders" },
           ]}
         />
       }
@@ -288,7 +290,7 @@ function PositionsPanel() {
             </div>
           )}
           <div className="min-h-0 flex-1 divide-y divide-line/40 overflow-y-auto">
-            {rows?.length ? rows.map((p) => <PositionRow key={p.id} p={p} />) : <EmptyState title={view === "open" ? "Nothing open yet" : "Nothing closed yet"} body={view === "open" ? "Quick buy a token to get started." : undefined} />}
+            {view === "orders" ? <OpenOrders showToken empty={<EmptyState title="No open orders" body="Set a limit, stop or take-profit from any token page." />} /> : rows?.length ? rows.map((p) => <PositionRow key={p.id} p={p} />) : <EmptyState title={view === "open" ? "Nothing open yet" : "Nothing closed yet"} body={view === "open" ? "Quick buy a token to get started." : undefined} />}
           </div>
         </>
       )}

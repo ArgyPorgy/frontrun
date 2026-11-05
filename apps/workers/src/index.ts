@@ -18,6 +18,8 @@ import {
   activeTokenKeys,
   anchorPendingTheses,
   arcUsdcBalances,
+  checkWatchedOrders,
+  pollFlashOrders,
   closeDb,
   closeRedis,
   db,
@@ -198,6 +200,9 @@ async function main() {
   every("boosts", 5 * 60_000, refreshBoosts);
   every("trade-indexer", 1_500, () => pollActiveTrades(), { leaseMs: 20_000 });
   every("balances", 5_000, watchBalances);
+  // A stop-loss should fire promptly, and these runs can wait on a trade, so the lease is long.
+  every("orders-watch", 3_000, () => checkWatchedOrders(), { leaseMs: 2 * 60_000 });
+  every("orders-flash", 15_000, () => pollFlashOrders(), { leaseMs: 2 * 60_000 });
   every("reconcile", 5 * 60_000, () => reconcilePositions(), { leaseMs: 10 * 60_000 });
   every("thesis-resolve", 60_000, async () => {
     await resolveDueTheses();
