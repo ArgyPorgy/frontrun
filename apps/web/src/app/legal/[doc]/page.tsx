@@ -29,7 +29,7 @@ const DOCS: Record<string, Doc> = {
       {
         heading: "Content you post",
         body: [
-          "Theses and replies are your own opinions. You keep ownership of them and allow us to display them in the app and in share cards. Don't post scams, wallet-drainer links, spam or illegal content. We may hide content and suspend accounts that break these rules. A thesis's price and position lock when you post it. You can delete a thesis, but not edit it.",
+          "Thesis posts and replies are your own opinions. You keep ownership of them and allow us to display them in the app and in share cards. Don't post scams, wallet-drainer links, spam or illegal content. We may hide content and suspend accounts that break these rules. A thesis's price and position lock when you post it. You can delete a thesis, but not edit it.",
         ],
       },
       {
@@ -52,7 +52,7 @@ const DOCS: Record<string, Doc> = {
       {
         heading: "What's public",
         body: [
-          "Your username, avatar, theses, replies, positions, PnL and thesis accuracy are visible to anyone. Wallet addresses and on-chain activity are public on their blockchains regardless of this app.",
+          "Your username, avatar, thesis posts, replies, positions, PnL and thesis accuracy are visible to anyone. Wallet addresses and on-chain activity are public on their blockchains regardless of this app.",
         ],
       },
       {
@@ -64,7 +64,7 @@ const DOCS: Record<string, Doc> = {
       {
         heading: "Your choices",
         body: [
-          "You can delete theses and replies, turn notifications off, remove the app signer and export your keys. To ask for your account data to be deleted, contact us. On-chain records can't be erased by anyone.",
+          "You can delete thesis posts and replies, turn notifications off, remove the app signer and export your keys. To ask for your account data to be deleted, contact us. On-chain records can't be erased by anyone.",
         ],
       },
     ],
@@ -79,7 +79,7 @@ const DOCS: Record<string, Doc> = {
         ],
       },
       {
-        heading: "Theses are opinions",
+        heading: "A thesis is an opinion",
         body: [
           "A thesis is one person's view and is not advice. Showing a verified position means the author held the token when posting, not that they still hold it or that they are right. Authors may sell at any time, including to people copying them. Past accuracy doesn't predict future results.",
         ],

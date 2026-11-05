@@ -178,7 +178,7 @@ function ThesisPanel({
           ))}
         </div>
       ) : (
-        <EmptyState title={min ? "None at this position size" : "No theses on this token yet"} body="Hold it and pin the first one to the chart." />
+        <EmptyState title={min ? "None at this position size" : "No thesis on this token yet"} body="Hold it and pin the first one to the chart." />
       )}
     </div>
   );
@@ -361,7 +361,7 @@ function TokenScreen({ chain, address }: { chain: ChainKey; address: string }) {
             value={tab}
             onChange={setTab}
             options={[
-              { value: "theses", label: `Theses${t.thesisCount ? ` ${t.thesisCount}` : ""}` },
+              { value: "theses", label: `Thesis${t.thesisCount ? ` ${t.thesisCount}` : ""}` },
               { value: "trades", label: "Trades" },
               { value: "holders", label: "Holders" },
             ]}

@@ -1,6 +1,6 @@
 "use client";
 
-import { tokenKey, type ChainKey, type NotificationView, type PriceTick, type ThesisView, type TradeView } from "@frontrun/core";
+import { TERMINAL_STATUSES, tokenKey, type ChainKey, type NotificationView, type PriceTick, type ThesisView, type TradeView } from "@frontrun/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from "react";
 import { io, type Socket } from "socket.io-client";
@@ -80,6 +80,8 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       socket.on("thesis", (t: ThesisView) => thesisListeners.current.forEach((l) => l(t)));
       socket.on("trade", (e: { trade: TradeView }) => {
         tradeListeners.current.forEach((l) => l(e.trade));
+        // Only a final result changes these. Refetching earlier would bring a just-sold position back.
+        if (!TERMINAL_STATUSES.includes(e.trade.status)) return;
         void queryClient.invalidateQueries({ queryKey: ["portfolio"] });
         void queryClient.invalidateQueries({ queryKey: ["balance"] });
         void queryClient.invalidateQueries({ queryKey: ["position"] });

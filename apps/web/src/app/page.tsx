@@ -39,7 +39,7 @@ function Landing({ items }: { items: TokenListItem[] }) {
     <section>
       <div className="px-4 pt-6 pb-5">
         <h1 className="max-w-md text-[28px] leading-[1.15] font-semibold tracking-tight">
-          Any token. One USDC balance. Theses from people who actually hold.
+          Any token. One USDC balance. Every thesis from someone who actually holds.
         </h1>
         <p className="mt-2 max-w-md text-muted">
           Buy on 8 chains from your balance on Arc in one tap. Every thesis shows the author&apos;s real position and whether they were right.
@@ -113,16 +113,16 @@ function ThesisFeed({ tab, chain }: { tab: "top" | "following"; chain: ChainKey 
   );
 
   if (tab === "following" && status !== "in") {
-    return <EmptyState title="See theses from people you follow" action={<Button onClick={login}>Sign in</Button>} />;
+    return <EmptyState title="See thesis posts from people you follow" action={<Button onClick={login}>Sign in</Button>} />;
   }
   if (query.isLoading) return <RowSkeletons count={5} />;
   const seen = new Set(extra.map((t) => t.id));
   const items = [...extra, ...(query.data?.items ?? []).filter((t) => !seen.has(t.id)), ...pages];
   if (!items.length) {
     return tab === "following" ? (
-      <EmptyState title="Nothing here yet" body="Follow people from their profiles, and their theses land here." />
+      <EmptyState title="Nothing here yet" body="Follow people from their profiles, and their thesis posts land here." />
     ) : (
-      <EmptyState title="No theses yet" body="Theses come from verified holders. Buy a token and be the first to pin one." />
+      <EmptyState title="No thesis posts yet" body="They come from verified holders. Buy a token and be the first to pin one." />
     );
   }
   const loadMore = async () => {
@@ -186,7 +186,7 @@ export default function HomePage() {
           options={[
             { value: "trending", label: "Trending" },
             { value: "new", label: "New" },
-            { value: "top", label: "Top theses" },
+            { value: "top", label: "Top thesis" },
             { value: "following", label: "Following" },
           ]}
         />

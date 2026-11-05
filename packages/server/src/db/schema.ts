@@ -78,6 +78,8 @@ export const trades = pgTable("trades", {
   usdOut: usd("usd_out"),
   qty: qty("qty"),
   priceUsd: usd("price_usd"),
+  /** What this sale made or lost against its cost basis. Null on buys. */
+  pnlUsd: usd("pnl_usd"),
   feeUsd: usd("fee_usd"),
   provider: text("provider").notNull(),
   providerOrderId: text("provider_order_id"),
@@ -208,6 +210,8 @@ export const notifications = pgTable("notifications", {
   thesisId: uuid("thesis_id").references(() => theses.id, { onDelete: "cascade" }),
   tokenChain: text("token_chain"),
   tokenAddr: text("token_addr"),
+  /** Set on fills, so the notification can open that trade's result. */
+  tradeId: uuid("trade_id").references(() => trades.id, { onDelete: "set null" }),
   message: text("message").notNull(),
   readAt: ts("read_at"),
   createdAt: ts("created_at").notNull().defaultNow(),

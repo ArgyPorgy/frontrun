@@ -38,6 +38,7 @@ import { HttpError } from "../http";
 import { logger } from "../logger";
 import { getSnapshot, getTokenDetail, rememberToken } from "../market/service";
 import { notify } from "../notifications";
+import { resolveClosedTheses } from "../theses";
 import { arcUsdcBalance, erc20Allowance, tokenBalance } from "../onchain";
 import {
   PROVIDERS,
@@ -347,6 +348,7 @@ export function tradeToView(row: typeof schema.trades.$inferSelect, token: Token
     qty: row.qty,
     priceUsd: row.priceUsd,
     feeUsd: row.feeUsd,
+    pnlUsd: row.pnlUsd,
     provider: row.provider as ProviderId,
     srcChain: row.srcChain as ChainKey,
     srcTx: row.srcTx,
@@ -628,13 +630,17 @@ export async function applyStatus(tradeId: string, update: StatusUpdate): Promis
         fields.applied = true;
         if (update.usdIn) fields.usdIn = update.usdIn;
         if (update.usdOut) fields.usdOut = update.usdOut;
-        await applyFillToPosition(tx as unknown as Db, trade, update);
+        const pnl = await applyFillToPosition(tx as unknown as Db, trade, update);
+        if (pnl !== null) fields.pnlUsd = pnl;
       }
     }
     await tx.update(schema.trades).set(fields).where(eq(schema.trades.id, tradeId));
     return { trade, status: fields.status as TradeStatus, terminal };
   });
   if (!outcome) return;
+  if (outcome.status === "filled" && outcome.trade.side === "sell") {
+    await resolveClosedTheses({ userId: outcome.trade.userId }).catch((err: unknown) => logger.warn({ tradeId, err: err instanceof Error ? err.message : err }, "thesis resolve failed"));
+  }
   await publishTrade(tradeId);
   if (outcome.terminal) {
     await db()
@@ -644,7 +650,8 @@ export async function applyStatus(tradeId: string, update: StatusUpdate): Promis
   }
 }
 
-async function applyFillToPosition(tx: Db, trade: typeof schema.trades.$inferSelect, update: StatusUpdate) {
+/** Returns what a sale realized, or null when there's nothing to report. */
+async function applyFillToPosition(tx: Db, trade: typeof schema.trades.$inferSelect, update: StatusUpdate): Promise<string | null> {
   const [row] = await tx
     .select()
     .from(schema.positions)
@@ -681,9 +688,10 @@ async function applyFillToPosition(tx: Db, trade: typeof schema.trades.$inferSel
         .set({ paperBalanceUsd: sql`${schema.users.paperBalanceUsd} - ${usdIn}::numeric` })
         .where(eq(schema.users.id, trade.userId));
     }
-    return;
+    return null;
   }
   const usdOut = update.usdOut ?? "0";
+  let realized: string | null = null;
   if (row) {
     const result = applySell(state, { qty: update.qty!, usdReceived: usdOut, feesUsd: update.extraCostUsd });
     await tx
@@ -695,6 +703,7 @@ async function applyFillToPosition(tx: Db, trade: typeof schema.trades.$inferSel
         ...(result.closed ? { closedAt: new Date() } : {}),
       })
       .where(eq(schema.positions.id, row.id));
+    realized = D(result.state.realizedPnlUsd).sub(state.realizedPnlUsd).toFixed();
   }
   if (trade.isPaper) {
     await tx
@@ -702,6 +711,7 @@ async function applyFillToPosition(tx: Db, trade: typeof schema.trades.$inferSel
       .set({ paperBalanceUsd: sql`${schema.users.paperBalanceUsd} + ${usdOut}::numeric` })
       .where(eq(schema.users.id, trade.userId));
   }
+  return realized;
 }
 
 async function notifyTradeResult(trade: typeof schema.trades.$inferSelect, status: TradeStatus) {
@@ -713,7 +723,7 @@ async function notifyTradeResult(trade: typeof schema.trades.$inferSelect, statu
       : status === "refunded"
         ? `Your ${token.symbol} ${trade.side} was refunded`
         : `Your ${token.symbol} ${trade.side} didn't go through`;
-  await notify(trade.userId, { type: "trade_update", message, tokenChain: trade.tokenChain, tokenAddr: trade.tokenAddr }, { push: true });
+  await notify(trade.userId, { type: "trade_update", message, tradeId: trade.id, tokenChain: trade.tokenChain, tokenAddr: trade.tokenAddr }, { push: true });
   if (status === "filled" && trade.copiedThesisId) {
     const thesis = await db().query.theses.findFirst({ where: eq(schema.theses.id, trade.copiedThesisId) });
     if (thesis && thesis.userId !== trade.userId) {

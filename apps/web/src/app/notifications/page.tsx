@@ -1,9 +1,10 @@
 "use client";
 
-import { timeAgo, type NotificationView } from "@frontrun/core";
+import { timeAgo, type NotificationView, type TradeView } from "@frontrun/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { TradeCardSheet } from "@/components/trade-card";
 import { Avatar, Button, EmptyState, PageTitle, RowSkeletons, TokenIcon } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -16,11 +17,22 @@ function hrefFor(n: NotificationView): string {
   return "/";
 }
 
+function NotificationBody({ n }: { n: NotificationView }) {
+  return (
+    <>
+      {n.actor ? <Avatar user={n.actor} size={34} /> : n.token ? <TokenIcon symbol={n.token.symbol} imageUrl={n.token.imageUrl} size={34} /> : <span className="h-[34px] w-[34px] rounded-full bg-raised" />}
+      <p className="min-w-0 flex-1 text-sm">{n.message}</p>
+      <span className="num text-xs text-faint">{timeAgo(n.createdAt)}</span>
+    </>
+  );
+}
+
 export default function NotificationsPage() {
   const { status, login } = useAuth();
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ["notifications"], queryFn: () => api.notifications(), enabled: status === "in" });
   const unread = query.data?.unread ?? 0;
+  const [openTrade, setOpenTrade] = useState<TradeView | null>(null);
   useEffect(() => {
     if (unread > 0) {
       void api.markNotificationsRead().then(() => queryClient.invalidateQueries({ queryKey: ["notifications"] }));
@@ -37,17 +49,22 @@ export default function NotificationsPage() {
         <ul className="divide-y divide-line/60">
           {query.data.items.map((n) => (
             <li key={n.id}>
-              <Link href={hrefFor(n)} className={`flex items-center gap-3 px-4 py-3 ${n.read ? "" : "bg-signal/5"}`}>
-                {n.actor ? <Avatar user={n.actor} size={34} /> : n.token ? <TokenIcon symbol={n.token.symbol} imageUrl={n.token.imageUrl} size={34} /> : <span className="h-[34px] w-[34px] rounded-full bg-raised" />}
-                <p className="min-w-0 flex-1 text-sm">{n.message}</p>
-                <span className="num text-xs text-faint">{timeAgo(n.createdAt)}</span>
-              </Link>
+              {n.tradeId ? (
+                <button onClick={() => void api.trade(n.tradeId!).then(setOpenTrade)} className={`flex w-full items-center gap-3 px-4 py-3 text-left ${n.read ? "" : "bg-signal/5"}`}>
+                  <NotificationBody n={n} />
+                </button>
+              ) : (
+                <Link href={hrefFor(n)} className={`flex items-center gap-3 px-4 py-3 ${n.read ? "" : "bg-signal/5"}`}>
+                  <NotificationBody n={n} />
+                </Link>
+              )}
             </li>
           ))}
         </ul>
       ) : (
         <EmptyState title="Nothing yet" body="Alerts from people you follow, fills and deposits show up here." />
       )}
+      <TradeCardSheet trade={openTrade} onClose={() => setOpenTrade(null)} />
     </div>
   );
 }

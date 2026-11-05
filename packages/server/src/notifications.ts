@@ -11,6 +11,7 @@ export interface NotifyInput {
   message: string;
   actorId?: string | null;
   thesisId?: string | null;
+  tradeId?: string | null;
   tokenChain?: string | null;
   tokenAddr?: string | null;
 }
@@ -70,6 +71,7 @@ async function rowToView(row: typeof schema.notifications.$inferSelect, actor: U
     type: row.type as NotificationView["type"],
     actor,
     thesisId: row.thesisId,
+    tradeId: row.tradeId,
     token,
     message: row.message,
     createdAt: row.createdAt.toISOString(),
@@ -86,6 +88,7 @@ export async function notify(userId: string, input: NotifyInput, opts: { push?: 
       message: input.message,
       actorId: input.actorId ?? null,
       thesisId: input.thesisId ?? null,
+      tradeId: input.tradeId ?? null,
       tokenChain: input.tokenChain ?? null,
       tokenAddr: input.tokenAddr ?? null,
     })

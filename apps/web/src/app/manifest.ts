@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Front Run",
     short_name: "Front Run",
-    description: "Trade any token from one USDC balance on Arc, with theses from people who actually hold.",
+    description: "Trade any token from one USDC balance on Arc, with thesis posts from people who actually hold.",
     start_url: "/",
     display: "standalone",
     orientation: "portrait",

@@ -34,6 +34,7 @@ import {
   refreshBoosts,
   refreshMarketList,
   refreshRankScores,
+  resolveClosedTheses,
   resolveDueTheses,
   runMigrations,
   schema,
@@ -119,6 +120,13 @@ function marketRotation() {
 }
 
 /** Spots deposits by balance change for wallets with the app open. */
+async function hasRecentTrade(userId: string): Promise<boolean> {
+  const recent = await db().query.trades.findFirst({
+    where: and(eq(schema.trades.userId, userId), gt(schema.trades.updatedAt, new Date(Date.now() - 5 * 60_000))),
+  });
+  return !!recent;
+}
+
 async function watchBalances() {
   if (isPaperMode()) return;
   const cutoff = Date.now() - 120_000;
@@ -142,8 +150,9 @@ async function watchBalances() {
       const usdc = fromBaseUnits(balance, CHAINS.arc.usdcDecimals);
       await publish(CHANNELS.user(userId), { type: "balance", usdc });
       const gained = balance - BigInt(previous);
-      // Tiny changes are gas or fill settlement, and a real deposit clears this bar.
-      if (gained >= 100_000n) {
+      // Tiny changes are gas or fill settlement, and a real deposit clears this bar. So do a sale's proceeds,
+      // which reach the wallet before the sale reports as filled, so a recent trade rules out a deposit.
+      if (gained >= 100_000n && !(await hasRecentTrade(userId))) {
         const amount = D(fromBaseUnits(gained, CHAINS.arc.usdcDecimals)).toFixed(2);
         await notify(userId, { type: "deposit", message: `$${amount} USDC arrived on Arc` }, { push: true });
       }
@@ -190,7 +199,10 @@ async function main() {
   every("trade-indexer", 1_500, () => pollActiveTrades(), { leaseMs: 20_000 });
   every("balances", 5_000, watchBalances);
   every("reconcile", 5 * 60_000, () => reconcilePositions(), { leaseMs: 10 * 60_000 });
-  every("thesis-resolve", 60_000, () => resolveDueTheses());
+  every("thesis-resolve", 60_000, async () => {
+    await resolveDueTheses();
+    await resolveClosedTheses();
+  });
   every("thesis-rank", 5 * 60_000, refreshRankScores);
   every("moderation", 60_000, moderate);
   // A long lease, since a batch waits on several receipts. Theses share the relayer's nonce.

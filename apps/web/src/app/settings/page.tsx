@@ -287,7 +287,7 @@ function NotificationsRow() {
 
   const description = {
     loading: "",
-    on: "Fills, deposits and theses from people you follow.",
+    on: "Fills, deposits and thesis posts from people you follow.",
     off: "Get alerts on this device.",
     unsupported: "Not available on this device.",
     needs_install: "On iPhone, add the app to your Home Screen first.",

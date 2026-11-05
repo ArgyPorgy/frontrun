@@ -188,6 +188,38 @@ async function expectApiError(promise: Promise<unknown>, code: string) {
   return err as ApiError;
 }
 
+describe("closing a position", () => {
+  it("closes its thesis at the sale price, and counts toward accuracy", async () => {
+    const { client } = await loginFunded("closer");
+    await buy(client, TOKEN_A, "100");
+    const thesis = await client.createThesis({ chain: "arc", address: TOKEN_A, body: "Closing this one out soon." });
+    expect(thesis.outcome).toBe("pending");
+    await sell(client, TOKEN_A, 100);
+    const after = await client.thesis(thesis.id);
+    expect(after.outcome).not.toBe("pending");
+    const me = await client.me();
+    const profile = await client.profile(me.username);
+    expect(profile.stats.resolved).toBe(1);
+  });
+
+  it("keeps the thesis open after a partial sale", async () => {
+    const { client } = await loginFunded("partial");
+    await buy(client, TOKEN_A, "100");
+    const thesis = await client.createThesis({ chain: "arc", address: TOKEN_A, body: "Only trimming this one a bit." });
+    await sell(client, TOKEN_A, 25);
+    expect((await client.thesis(thesis.id)).outcome).toBe("pending");
+  });
+
+  it("reports what a sale made on the trade itself", async () => {
+    const { client } = await loginFunded("pnlcard");
+    await buy(client, TOKEN_A, "100");
+    const { trade } = await sell(client, TOKEN_A, 100);
+    expect(trade.pnlUsd).not.toBeNull();
+    const list = await client.notifications();
+    expect(list.items.some((n) => n.tradeId === trade.id)).toBe(true);
+  });
+});
+
 describe("the trade indexer", () => {
   it("leaves a live trade alone while it's being submitted, and closes it only if it stalls", async () => {
     const { client } = await loginFunded("midflight");

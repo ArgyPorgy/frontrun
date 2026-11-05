@@ -15,6 +15,13 @@
       "when": 1793904726897,
       "tag": "0001_thesis_anchoring",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793918605000,
+      "tag": "0002_trade_pnl_and_links",
+      "breakpoints": true
     }
   ]
 }

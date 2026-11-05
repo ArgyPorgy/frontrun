@@ -6,7 +6,6 @@ import {
   D,
   SELL_PRESETS_PCT,
   cleanAmountInput,
-  explorerTxUrl,
   formatPrice,
   formatQty,
   formatUsd,
@@ -15,7 +14,6 @@ import {
   type QuoteView,
   type ThesisView,
   type TokenDetail,
-  type TradeView,
 } from "@frontrun/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
@@ -41,81 +39,6 @@ function PresetButton({ active, disabled, onClick, children }: { active: boolean
     >
       {children}
     </button>
-  );
-}
-
-function ReceiptSheet({ trade, onClose }: { trade: TradeView | null; onClose(): void }) {
-  const [details, setDetails] = useState(false);
-  if (!trade) return null;
-  const failed = trade.status === "failed" || trade.status === "refunded";
-  const title = trade.status === "filled" ? (trade.side === "buy" ? "Bought" : "Sold") : trade.status === "refunded" ? "Refunded" : "Didn't go through";
-  return (
-    <Sheet open onClose={onClose} title={`${title} ${trade.token.symbol}`}>
-      {failed ? (
-        <p className="text-sm text-muted">{trade.error ?? "Nothing was traded."}</p>
-      ) : (
-        <dl className="num space-y-2 text-sm">
-          <div className="flex justify-between">
-            <dt className="text-muted">{trade.side === "buy" ? "Spent" : "Received"}</dt>
-            <dd>{formatUsd(trade.side === "buy" ? trade.usdIn : trade.usdOut)}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-muted">{trade.side === "buy" ? "Received" : "Sold"}</dt>
-            <dd>
-              {formatQty(trade.qty)} {trade.token.symbol}
-            </dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-muted">Price</dt>
-            <dd>{formatPrice(trade.priceUsd)}</dd>
-          </div>
-        </dl>
-      )}
-      <button onClick={() => setDetails(!details)} className="mt-3 text-sm text-muted underline underline-offset-2">
-        {details ? "Hide details" : "Details"}
-      </button>
-      {details && (
-        <dl className="num mt-2 space-y-1.5 text-xs text-muted">
-          <div className="flex justify-between">
-            <dt>Route</dt>
-            <dd>{trade.provider}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt>Fees</dt>
-            <dd>{formatUsd(trade.feeUsd)}</dd>
-          </div>
-          {trade.isPaper && (
-            <div className="flex justify-between">
-              <dt>Mode</dt>
-              <dd>Paper fill</dd>
-            </div>
-          )}
-          {trade.srcTx && (
-            <div className="flex justify-between">
-              <dt>Source tx</dt>
-              <dd>
-                <a className="underline" href={explorerTxUrl(trade.srcChain, trade.srcTx)} target="_blank" rel="noreferrer">
-                  View
-                </a>
-              </dd>
-            </div>
-          )}
-          {trade.dstTx && trade.dstTx !== trade.srcTx && (
-            <div className="flex justify-between">
-              <dt>Destination tx</dt>
-              <dd>
-                <a className="underline" href={explorerTxUrl(trade.side === "buy" ? trade.token.chain : "arc", trade.dstTx)} target="_blank" rel="noreferrer">
-                  View
-                </a>
-              </dd>
-            </div>
-          )}
-        </dl>
-      )}
-      <Button onClick={onClose} variant="secondary" className="mt-4 w-full">
-        Done
-      </Button>
-    </Sheet>
   );
 }
 
@@ -209,7 +132,7 @@ export function TradeBar({
   const me = useMe();
   const balance = useBalance();
   const queryClient = useQueryClient();
-  const { execute, receipt, clearReceipt } = useTradeRunner();
+  const { execute } = useTradeRunner();
   const [enabling, setEnabling] = useState(false);
   const [enableError, setEnableError] = useState<string | null>(null);
   const [side, setSide] = useState<Side>("buy");
@@ -342,8 +265,7 @@ export function TradeBar({
   else if (q) {
     const out = side === "buy" ? `≈ ${formatQty(q.expectedQty)} ${token.symbol}` : `≈ ${formatUsd(q.expectedOutUsd)}`;
     const impact = q.priceImpact !== null && q.priceImpact >= 0.001 ? ` · ${(q.priceImpact * 100).toFixed(1)}% impact` : "";
-    const eta = q.route.crossChain ? ` · ~${q.etaSeconds}s` : "";
-    subline = `${out}${impact}${eta}`;
+    subline = `${out}${impact}`;
   } else if (amount && (quote.isFetching || !settled) && status === "in") subline = "Finding the best route…";
 
   return (
@@ -452,7 +374,6 @@ export function TradeBar({
         </div>
       </div>
       <ConfirmSheet quote={confirming} busy={busy} onClose={() => setConfirming(null)} onConfirm={() => confirming && void run(confirming, true)} />
-      <ReceiptSheet trade={receipt} onClose={clearReceipt} />
     </>
   );
 }

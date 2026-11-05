@@ -113,13 +113,14 @@ export default function ProfilePage() {
             sub={p.stats.resolved ? `${p.stats.right} of ${p.stats.resolved} right` : `${p.stats.theses} open`}
           />
         </div>
+        <p className="mt-2 px-1 text-xs text-faint">Thesis accuracy is how often the price rose after posting. A thesis closes when its author sells out, at their sale price, or after 24 hours.</p>
       </section>
       <Segmented
         className="px-3 pb-1"
         value={tab}
         onChange={setTab}
         options={[
-          { value: "theses", label: `Theses ${p.stats.theses}` },
+          { value: "theses", label: `Thesis ${p.stats.theses}` },
           { value: "positions", label: "Positions" },
         ]}
       />
@@ -133,7 +134,7 @@ export default function ProfilePage() {
             ))}
           </div>
         ) : (
-          <EmptyState title="No theses yet" />
+          <EmptyState title="No thesis posts yet" />
         )
       ) : positions.isLoading ? (
         <RowSkeletons count={3} />

@@ -3,6 +3,7 @@
 import { CHAINS, formatPct, type ChainKey, type UserSummary } from "@frontrun/core";
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 const AVATAR_PALETTE: Array<[string, string]> = [
   ["#c8f135", "#2f6b3a"],
@@ -79,11 +80,19 @@ export function TokenIcon({ symbol, imageUrl, size = 36 }: { symbol: string; ima
   );
 }
 
+export function ChainLogo({ chain, size = 16 }: { chain: ChainKey; size?: number }) {
+  return (
+    // Fixed local files, small enough that an image optimizer would only add a round trip.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={`/chains/${chain}.webp`} alt={CHAINS[chain].name} width={size} height={size} className="shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />
+  );
+}
+
 export function ChainBadge({ chain }: { chain: ChainKey }) {
   const info = CHAINS[chain];
   return (
-    <span className="num inline-flex items-center gap-1 rounded-md bg-raised px-1.5 py-0.5 text-[10px] font-medium tracking-normal text-muted">
-      <span className="h-1.5 w-1.5 rounded-full" style={{ background: info.accent }} />
+    <span className="num inline-flex items-center gap-1 rounded-md bg-raised py-0.5 pr-1.5 pl-0.5 text-[10px] font-medium tracking-normal text-muted">
+      <ChainLogo chain={chain} size={14} />
       {info.shortName}
     </span>
   );
@@ -159,9 +168,10 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
       document.body.style.overflow = previous;
     };
   }, [open, onClose]);
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/70 md:items-center md:justify-center" onClick={onClose} role="presentation">
+  if (!open || typeof document === "undefined") return null;
+  // At the top of the page, so the chart's own layers or a parent's blur can never sit over it.
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-end bg-black/80 md:items-center md:justify-center" onClick={onClose} role="presentation">
       <div
         role="dialog"
         aria-modal="true"
@@ -173,7 +183,8 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
         {title && <h2 className="px-5 pt-3 text-lg font-semibold">{title}</h2>}
         <div className="px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+20px)]">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

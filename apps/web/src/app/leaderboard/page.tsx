@@ -12,7 +12,7 @@ export default function LeaderboardPage() {
     <div>
       <PageTitle>Accuracy leaderboard</PageTitle>
       <p className="px-4 pb-3 text-sm text-muted">
-        Ranked by how often a verified thesis was above its post price 24 hours later, not by who has the most money. Takes {query.data?.minResolved ?? 5} resolved theses to qualify.
+        Ranked by how often a verified thesis called it, at the author's sale price or 24 hours later, not by who has the most money. Takes {query.data?.minResolved ?? 5} resolved theses to qualify.
       </p>
       {query.isLoading ? (
         <RowSkeletons />
@@ -38,7 +38,7 @@ export default function LeaderboardPage() {
           ))}
         </ol>
       ) : (
-        <EmptyState title="No one has qualified yet" body="Theses resolve 24 hours after posting, so the board fills up as they do." />
+        <EmptyState title="No one has qualified yet" body="A thesis closes when its author sells out, or 24 hours after posting, so the board fills up as they do." />
       )}
     </div>
   );

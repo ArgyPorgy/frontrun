@@ -14,7 +14,7 @@ export default function MyProfilePage() {
     if (me.data) router.replace(`/u/${me.data.username}`);
   }, [me.data, router]);
   if (status === "out") {
-    return <EmptyState title="Your profile" body="Sign in to post theses and build a track record." action={<Button onClick={login}>Sign in</Button>} />;
+    return <EmptyState title="Your profile" body="Sign in to post a thesis and build a track record." action={<Button onClick={login}>Sign in</Button>} />;
   }
   return <RowSkeletons count={4} />;
 }

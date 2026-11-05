@@ -1,8 +1,9 @@
 "use client";
 
-import { ApiError, TERMINAL_STATUSES, type ChainKey, type QuoteView, type TradeView } from "@frontrun/core";
+import { ApiError, D, TERMINAL_STATUSES, type ChainKey, type PortfolioView, type QuoteView, type TradeView } from "@frontrun/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { TradeCardSheet } from "@/components/trade-card";
 import { api, errorMessage } from "./api";
 import { useAuth } from "./auth";
 import { useSocket } from "./socket";
@@ -21,16 +22,8 @@ function newKey(): string {
   return crypto.randomUUID();
 }
 
-/**
- * "Bought" shows this long before the fill is expected. The order is already accepted by then. If it
- * still fails, the toast corrects itself and the receipt says so.
- */
-const OPTIMISTIC_LEAD_SECONDS = 3;
-
 interface TradeRunner {
   execute(quote: QuoteView, opts?: { confirmed?: boolean }): Promise<{ needsConfirm?: boolean; expired?: boolean; trade?: TradeView }>;
-  receipt: TradeView | null;
-  clearReceipt(): void;
 }
 
 const TradeRunnerContext = createContext<TradeRunner | null>(null);
@@ -110,18 +103,26 @@ export function TradeRunnerProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(timer);
   }, [showStatus]);
 
-  /** Only an order the venue has accepted gets this, and only while its real result is still out. */
+  /**
+   * Shows the result as soon as the venue has accepted the order. Real fills take from a few seconds up
+   * to about 40, so this always lands well before the chain confirms, and the app feels instant. If the
+   * order later fails, the toast and the card correct themselves.
+   */
   const claimAhead = useCallback(
-    (trade: TradeView, etaSeconds: number) => {
+    (trade: TradeView, quote: QuoteView) => {
       if (TERMINAL_STATUSES.includes(trade.status) || trade.status === "awaiting_signature") return;
-      const delay = Math.max(etaSeconds - OPTIMISTIC_LEAD_SECONDS, 0) * 1000;
-      setTimeout(() => {
-        if (!watching.current.has(trade.id)) return;
-        claimed.current.add(trade.id);
-        toast(`${trade.side === "buy" ? "Bought" : "Sold"} ${trade.token.symbol}`, { key: `trade:${trade.id}`, tone: "good" });
-      }, delay);
+      claimed.current.add(trade.id);
+      toast(`${trade.side === "buy" ? "Bought" : "Sold"} ${trade.token.symbol}`, { key: `trade:${trade.id}`, tone: "good" });
+      if (trade.side !== "sell") return;
+      // A full sale leaves the position straight away too. A failure refetches it, which puts it back.
+      const { chain, address } = trade.token;
+      const key = ["position", chain, address];
+      const held = queryClient.getQueryData<{ position: { qty: string } | null }>(key)?.position;
+      if (!held || !quote.qtyIn || D(quote.qtyIn).lt(D(held.qty).mul("0.999"))) return;
+      queryClient.setQueryData(key, { position: null });
+      queryClient.setQueryData<PortfolioView>(["portfolio"], (p) => (p ? { ...p, open: p.open.filter((o) => o.token.chain !== chain || o.token.address !== address) } : p));
     },
-    [toast],
+    [queryClient, toast],
   );
 
   const signInWallet = useCallback(
@@ -152,7 +153,7 @@ export function TradeRunnerProvider({ children }: { children: ReactNode }) {
         showStatus(started);
         const trade = await signInWallet(started);
         showStatus(trade);
-        claimAhead(trade, quote.etaSeconds);
+        claimAhead(trade, quote);
         return { trade };
       } catch (err) {
         dismiss(tradeId ? `trade:${tradeId}` : startKey);
@@ -168,9 +169,14 @@ export function TradeRunnerProvider({ children }: { children: ReactNode }) {
     [claimAhead, dismiss, rekey, showStatus, signInWallet, toast],
   );
 
-  const value = useMemo<TradeRunner>(() => ({ execute, receipt, clearReceipt: () => setReceipt(null) }), [execute, receipt]);
+  const value = useMemo<TradeRunner>(() => ({ execute }), [execute]);
 
-  return <TradeRunnerContext.Provider value={value}>{children}</TradeRunnerContext.Provider>;
+  return (
+    <TradeRunnerContext.Provider value={value}>
+      {children}
+      <TradeCardSheet trade={receipt} onClose={() => setReceipt(null)} />
+    </TradeRunnerContext.Provider>
+  );
 }
 
 export function useTradeRunner(): TradeRunner {

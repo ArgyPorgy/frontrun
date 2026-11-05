@@ -37,7 +37,7 @@ function ProfileStep() {
     <div className="px-4 pt-6">
       <p className="text-xs font-medium text-muted">Step 1 of 3</p>
       <h1 className="mt-1 text-2xl font-semibold tracking-tight">Pick a name and avatar</h1>
-      <p className="mt-1 text-muted">This is who people see on your theses and on the chart.</p>
+      <p className="mt-1 text-muted">This is who people see on your thesis posts and on the chart.</p>
       <div className="mt-5 grid grid-cols-6 gap-3">
         {AVATAR_CHOICES.map((choice) => (
           <button key={choice} onClick={() => setAvatar(choice)} aria-label={`Avatar ${choice}`} aria-pressed={avatar === choice} className={`rounded-full p-0.5 ${avatar === choice ? "ring-2 ring-signal" : ""}`}>

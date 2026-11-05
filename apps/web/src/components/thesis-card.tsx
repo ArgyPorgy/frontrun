@@ -206,7 +206,7 @@ export function ThesisCard({
               Sign in to report
             </Button>
           )}
-          <p className="mt-1 text-center text-xs text-faint">Theses are opinions, not financial advice.</p>
+          <p className="mt-1 text-center text-xs text-faint">A thesis is an opinion, not financial advice.</p>
         </div>
       </Sheet>
     </article>
@@ -276,7 +276,7 @@ export function ThesisComposer({
       </div>
       {error && <p className="mt-2 text-sm text-down">{error}</p>}
       <p className="mt-3 text-xs text-faint">
-        The price and your position lock when you post. You can delete a thesis later, but not edit it. Theses are opinions, not financial advice.
+        The price and your position lock when you post. You can delete a thesis later, but not edit it. A thesis is an opinion, not financial advice.
       </p>
       <Button onClick={submit} disabled={post.isPending || !body.trim()} className="mt-3 w-full">
         {post.isPending ? "Posting…" : "Pin to chart"}

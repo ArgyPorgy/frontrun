@@ -27,8 +27,8 @@ function RowBody({ token, priceUsd, change, marketCap }: { token: TokenListItem;
           <span className="truncate font-semibold">{token.symbol}</span>
           <ChainBadge chain={token.chain} />
           {token.thesisCount > 0 && (
-            <span className="num rounded-md bg-signal/15 px-1.5 py-0.5 text-[10px] font-medium tracking-normal text-signal" title={`${token.thesisCount} ${token.thesisCount === 1 ? "thesis" : "theses"}`}>
-              {token.thesisCount} {token.thesisCount === 1 ? "thesis" : "theses"}
+            <span className="num rounded-md bg-signal/15 px-1.5 py-0.5 text-[10px] font-medium tracking-normal text-signal" title={`${token.thesisCount} thesis`}>
+              {token.thesisCount} thesis
             </span>
           )}
           {token.boosted && (

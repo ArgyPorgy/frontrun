@@ -234,6 +234,7 @@ export interface NotificationView {
   type: "thesis_posted" | "thesis_liked" | "thesis_replied" | "followed" | "trade_update" | "deposit" | "copy_buy";
   actor: UserSummary | null;
   thesisId: string | null;
+  tradeId: string | null;
   token: TokenRef | null;
   message: string;
   createdAt: string;
@@ -295,6 +296,7 @@ export interface TradeView {
   qty: string | null;
   priceUsd: string | null;
   feeUsd: string | null;
+  pnlUsd: string | null;
   provider: ProviderId;
   srcChain: ChainKey;
   srcTx: string | null;

@@ -10,7 +10,7 @@ const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" });
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
   title: { default: "Front Run", template: "%s · Front Run" },
-  description: "Trade any token from one USDC balance on Arc, with theses pinned to the chart by people who actually hold.",
+  description: "Trade any token from one USDC balance on Arc, with thesis posts pinned to the chart by people who actually hold.",
   appleWebApp: { capable: true, title: "Front Run", statusBarStyle: "black-translucent" },
   icons: { icon: "/icons/192", apple: "/icons/180" },
 };

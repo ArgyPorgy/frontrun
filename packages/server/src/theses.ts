@@ -460,6 +460,55 @@ export async function resolveDueTheses(limit = 100): Promise<number> {
   return due.length;
 }
 
+/**
+ * A thesis also ends when its author sells out, at the price they got. It's what they actually did with
+ * the call, and it means a closed trade never leaves a thesis showing as open. This finds them from the
+ * positions, so it also catches a position that closed outside the app.
+ */
+export async function resolveClosedTheses(opts: { userId?: string; limit?: number } = {}): Promise<number> {
+  const open = await db()
+    .select()
+    .from(schema.theses)
+    .where(
+      and(
+        eq(schema.theses.outcome, "pending"),
+        eq(schema.theses.verified, true),
+        isNull(schema.theses.deletedAt),
+        opts.userId ? eq(schema.theses.userId, opts.userId) : undefined,
+        sql`not exists (
+          select 1 from positions p
+          where p.user_id = ${schema.theses.userId} and p.token_chain = ${schema.theses.tokenChain}
+            and p.token_addr = ${schema.theses.tokenAddr} and p.closed_at is null
+        )`,
+      ),
+    )
+    .limit(opts.limit ?? 100);
+  for (const thesis of open) {
+    const sale = await db().query.trades.findFirst({
+      where: and(
+        eq(schema.trades.userId, thesis.userId),
+        eq(schema.trades.tokenChain, thesis.tokenChain),
+        eq(schema.trades.tokenAddr, thesis.tokenAddr),
+        eq(schema.trades.side, "sell"),
+        eq(schema.trades.status, "filled"),
+      ),
+      orderBy: desc(schema.trades.filledAt),
+    });
+    const price = sale?.priceUsd ?? (await getSnapshot(thesis.tokenChain as ChainKey, thesis.tokenAddr).catch(() => null))?.priceUsd;
+    if (!price) continue;
+    await db()
+      .update(schema.theses)
+      .set({
+        outcome: resolveOutcome(thesis.priceAtPost, price),
+        priceAtResolve: price,
+        returnPct: returnSincePost(thesis.priceAtPost, price),
+        resolvedAt: new Date(),
+      })
+      .where(eq(schema.theses.id, thesis.id));
+  }
+  return open.length;
+}
+
 /** Worker: keeps rank scores decaying, for theses recent enough to still be ranking. */
 export async function refreshRankScores() {
   await db().execute(sql`
