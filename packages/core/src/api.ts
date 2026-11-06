@@ -177,7 +177,7 @@ export class ApiClient {
   report = (body: { thesisId?: string; username?: string; reason: "spam" | "scam" | "abuse" | "other"; note?: string }) =>
     this.request<void>("POST", "/v1/reports", { body });
 
-  leaderboard = () => this.request<{ items: LeaderboardRow[]; minResolved: number }>("GET", "/v1/leaderboard");
+  leaderboard = () => this.request<{ items: LeaderboardRow[]; provisional: LeaderboardRow[]; minResolved: number }>("GET", "/v1/leaderboard");
 
   notifications = () => this.request<{ items: NotificationView[]; unread: number }>("GET", "/v1/notifications");
   markNotificationsRead = () => this.request<void>("POST", "/v1/notifications/read", { body: {} });

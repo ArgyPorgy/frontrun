@@ -46,6 +46,9 @@ export const PERMIT2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
 /** DefinitiveFlashAllowance on Arc: the spender in the one-tap approval. */
 export const FLASH_ALLOWANCE_ARC = "0x5d00000873b6BF41539e6f5365B0Ff7d3c368f78";
 export const EVM_NATIVE_SENTINEL = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+/** Where a thesis's position history and a wallet's reputation score live. Public, so they're kept here. */
+export const POSITION_LEDGER_ARC = "0xf64eed5e5706a29381123a6ec70b07947446070a";
+export const REPUTATION_REGISTRY_ARC = "0xae22ba7f5bcb367a179e21cf24d2ad10d917dc4e";
 /**
  * Flash can't bridge some tokens directly, like Robinhood's stock tokens. These trade through a stablecoin
  * on their own chain that Flash can bridge. USDG is the one NVDA's main Uniswap pool pairs with.

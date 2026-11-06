@@ -1,4 +1,6 @@
 import type { ChainKey } from "./chains";
+import type { ThesisLive } from "./proof";
+import type { ReputationComponents, ReputationView } from "./reputation";
 import type { RiskFlag } from "./risk";
 import type { GuardrailIssue, ProviderId, TradeStatus } from "./routing";
 import type { ThesisOutcome } from "./thesis";
@@ -154,6 +156,10 @@ export interface ThesisView {
   currentPriceUsd: string | null;
   /** Set once this thesis has been anchored on Arc. */
   anchor: { hash: string; txHash: string; anchoredAt: string } | null;
+  /** What the author has done with their position since posting. */
+  live: ThesisLive;
+  /** The author's reputation score, once they have one. */
+  authorScore: number | null;
 }
 
 export interface ThesisProof {
@@ -219,11 +225,17 @@ export interface ProfileView extends UserSummary {
     right: number;
     accuracy: number | null;
   };
+  reputation: ReputationView | null;
 }
 
 export interface LeaderboardRow {
   rank: number;
   user: UserSummary;
+  score: number;
+  provisional: boolean;
+  components: ReputationComponents;
+  avgDrawdownPct: number;
+  avgHoldSeconds: number;
   accuracy: number;
   resolved: number;
   right: number;
@@ -242,7 +254,7 @@ export interface TraderResult extends UserSummary {
 
 export interface NotificationView {
   id: string;
-  type: "thesis_posted" | "followed_buy" | "copy_trade" | "thesis_liked" | "thesis_replied" | "followed" | "trade_update" | "deposit" | "copy_buy";
+  type: "thesis_posted" | "followed_buy" | "copy_trade" | "thesis_position" | "thesis_liked" | "thesis_replied" | "followed" | "trade_update" | "deposit" | "copy_buy";
   actor: UserSummary | null;
   thesisId: string | null;
   tradeId: string | null;
@@ -455,7 +467,8 @@ export type ServerEvent =
   | { type: "trade"; trade: TradeView }
   | { type: "balance"; usdc: string }
   | { type: "notification"; notification: NotificationView }
-  | { type: "thesis"; thesis: ThesisView };
+  | { type: "thesis"; thesis: ThesisView }
+  | { type: "thesis_position"; thesisId: string; live: ThesisLive };
 
 export interface Page<T> {
   items: T[];

@@ -10,6 +10,7 @@ import {
   notFound,
   notify,
   publicPositions,
+  reputationByWallet,
   searchUsers,
   unblock,
   unfollow,
@@ -68,7 +69,15 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     reply.status(204).send();
   });
 
-  app.get("/v1/leaderboard", async () => ({ items: await leaderboard(), minResolved: LEADERBOARD_MIN_RESOLVED }));
+  app.get("/v1/leaderboard", async () => ({ ...(await leaderboard()), minResolved: LEADERBOARD_MIN_RESOLVED }));
+
+  // Open to anyone, so another app or bot can read a trader's score without an account here.
+  app.get("/v1/reputation/:wallet", async (req) => {
+    const { wallet } = req.params as { wallet: string };
+    const found = await reputationByWallet(wallet);
+    if (!found) throw notFound("Score");
+    return found;
+  });
 
   app.get("/v1/notifications", async (req) => {
     const user = await requireUser(req);

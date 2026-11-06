@@ -8,6 +8,8 @@ import {
   explorerTxUrl,
   formatCompactUsd,
   formatPrice,
+  liveBadge,
+  positionEventLabel,
   positionTier,
   timeAgo,
   type ChainKey,
@@ -40,6 +42,66 @@ function OutcomeBadge({ thesis }: { thesis: ThesisView }) {
     <span className={`inline-flex items-center gap-1 text-xs font-medium ${thesis.outcome === "right" ? "text-up" : "text-down"}`}>
       {thesis.outcome === "right" ? "Called it" : "Missed"} <Pct value={thesis.returnPct} />
     </span>
+  );
+}
+
+const BADGE_TONES = {
+  good: "bg-up/15 text-up",
+  warn: "bg-warn/15 text-warn",
+  bad: "bg-down/15 text-down",
+  muted: "bg-raised text-muted",
+} as const;
+
+/** What the author holds right now. Keyed on the value, so it visibly flips when a sale lands. */
+export function LivePositionBadge({ thesis }: { thesis: ThesisView }) {
+  const badge = liveBadge(thesis.live);
+  return (
+    <span key={badge.label} title={badge.hint} className={`num inline-flex animate-badge-flip items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${BADGE_TONES[badge.tone]}`}>
+      {thesis.live.status !== "none" && <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-current" />}
+      {badge.label}
+    </span>
+  );
+}
+
+/** Every change to the position since posting, with its record on Arc. */
+export function PositionHistory({ thesis }: { thesis: ThesisView }) {
+  if (thesis.live.status === "none") return null;
+  return (
+    <section className="border-t border-line/70 px-4 py-3">
+      <h2 className="text-sm font-semibold">Position since posting</h2>
+      <ol className="mt-2 space-y-2 text-sm">
+        <li className="flex items-baseline justify-between gap-3">
+          <span>Posted holding {formatCompactUsd(thesis.positionUsdAtPost)} at {formatPrice(thesis.priceAtPost)}</span>
+          <span className="flex shrink-0 items-baseline gap-2 text-xs text-faint">
+            {timeAgo(thesis.ts)}
+            {thesis.anchor && (
+              <a href={explorerTxUrl("arc", thesis.anchor.txHash)} target="_blank" rel="noreferrer" className="text-signal underline underline-offset-2">
+                Arc
+              </a>
+            )}
+          </span>
+        </li>
+        {thesis.live.events.map((event) => (
+          <li key={event.id} className="flex items-baseline justify-between gap-3">
+            <span>
+              {positionEventLabel(event)}
+              {event.priceUsd && <span className="num text-muted"> at {formatPrice(event.priceUsd)}</span>}
+            </span>
+            <span className="flex shrink-0 items-baseline gap-2 text-xs text-faint">
+              {timeAgo(event.at)}
+              {event.txHash ? (
+                <a href={explorerTxUrl("arc", event.txHash)} target="_blank" rel="noreferrer" className="text-signal underline underline-offset-2">
+                  Arc
+                </a>
+              ) : (
+                <span>Writing to Arc</span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ol>
+      {!thesis.live.events.length && <p className="mt-2 text-xs text-faint">Nothing has changed since this was posted. Any sale will show here and on Arc.</p>}
+    </section>
   );
 }
 
@@ -140,6 +202,11 @@ export function ThesisCard({
               {thesis.author.username}
             </Link>
             {thesis.verified && <VerifiedBadge positionUsd={thesis.positionUsdAtPost} />}
+            {thesis.authorScore !== null && (
+              <span className="num rounded-md bg-raised px-1.5 py-0.5 text-[10px] font-semibold text-cyan" title="This author's reputation score, out of 100">
+                {thesis.authorScore}
+              </span>
+            )}
             <span className="text-xs text-faint">{timeAgo(thesis.ts)}</span>
             <button onClick={() => setMenu(true)} aria-label="More" className="ml-auto px-1 text-faint">
               ···
@@ -156,8 +223,14 @@ export function ThesisCard({
             </Link>
           )}
           <div className="num mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+            <LivePositionBadge thesis={thesis} />
+            {thesis.live.proofTx && (
+              <a href={explorerTxUrl("arc", thesis.live.proofTx)} target="_blank" rel="noreferrer" className="text-signal underline underline-offset-2" title="This change to the author's position is recorded on Arc">
+                Proof on Arc
+              </a>
+            )}
             <span>Posted at {formatPrice(thesis.priceAtPost)}</span>
-            {thesis.verified && <span>Holding {formatCompactUsd(thesis.positionUsdAtPost)}</span>}
+            {thesis.verified && <span>With {formatCompactUsd(thesis.positionUsdAtPost)}</span>}
             <OutcomeBadge thesis={thesis} />
             {thesis.anchor && (
               <a href={explorerTxUrl("arc", thesis.anchor.txHash)} target="_blank" rel="noreferrer" className="text-signal underline underline-offset-2" title="This thesis's hash is recorded on Arc, so it can't be changed after the fact">

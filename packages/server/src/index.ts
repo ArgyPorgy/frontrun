@@ -14,6 +14,8 @@ export * from "./stats";
 export * from "./trackers";
 export * from "./reconcile";
 export * from "./anchoring";
+export * from "./position-proof";
+export * from "./reputation";
 export * from "./signerOps";
 export * from "./providers";
 export * from "./routing/engine";

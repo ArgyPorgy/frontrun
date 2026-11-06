@@ -1,12 +1,23 @@
 "use client";
 
-import { TERMINAL_STATUSES, tokenKey, type ChainKey, type NotificationView, type PriceTick, type ThesisView, type TradeView } from "@frontrun/core";
+import { TERMINAL_STATUSES, tokenKey, type ChainKey, type NotificationView, type PriceTick, type ThesisLive, type ThesisView, type TradeView } from "@frontrun/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from "react";
 import { io, type Socket } from "socket.io-client";
 import { API_URL, getToken } from "./api";
 import { useAuth } from "./auth";
 import { useToast } from "./toast";
+
+/** Puts a thesis's new position into whatever shape a cached query holds it: one thesis, a page, or pages of them. */
+function withLive(data: unknown, thesisId: string, live: ThesisLive): unknown {
+  if (Array.isArray(data)) return data.map((item) => withLive(item, thesisId, live));
+  if (!data || typeof data !== "object") return data;
+  const value = data as { id?: string; items?: unknown; pages?: unknown };
+  if (value.id === thesisId) return { ...value, live };
+  if (Array.isArray(value.items)) return { ...value, items: withLive(value.items, thesisId, live) };
+  if (Array.isArray(value.pages)) return { ...value, pages: withLive(value.pages, thesisId, live) };
+  return data;
+}
 
 /**
  * One socket for the whole app. Prices live in a small store outside React state, so a tick
@@ -78,6 +89,13 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         store.set(key, { chain: p.chain, address: p.address, priceUsd: p.priceUsd, priceChange24h: null, liquidityUsd: null, marketCapUsd: null, volume24hUsd: 0, at: Date.now() });
       });
       socket.on("thesis", (t: ThesisView) => thesisListeners.current.forEach((l) => l(t)));
+      socket.on("thesis_position", (e: { thesisId: string; live: ThesisLive }) => {
+        for (const queryKey of [["theses"], ["pins"]]) {
+          queryClient.setQueriesData({ queryKey }, (data: unknown) => withLive(data, e.thesisId, e.live));
+        }
+        // A sale can also judge the thesis, so the rest of it is fetched fresh once it's closed.
+        if (e.live.status === "exited") void queryClient.invalidateQueries({ queryKey: ["theses"] });
+      });
       socket.on("trade", (e: { trade: TradeView }) => {
         tradeListeners.current.forEach((l) => l(e.trade));
         // Only a final result changes these. Refetching earlier would bring a just-sold position back.

@@ -14,7 +14,6 @@ import {
   thesisRankScore,
   tokenKey,
   type ChainKey,
-  type LeaderboardRow,
   type Page,
   type ReplyView,
   type ThesisView,
@@ -27,6 +26,8 @@ import { logger } from "./logger";
 import { getPrices, getSnapshot, rememberToken } from "./market/service";
 import { notify, notifyFollowers } from "./notifications";
 import { tokenBalance } from "./onchain";
+import { positionEventsFor, toThesisLive } from "./position-proof";
+import { refreshReputation, scoresFor } from "./reputation";
 import { CHANNELS, publish, redis } from "./redis";
 import { isPaperMode, tokenRefFor } from "./trading/service";
 import { loadSigningWallets } from "./trading/signer";
@@ -65,6 +66,7 @@ async function toViews(rows: Array<{ thesis: ThesisRow; user: UserRow }>, viewer
       refs.set(key, await tokenRefFor(chain, address));
     }),
   );
+  const [events, scores] = await Promise.all([positionEventsFor(ids), scoresFor([...new Set(rows.map((r) => r.user.id))])]);
   return rows.map(({ thesis, user }) => {
     const key = tokenKey(thesis.tokenChain as ChainKey, thesis.tokenAddr);
     const current = prices.get(key) ?? null;
@@ -89,6 +91,8 @@ async function toViews(rows: Array<{ thesis: ThesisRow; user: UserRow }>, viewer
         thesis.anchorTx && thesis.anchorHash && thesis.anchoredAt
           ? { hash: thesis.anchorHash, txHash: thesis.anchorTx, anchoredAt: thesis.anchoredAt.toISOString() }
           : null,
+      live: toThesisLive(thesis, events.get(thesis.id) ?? []),
+      authorScore: scores.get(user.id) ?? null,
     };
   });
 }
@@ -102,23 +106,23 @@ async function positionAtPost(userId: string, chain: ChainKey, address: string, 
   const row = await db().query.positions.findFirst({
     where: and(eq(schema.positions.userId, userId), eq(schema.positions.tokenChain, chain), eq(schema.positions.tokenAddr, address), isNull(schema.positions.closedAt)),
   });
-  if (!row) return { usd: "0", avgEntry: null as string | null, verified: false };
+  if (!row) return { usd: "0", qty: null as string | null, avgEntry: null as string | null, verified: false };
   let qty = D(row.qty);
   if (!isPaperMode()) {
     const wallets = await loadSigningWallets(userId);
     const owner = chain === "solana" ? wallets.solanaAddress : wallets.evmAddress;
-    if (!owner) return { usd: "0", avgEntry: null, verified: false };
+    if (!owner) return { usd: "0", qty: null, avgEntry: null, verified: false };
     const onChain = await tokenBalance(chain, address, owner).catch((err) => {
       logger.warn({ err: err instanceof Error ? err.message : err, chain, address }, "balance check failed");
       return null;
     });
     // If the chain can't be read, don't award the badge on our records alone.
-    if (onChain === null) return { usd: "0", avgEntry: null, verified: false };
+    if (onChain === null) return { usd: "0", qty: null, avgEntry: null, verified: false };
     qty = D(onChain).lt(qty) ? D(onChain) : qty;
   }
   const usd = qty.mul(priceUsd);
   const avgEntry = averageEntry({ qty: row.qty, costBasisUsd: row.costBasisUsd, realizedPnlUsd: row.realizedPnlUsd });
-  return { usd: usd.toFixed(), avgEntry, verified: usd.gte(VERIFIED_MIN_USD) };
+  return { usd: usd.toFixed(), qty: qty.toFixed(), avgEntry, verified: usd.gte(VERIFIED_MIN_USD) };
 }
 
 export async function createThesis(user: UserRow, input: { chain: ChainKey; address: string; body: string }): Promise<ThesisView> {
@@ -145,6 +149,8 @@ export async function createThesis(user: UserRow, input: { chain: ChainKey; addr
       positionUsdAtPost: position.usd,
       authorAvgEntry: position.avgEntry,
       verified: position.verified,
+      qtyAtPost: position.verified ? position.qty : null,
+      heldQty: position.verified ? position.qty : null,
       rankScore: thesisRankScore({ likeCount: 0, replyCount: 0, positionUsd: position.usd, verified: position.verified, ageHours: 0 }),
     })
     .returning();
@@ -390,51 +396,6 @@ export async function report(
   }
 }
 
-/** How often a thesis ended in a realized profit is the headline, not the size of it: being right matters more here than being big. */
-export async function leaderboard(limit = 50): Promise<LeaderboardRow[]> {
-  const realized = db()
-    .select({
-      userId: schema.positions.userId,
-      total: sql<string>`sum(${schema.positions.realizedPnlUsd})`.as("total"),
-    })
-    .from(schema.positions)
-    .groupBy(schema.positions.userId)
-    .as("realized");
-  const rows = await db()
-    .select({
-      user: schema.users,
-      resolved: sql<number>`count(*)::int`,
-      right: sql<number>`count(*) filter (where ${schema.theses.outcome} = 'right')::int`,
-      avgReturn: sql<number>`coalesce(avg(${schema.theses.returnPct}), 0)::float`,
-      realized: sql<string>`coalesce(max(${realized.total}), 0)`,
-    })
-    .from(schema.theses)
-    .innerJoin(schema.users, eq(schema.theses.userId, schema.users.id))
-    .leftJoin(realized, eq(realized.userId, schema.users.id))
-    .where(
-      and(
-        isNull(schema.theses.deletedAt),
-        isNull(schema.theses.hiddenAt),
-        eq(schema.theses.verified, true),
-        inArray(schema.theses.outcome, ["right", "wrong"]),
-        eq(schema.users.isBanned, false),
-      ),
-    )
-    .groupBy(schema.users.id)
-    .having(sql`count(*) >= ${LEADERBOARD_MIN_RESOLVED}`)
-    .orderBy(sql`count(*) filter (where ${schema.theses.outcome} = 'right')::float / count(*) desc`, sql`count(*) desc`)
-    .limit(limit);
-  return rows.map((row, i) => ({
-    rank: i + 1,
-    user: toSummary(row.user),
-    accuracy: (row.right / row.resolved) * 100,
-    resolved: row.resolved,
-    right: row.right,
-    avgReturnPct: row.avgReturn,
-    realizedPnlUsd: D(row.realized).toFixed(),
-  }));
-}
-
 /**
  * A thesis ends when the position it was posted on is sold out, and it's judged on the profit its author
  * realized on that position. Until then it stays open: there's no timer, and a price move alone never
@@ -454,7 +415,8 @@ export async function resolveClosedTheses(opts: { userId?: string; limit?: numbe
         gt(schema.positions.closedAt, schema.theses.ts),
       ),
     )
-    .where(and(eq(schema.theses.outcome, "pending"), eq(schema.theses.verified, true), isNull(schema.theses.deletedAt), opts.userId ? eq(schema.theses.userId, opts.userId) : undefined))
+    // A deleted thesis is still judged, since deleting one mustn't be a way out of a loss on the reputation score.
+    .where(and(eq(schema.theses.outcome, "pending"), eq(schema.theses.verified, true), opts.userId ? eq(schema.theses.userId, opts.userId) : undefined))
     .limit(opts.limit ?? 100);
   for (const thesis of open) {
     const [sold] = await db()
@@ -487,6 +449,8 @@ export async function resolveClosedTheses(opts: { userId?: string; limit?: numbe
       })
       .where(eq(schema.theses.id, thesis.id));
   }
+  // The seller's score moves with this. Everyone else's waits for the worker's pass.
+  if (opts.userId && open.length) await refreshReputation({ userId: opts.userId });
   return open.length;
 }
 

@@ -28,7 +28,7 @@ vi.hoisted(() => {
   });
 });
 
-import { ApiClient, ApiError, tokenKey, type ChainKey, type TokenSnapshot, type TradeCardView } from "@frontrun/core";
+import { ApiClient, ApiError, REPUTATION_REGISTRY_ARC, tokenKey, type ChainKey, type TokenSnapshot, type TradeCardView } from "@frontrun/core";
 import {
   DEX_BACKGROUND_PER_MINUTE,
   DexBusyError,
@@ -42,14 +42,19 @@ import {
   pollActiveTrades,
   publish,
   redis,
+  attestArgs,
+  ledgerArgs,
   resolveClosedTheses,
+  syncFreshFills,
+  syncThesisPositions,
+  trackThesisLows,
   runCopyTrades,
   sendBuyAlerts,
   runMigrations,
   schema,
   statsChanged,
 } from "@frontrun/server";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { io as socketClient } from "socket.io-client";
 import { buildApp } from "../src/app";
@@ -941,6 +946,189 @@ describe("theses", () => {
     await vi.waitFor(async () => {
       expect((await author.client.notifications()).items.map((n) => n.type)).toContain("copy_buy");
     });
+  });
+});
+
+describe("live position proof", () => {
+  async function holdAndPost(handle: string) {
+    const { client } = await loginFunded(handle);
+    await setPrice("arc", TOKEN_A, "2");
+    await buy(client, TOKEN_A, "100");
+    const thesis = await client.createThesis({ chain: "arc", address: TOKEN_A, body: "Holding this." });
+    return { client, thesis };
+  }
+
+  it("starts as holding everything", async () => {
+    const { thesis } = await holdAndPost("proofstart");
+    expect(thesis.verified).toBe(true);
+    expect(thesis.live).toMatchObject({ status: "holding", heldPct: 100, events: [] });
+  });
+
+  it("flips to trimmed when the author sells part, then exited when they sell the rest", async () => {
+    const { client, thesis } = await holdAndPost("proofsell");
+    await setPrice("arc", TOKEN_A, "3");
+    await sell(client, TOKEN_A, 40);
+    await syncFreshFills();
+    const trimmed = await client.thesis(thesis.id);
+    expect(trimmed.live.status).toBe("trimmed");
+    expect(trimmed.live.heldPct).toBeCloseTo(60, 0);
+    expect(trimmed.live.events.map((e) => e.action)).toEqual(["trim"]);
+    expect(trimmed.outcome).toBe("pending");
+
+    await sell(client, TOKEN_A, 100);
+    await syncFreshFills();
+    const exited = await client.thesis(thesis.id);
+    expect(exited.live.status).toBe("exited");
+    expect(exited.live.heldPct).toBe(0);
+    expect(Number(exited.live.exitPriceUsd)).toBeGreaterThan(2);
+    expect(exited.live.exitReturnPct).toBe(exited.returnPct);
+    expect(exited.live.events.map((e) => e.action)).toEqual(["trim", "exit"]);
+    expect(exited.outcome).toBe("right");
+  });
+
+  it("counts each fill once, however many times it runs", async () => {
+    const { client, thesis } = await holdAndPost("proofonce");
+    await sell(client, TOKEN_A, 25);
+    await syncFreshFills();
+    await syncFreshFills();
+    await syncThesisPositions();
+    await syncThesisPositions();
+    const after = await client.thesis(thesis.id);
+    expect(after.live.events).toHaveLength(1);
+    expect(after.live.heldPct).toBeCloseTo(75, 0);
+  });
+
+  it("ignores what happened before the thesis was posted", async () => {
+    const { client } = await loginFunded("proofbefore");
+    await setPrice("arc", TOKEN_A, "2");
+    await buy(client, TOKEN_A, "100");
+    await sell(client, TOKEN_A, 50);
+    const thesis = await client.createThesis({ chain: "arc", address: TOKEN_A, body: "Kept half." });
+    await syncFreshFills();
+    await syncThesisPositions();
+    const after = await client.thesis(thesis.id);
+    expect(after.live).toMatchObject({ status: "holding", heldPct: 100, events: [] });
+  });
+
+  it("alerts followers about a sale", async () => {
+    const { client, thesis } = await holdAndPost("proofalert");
+    const fan = await login("prooffan");
+    await fan.client.follow("proofalert");
+    await sell(client, TOKEN_A, 50);
+    await syncFreshFills();
+    const { items } = await fan.client.notifications();
+    const alert = items.find((n) => n.type === "thesis_position");
+    expect(alert?.message).toContain("proofalert sold 50%");
+    expect(alert?.thesisId).toBe(thesis.id);
+  });
+
+  it("shows no live position for someone who didn't hold", async () => {
+    const { client } = await login("proofnone");
+    const thesis = await client.createThesis({ chain: "arc", address: TOKEN_A, body: "Looks fun." });
+    expect(thesis.live.status).toBe("none");
+  });
+
+  it("writes a change to Arc against the hash its thesis was anchored under", () => {
+    const at = new Date("2026-11-07T00:00:00Z");
+    const args = ledgerArgs({ id: "11111111-1111-1111-1111-111111111111", action: "trim", heldBps: 6000, priceUsd: "0.012", occurredAt: at }, `0x${"a".repeat(64)}`, `0x${"b".repeat(40)}`);
+    expect(args[0]).toBe(`0x${"a".repeat(64)}`);
+    expect(args[3]).toBe(2);
+    expect(args[4]).toBe(6000);
+    expect(args[5]).toBe(12_000_000_000_000_000n);
+    expect(args[6]).toBe(BigInt(at.getTime() / 1000));
+  });
+});
+
+describe("reputation score", () => {
+  async function closeAt(client: ApiClient, buyAt: string, sellAt: string) {
+    await setPrice("arc", TOKEN_A, buyAt);
+    await buy(client, TOKEN_A, "100");
+    await client.createThesis({ chain: "arc", address: TOKEN_A, body: `call at ${buyAt}` });
+    await setPrice("arc", TOKEN_A, sellAt);
+    await sell(client, TOKEN_A, 100);
+  }
+
+  it("updates as soon as a position closes, and shows it on the profile", async () => {
+    const { client } = await loginFunded("scorer");
+    expect((await client.profile("scorer")).reputation).toBeNull();
+    await closeAt(client, "2", "3");
+    const { reputation } = await client.profile("scorer");
+    expect(reputation).toMatchObject({ closed: 1, wins: 1, provisional: true, attestTx: null });
+    expect(reputation!.score).toBeGreaterThan(0);
+    expect(reputation!.avgReturnPct).toBeGreaterThan(0);
+  });
+
+  it("counts a position once, however many theses were on it", async () => {
+    const { client } = await loginFunded("onceonly");
+    await setPrice("arc", TOKEN_A, "2");
+    await buy(client, TOKEN_A, "100");
+    await client.createThesis({ chain: "arc", address: TOKEN_A, body: "First." });
+    await client.createThesis({ chain: "arc", address: TOKEN_A, body: "Second." });
+    await client.createThesis({ chain: "arc", address: TOKEN_A, body: "Third." });
+    await setPrice("arc", TOKEN_A, "3");
+    await sell(client, TOKEN_A, 100);
+    expect((await client.profile("onceonly")).reputation).toMatchObject({ closed: 1, wins: 1 });
+  });
+
+  it("still counts a thesis its author deleted, so a loss can't be tidied away", async () => {
+    const { client } = await loginFunded("deleter");
+    await setPrice("arc", TOKEN_A, "4");
+    await buy(client, TOKEN_A, "100");
+    const thesis = await client.createThesis({ chain: "arc", address: TOKEN_A, body: "Oops." });
+    await client.deleteThesis(thesis.id);
+    await setPrice("arc", TOKEN_A, "1");
+    await sell(client, TOKEN_A, 100);
+    expect((await client.profile("deleter")).reputation).toMatchObject({ closed: 1, wins: 0 });
+  });
+
+  it("factors in how far the price dipped while held", async () => {
+    const calm = await loginFunded("calmone");
+    const wild = await loginFunded("wildone");
+    await setPrice("arc", TOKEN_A, "2");
+    await buy(calm.client, TOKEN_A, "100");
+    await calm.client.createThesis({ chain: "arc", address: TOKEN_A, body: "Calm." });
+    await buy(wild.client, TOKEN_A, "100");
+    await wild.client.createThesis({ chain: "arc", address: TOKEN_A, body: "Wild." });
+    await setPrice("arc", TOKEN_A, "2.1");
+    await sell(calm.client, TOKEN_A, 100);
+    await setPrice("arc", TOKEN_A, "1");
+    await trackThesisLows();
+    await setPrice("arc", TOKEN_A, "2.1");
+    await sell(wild.client, TOKEN_A, 100);
+    const a = (await calm.client.profile("calmone")).reputation!;
+    const b = (await wild.client.profile("wildone")).reputation!;
+    expect(a.avgDrawdownPct).toBe(0);
+    expect(b.avgDrawdownPct).toBeCloseTo(50, 0);
+    expect(a.score).toBeGreaterThan(b.score);
+  });
+
+  it("lets anyone read a score by wallet, with no account", async () => {
+    const { client } = await loginFunded("walletscore");
+    await closeAt(client, "2", "3");
+    const wallet = await db().query.wallets.findFirst({ where: and(eq(schema.wallets.userId, (await client.me()).id), eq(schema.wallets.chainType, "evm")) });
+    expect(wallet).toBeTruthy();
+    const res = await fetch(`${baseUrl}/v1/reputation/${wallet!.address.toUpperCase().replace("0X", "0x")}`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { username: string; closed: number; registry: string };
+    expect(body.username).toBe("walletscore");
+    expect(body.closed).toBe(1);
+    expect(body.registry).toBe(REPUTATION_REGISTRY_ARC);
+    expect((await fetch(`${baseUrl}/v1/reputation/0x${"9".repeat(40)}`)).status).toBe(404);
+  });
+
+  it("writes scores to Arc in the shape the contract takes", () => {
+    const args = attestArgs(`0x${"b".repeat(40)}`, { score: 72, winRatePct: 60, avgReturnPct: -12.5, avgDrawdownPct: 8, avgHoldSeconds: 7200, feePct: 0.5, closed: 12 });
+    expect(args).toEqual([`0x${"b".repeat(40)}`, 72, 6000, -1250, 800, 7200, 50, 12]);
+  });
+
+  it("puts short records aside rather than ranking them", async () => {
+    const { client } = await loginFunded("shortrecord");
+    await closeAt(client, "2", "3");
+    const board = await new ApiClient({ baseUrl }).leaderboard();
+    expect(board.items.map((r) => r.user.username)).not.toContain("shortrecord");
+    const row = board.provisional.find((r) => r.user.username === "shortrecord");
+    expect(row?.provisional).toBe(true);
+    expect(row?.score).toBeGreaterThan(0);
   });
 });
 

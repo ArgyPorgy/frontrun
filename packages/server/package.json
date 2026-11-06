@@ -13,6 +13,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate-cli.ts",
     "privy:policy": "tsx scripts/create-privy-policy.ts",
+    "proof:deploy": "tsx scripts/deploy-proof-contracts.ts",
     "keys:check": "tsx scripts/check-keys.ts",
     "signer:test": "tsx scripts/test-signer.ts",
     "registry:deploy": "tsx scripts/deploy-registry.ts",

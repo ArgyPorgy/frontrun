@@ -109,6 +109,8 @@ export const trades = pgTable("trades", {
   filledAt: ts("filled_at"),
   /** Set once followers have been told about this buy. */
   followersNotifiedAt: ts("followers_notified_at"),
+  /** Set once this fill has been applied to the live position on its author's theses. */
+  proofProcessedAt: ts("proof_processed_at"),
 }, (t) => [
   uniqueIndex("trades_idempotency").on(t.userId, t.idempotencyKey),
   index("trades_user_created").on(t.userId, t.createdAt),
@@ -197,13 +199,65 @@ export const theses = pgTable("theses", {
   anchorTx: text("anchor_tx"),
   anchoredAt: ts("anchored_at"),
   anchorAttempts: integer("anchor_attempts").notNull().default(0),
+  /** What the author held when posting. What they've done since is measured against this. */
+  qtyAtPost: qty("qty_at_post"),
+  heldQty: qty("held_qty"),
+  heldBps: integer("held_bps").notNull().default(10000),
+  positionStatus: text("position_status", { enum: ["holding", "trimmed", "exited", "moved"] }).notNull().default("holding"),
+  positionChangedAt: ts("position_changed_at"),
+  /** Last time the author's wallet was compared with our records. */
+  positionCheckedAt: ts("position_checked_at"),
+  /** The lowest price seen while the position was open, which is how deep it dipped. */
+  lowPriceSincePost: usd("low_price_since_post"),
 }, (t) => [
+  index("theses_position_check").on(t.positionCheckedAt).where(sql`verified and position_status <> 'exited'`),
   index("theses_token_ts").on(t.tokenChain, t.tokenAddr, t.ts),
   index("theses_user_ts").on(t.userId, t.ts),
   index("theses_rank").on(t.rankScore),
   index("theses_ts").on(t.ts),
   index("theses_unresolved").on(t.ts).where(sql`outcome = 'pending' and deleted_at is null`),
 ]);
+
+/** Every change to the position behind a thesis, oldest first. Each one is also written to Arc. */
+export const thesisPositionEvents = pgTable("thesis_position_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  thesisId: uuid("thesis_id").notNull().references(() => theses.id, { onDelete: "cascade" }),
+  /** Null when the change was read from the wallet rather than a trade here. */
+  tradeId: uuid("trade_id"),
+  action: text("action", { enum: ["add", "trim", "exit", "moved"] }).notNull(),
+  qtyAfter: qty("qty_after").notNull(),
+  heldBps: integer("held_bps").notNull(),
+  priceUsd: usd("price_usd"),
+  occurredAt: ts("occurred_at").notNull(),
+  anchorTx: text("anchor_tx"),
+  anchoredAt: ts("anchored_at"),
+  anchorAttempts: integer("anchor_attempts").notNull().default(0),
+  createdAt: ts("created_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("thesis_position_events_trade").on(t.thesisId, t.tradeId),
+  index("thesis_position_events_thesis").on(t.thesisId, t.occurredAt),
+  index("thesis_position_events_unanchored").on(t.occurredAt).where(sql`anchor_tx is null`),
+]);
+
+/** Each trader's current score, and what was last written to Arc. */
+export const reputationScores = pgTable("reputation_scores", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  score: integer("score").notNull(),
+  closed: integer("closed").notNull(),
+  wins: integer("wins").notNull(),
+  winRatePct: real("win_rate_pct").notNull(),
+  avgReturnPct: real("avg_return_pct").notNull(),
+  avgDrawdownPct: real("avg_drawdown_pct").notNull(),
+  avgHoldSeconds: integer("avg_hold_seconds").notNull(),
+  feePct: real("fee_pct").notNull(),
+  components: jsonb("components").notNull(),
+  computedAt: ts("computed_at").notNull().defaultNow(),
+  attestedScore: integer("attested_score"),
+  attestedClosed: integer("attested_closed"),
+  attestTx: text("attest_tx"),
+  attestedAt: ts("attested_at"),
+  attestAttempts: integer("attest_attempts").notNull().default(0),
+}, (t) => [index("reputation_scores_rank").on(t.score)]);
 
 export const thesisReplies = pgTable("thesis_replies", {
   id: uuid("id").primaryKey().defaultRandom(),

@@ -1,4 +1,4 @@
-import { isChainKey, isValidAddress, tokenKey, type ChainKey, type PriceTick, type ServerEvent, type ThesisView } from "@frontrun/core";
+import { isChainKey, isValidAddress, tokenKey, type ChainKey, type PriceTick, type ServerEvent, type ThesisLive, type ThesisView } from "@frontrun/core";
 import { CHANNELS, KEYS, appOrigins, db, getPrices, logger, markActive, newSubscriber, redis, schema } from "@frontrun/server";
 import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
@@ -94,8 +94,9 @@ export async function attachWebsocket(app: FastifyInstance): Promise<() => Promi
         const ticks = JSON.parse(raw) as PriceTick[];
         for (const tick of ticks) io.to(tokenRoom(tick.chain, tick.address)).emit("tick", tick);
       } else if (channel === CHANNELS.theses) {
-        const event = JSON.parse(raw) as { thesis: ThesisView };
-        io.to("feed").emit("thesis", event.thesis);
+        const event = JSON.parse(raw) as { type: "thesis"; thesis: ThesisView } | { type: "thesis_position"; thesisId: string; live: ThesisLive };
+        if (event.type === "thesis_position") io.to("feed").emit("thesis_position", { thesisId: event.thesisId, live: event.live });
+        else io.to("feed").emit("thesis", event.thesis);
       } else if (channel === CHANNELS.stats) {
         io.to("feed").emit("stats");
       }

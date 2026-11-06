@@ -24,6 +24,7 @@ import { and, desc, eq, inArray, isNotNull, isNull, sql, or } from "drizzle-orm"
 import { db, schema } from "./db/client";
 import { env } from "./env";
 import { conflict, notFound } from "./errors";
+import { reputationOf } from "./reputation";
 import { getPricesFilled } from "./market/service";
 import { fetchPrivyWallets, serverSigningConfigured } from "./trading/signer";
 import { isPaperMode, signerStatus, tokenRefFor, usdcBalance } from "./trading/service";
@@ -327,6 +328,7 @@ export async function buildProfile(username: string, viewerId: string | null): P
     isFollowing,
     isBlocked,
     isMe: viewerId === user.id,
+    reputation: await reputationOf(user.id),
     stats: {
       allTimePnlUsd: totals.allTimeUsd,
       realizedUsd: totals.realizedUsd,

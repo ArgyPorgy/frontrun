@@ -17,6 +17,7 @@ import {
   KEYS,
   activeTokenKeys,
   anchorPendingTheses,
+  anchorPositionEvents,
   arcUsdcBalances,
   checkWatchedOrders,
   pollTelegramTracker,
@@ -34,20 +35,25 @@ import {
   notify,
   pollActiveTrades,
   publish,
+  publishReputation,
   reconcilePositions,
   redis,
   refreshBoosts,
   refreshMarketList,
   refreshRankScores,
+  refreshReputation,
   resolveClosedTheses,
   runCopyTrades,
   sendBuyAlerts,
+  syncFreshFills,
+  syncThesisPositions,
+  trackThesisLows,
   runMigrations,
   schema,
   snapshotToTick,
   writeSnapshot,
 } from "@frontrun/server";
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull } from "drizzle-orm";
 
 const INSTANCE = randomUUID();
 const stopping = { value: false };
@@ -187,7 +193,7 @@ async function moderate() {
   }
   for (const ids of seen.values()) {
     if (ids.length >= 3) {
-      await db().update(schema.theses).set({ hiddenAt: new Date() }).where(sql`${schema.theses.id} = any(${ids}::uuid[])`);
+      await db().update(schema.theses).set({ hiddenAt: new Date() }).where(inArray(schema.theses.id, ids));
       logger.info({ count: ids.length }, "hid duplicate thesis spam");
     }
   }
@@ -216,11 +222,26 @@ async function main() {
   // A long lease, since a batch of copies waits on signing and sending.
   every("copy-trades", 3_000, () => runCopyTrades(), { leaseMs: 2 * 60_000 });
   every("reconcile", 5 * 60_000, () => reconcilePositions(), { leaseMs: 10 * 60_000 });
-  every("thesis-resolve", 60_000, () => resolveClosedTheses());
+  every("thesis-resolve", 60_000, async () => {
+    await resolveClosedTheses();
+    await refreshReputation();
+  });
+  every("thesis-live", 2_000, () => syncFreshFills());
+  every("thesis-position", 30_000, () => syncThesisPositions(), { leaseMs: 5 * 60_000 });
+  every("thesis-lows", 60_000, () => trackThesisLows());
   every("thesis-rank", 5 * 60_000, refreshRankScores);
   every("moderation", 60_000, moderate);
-  // A long lease, since a batch waits on several receipts. Theses share the relayer's nonce.
-  every("thesis-anchor", 15_000, () => anchorPendingTheses(), { leaseMs: 5 * 60_000 });
+  // A long lease, since a batch waits on several receipts. These run in turn because they share the relayer's nonce.
+  every(
+    "thesis-anchor",
+    15_000,
+    async () => {
+      await anchorPendingTheses();
+      await anchorPositionEvents();
+      await publishReputation();
+    },
+    { leaseMs: 5 * 60_000 },
+  );
 
   const shutdown = async () => {
     stopping.value = true;

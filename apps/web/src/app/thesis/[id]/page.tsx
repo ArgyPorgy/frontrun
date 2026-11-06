@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
-import { ThesisCard } from "@/components/thesis-card";
+import { PositionHistory, ThesisCard } from "@/components/thesis-card";
 import { Avatar, Button, EmptyState, RowSkeletons } from "@/components/ui";
 import { api, errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -46,6 +46,7 @@ export default function ThesisPage() {
   return (
     <div>
       <ThesisCard thesis={thesis.data} />
+      <PositionHistory thesis={thesis.data} />
       <div className="border-t border-line/70 px-4 py-3">
         {status === "in" ? (
           <form

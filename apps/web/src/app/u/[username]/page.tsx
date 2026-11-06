@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { CopySheet, useCopySettings } from "@/components/copy-trade";
+import { ReputationCard } from "@/components/reputation";
 import { ThesisCard } from "@/components/thesis-card";
 import { Avatar, Button, ChainBadge, EmptyState, LinkButton, Pct, RowSkeletons, Segmented, Sheet, Stat, TokenIcon } from "@/components/ui";
 import { api, errorMessage } from "@/lib/api";
@@ -124,6 +125,7 @@ export default function ProfilePage() {
           />
         </div>
         <p className="mt-2 px-1 text-xs text-faint">Thesis accuracy is how often a thesis ended in a realized profit. A thesis closes when its author sells out, and stays open until then.</p>
+        {p.reputation && <ReputationCard reputation={p.reputation} />}
       </section>
       <Segmented
         className="px-3 pb-1"

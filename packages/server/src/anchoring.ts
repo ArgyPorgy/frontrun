@@ -1,6 +1,6 @@
 import { CHAINS, toBaseUnits } from "@frontrun/core";
 import { and, asc, eq, isNull, lt } from "drizzle-orm";
-import { BaseError, ContractFunctionRevertedError, createWalletClient, getAbiItem, http, keccak256, parseAbi, toBytes, type Address, type Hex } from "viem";
+import { BaseError, ContractFunctionRevertedError, createWalletClient, getAbiItem, http, keccak256, parseAbi, toBytes, type Abi, type AbiEvent, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { arc } from "viem/chains";
 import { db, schema } from "./db/client";
@@ -84,6 +84,12 @@ export function anchoringEnabled(): boolean {
   return !!(e.THESIS_REGISTRY_ADDRESS && (e.ANCHOR_RELAYER_PRIVATE_KEY || e.GAS_TOPUP_PRIVATE_KEY));
 }
 
+/** Anything written to Arc comes from this one wallet: theses, position changes and reputation scores. */
+export function relayerEnabled(): boolean {
+  const e = env();
+  return !!(e.ANCHOR_RELAYER_PRIVATE_KEY || e.GAS_TOPUP_PRIVATE_KEY);
+}
+
 function relayerAccount() {
   const e = env();
   const key = e.ANCHOR_RELAYER_PRIVATE_KEY ?? e.GAS_TOPUP_PRIVATE_KEY;
@@ -91,18 +97,35 @@ function relayerAccount() {
   return privateKeyToAccount(normalizePrivateKey(key));
 }
 
-/** Sends one anchor and waits for it. Simulating first means a bad call costs no gas. */
-export async function sendAnchor(args: ReturnType<typeof anchorArgs>): Promise<Hex> {
-  const e = env();
-  const registry = e.THESIS_REGISTRY_ADDRESS as Address;
+/** Sends one write from the relayer and waits for it. Simulating first means a bad call costs no gas. */
+export async function relayerWrite(call: { address: Address; abi: Abi; functionName: string; args: readonly unknown[] }): Promise<Hex> {
   const account = relayerAccount();
   const client = evmClient("arc");
-  const { request } = await client.simulateContract({ account, address: registry, abi: THESIS_REGISTRY_ABI, functionName: "anchor", args });
-  const wallet = createWalletClient({ account, chain: arc, transport: http(e.ARC_RPC_URL) });
+  const { request } = await client.simulateContract({ account, address: call.address, abi: call.abi, functionName: call.functionName, args: call.args });
+  const wallet = createWalletClient({ account, chain: arc, transport: http(env().ARC_RPC_URL) });
   const hash = await wallet.writeContract(request);
   const receipt = await client.waitForTransactionReceipt({ hash, timeout: 60_000 });
-  if (receipt.status !== "success") throw new Error(`Anchor transaction ${hash} reverted.`);
+  if (receipt.status !== "success") throw new Error(`Arc transaction ${hash} reverted.`);
   return hash;
+}
+
+export async function sendAnchor(args: ReturnType<typeof anchorArgs>): Promise<Hex> {
+  return relayerWrite({ address: env().THESIS_REGISTRY_ADDRESS as Address, abi: THESIS_REGISTRY_ABI, functionName: "anchor", args });
+}
+
+/** Finds the transaction behind a write we know landed, looking back through recent blocks. */
+export async function findLogTx(address: Address, event: AbiEvent, args: Record<string, unknown>): Promise<Hex> {
+  const client = evmClient("arc");
+  let toBlock = await client.getBlockNumber();
+  for (let i = 0; i < LOG_CHUNKS && toBlock > 0n; i++) {
+    const fromBlock = toBlock >= LOG_CHUNK_BLOCKS ? toBlock - LOG_CHUNK_BLOCKS + 1n : 0n;
+    const logs = await client.getLogs({ address, event, args, fromBlock, toBlock });
+    if (logs[0]?.transactionHash) return logs[0].transactionHash;
+    toBlock = fromBlock - 1n;
+    // Arc's public RPC starts refusing at a few requests a second.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+  }
+  throw new Error("This record is on Arc, but too far back to find its transaction.");
 }
 
 /**
@@ -111,19 +134,9 @@ export async function sendAnchor(args: ReturnType<typeof anchorArgs>): Promise<H
  */
 export async function findAnchorTx(hash: Hex): Promise<Hex | null> {
   const registry = env().THESIS_REGISTRY_ADDRESS as Address;
-  const client = evmClient("arc");
-  const anchoredAt = await client.readContract({ address: registry, abi: THESIS_REGISTRY_ABI, functionName: "anchoredAt", args: [hash] });
+  const anchoredAt = await evmClient("arc").readContract({ address: registry, abi: THESIS_REGISTRY_ABI, functionName: "anchoredAt", args: [hash] });
   if (anchoredAt === 0n) return null;
-  let toBlock = await client.getBlockNumber();
-  for (let i = 0; i < LOG_CHUNKS && toBlock > 0n; i++) {
-    const fromBlock = toBlock >= LOG_CHUNK_BLOCKS ? toBlock - LOG_CHUNK_BLOCKS + 1n : 0n;
-    const logs = await client.getLogs({ address: registry, event: ANCHORED_EVENT, args: { thesisHash: hash }, fromBlock, toBlock });
-    if (logs[0]) return logs[0].transactionHash;
-    toBlock = fromBlock - 1n;
-    // Arc's public RPC starts refusing at a few requests a second.
-    await new Promise((resolve) => setTimeout(resolve, 400));
-  }
-  throw new Error("This hash is anchored, but too far back to find its transaction.");
+  return findLogTx(registry, ANCHORED_EVENT, { thesisHash: hash });
 }
 
 /**
