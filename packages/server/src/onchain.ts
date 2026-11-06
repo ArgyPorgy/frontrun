@@ -119,6 +119,29 @@ interface SolanaTokenAccounts {
   };
 }
 
+/** Waits for a Solana transaction to land, the way an EVM step waits for its receipt. */
+export async function waitForSolanaTx(signature: string, timeoutMs = 45_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const data = await fetchJson<{ result?: { value?: Array<{ err: unknown; confirmationStatus?: string } | null> } }>(rpcFor("solana"), {
+      method: "POST",
+      body: { jsonrpc: "2.0", id: 1, method: "getSignatureStatuses", params: [[signature]] },
+      timeoutMs: 6_000,
+    }).catch(() => null);
+    const status = data?.result?.value?.[0];
+    if (status?.err) throw new Error("The transaction reverted on-chain.");
+    if (status?.confirmationStatus === "confirmed" || status?.confirmationStatus === "finalized") return;
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+  throw new Error(`Solana transaction ${signature} hasn't landed yet.`);
+}
+
+/** The wallet's SOL, in lamports. */
+export async function solanaLamports(owner: string): Promise<number> {
+  const data = await fetchJson<{ result?: { value?: number } }>(rpcFor("solana"), { method: "POST", body: { jsonrpc: "2.0", id: 1, method: "getBalance", params: [owner] }, timeoutMs: 6_000, retries: 1 });
+  return data.result?.value ?? 0;
+}
+
 export async function solanaTokenBalance(owner: string, mint: string): Promise<{ qty: string; decimals: number | null }> {
   const body = {
     jsonrpc: "2.0",

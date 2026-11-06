@@ -24,6 +24,7 @@ import { providersFor } from "../src/providers";
 import { isCrossChain, spentChain } from "../src/providers/types";
 import { lifiStatusToUpdate } from "../src/providers/lifi";
 import { friendlyFailure } from "../src/trading/service";
+import { isSponsorshipOff, needsSol } from "../src/trading/signer";
 import { paperFill, syntheticQuote } from "../src/providers/paper";
 import { assertSwapMatches } from "../src/providers/uniswap";
 import type { RouteRequest } from "../src/providers/types";
@@ -557,6 +558,20 @@ describe("the landing page's basket", () => {
   it("keeps trending mixed in among the curated tokens", () => {
     const mixed = mixBasket([token("NVDA", "stock"), token("BTC", "crypto"), token("PEPE", "meme"), token("TSLA", "stock")], [token("A", "trending"), token("B", "trending"), token("C", "trending")]);
     expect(mixed.map((t) => t.symbol)).toEqual(["NVDA", "BTC", "A", "PEPE", "TSLA", "B", "C"]);
+  });
+});
+
+describe("Solana setup fees", () => {
+  it("recognises Privy saying sponsorship is off, and nothing else", () => {
+    expect(isSponsorshipOff(new Error('400 {"error":"Gas sponsorship is not enabled.","code":"invalid_data"}'))).toBe(true);
+    expect(isSponsorshipOff(new Error("400 policy_violation"))).toBe(false);
+    expect(isSponsorshipOff("Gas sponsorship is not enabled")).toBe(false);
+  });
+
+  it("tells the person exactly what's needed, and where to send it", () => {
+    const message = friendlyFailure(needsSol("AX262Th9tP2jjm6sUC74GQMvTRCkZe2iaKHwzAGMgAvo"));
+    expect(message).toContain("AX262Th9tP2jjm6sUC74GQMvTRCkZe2iaKHwzAGMgAvo");
+    expect(message).toContain("Your tokens are safe");
   });
 });
 

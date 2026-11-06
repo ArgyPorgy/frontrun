@@ -9,7 +9,7 @@ import { env } from "../env";
 import { AppError } from "../errors";
 import { logger } from "../logger";
 import { fetchTokens } from "../market/dexscreener";
-import { evmClient, viemChain } from "../onchain";
+import { evmClient, solanaLamports, viemChain, waitForSolanaTx } from "../onchain";
 import { sendSponsored, sponsorshipConfigured } from "./sponsor";
 
 let client: PrivyClient | undefined;
@@ -140,6 +140,17 @@ export async function ensureGasForSetup(args: { chain: ChainKey; address: string
   return true;
 }
 
+/** Enough for a setup transaction's base and priority fees. */
+const MIN_SOLANA_FEE_LAMPORTS = 50_000;
+
+export function isSponsorshipOff(err: unknown): boolean {
+  return err instanceof Error && /sponsorship is not enabled/i.test(err.message);
+}
+
+export function needsSol(address: string): AppError {
+  return new AppError(422, "needs_sol", `Your first sell of a Solana token needs a tiny bit of SOL for the network fee. Send about 0.001 SOL to ${address}, then sell again. Your tokens are safe.`);
+}
+
 /** Runs one signing step with the backend's policy-limited signer. Never used without a live grant. */
 export async function performServerStep(wallets: SigningWallets, step: ExecStep, ctx: { userId: string; tradeId: string }): Promise<StepResult> {
   switch (step.kind) {
@@ -202,16 +213,31 @@ export async function performServerStep(wallets: SigningWallets, step: ExecStep,
     case "svm_tx": {
       if (!wallets.solanaWalletId) throw new Error("This Solana wallet can't be signed for server-side.");
       if (step.broadcast) {
-        const { hash } = await privy()
-          .wallets()
-          .solana()
-          .signAndSendTransaction(wallets.solanaWalletId, {
-            caip2: SOLANA_MAINNET_CAIP2,
-            transaction: step.transactionBase64,
-            ...(step.sponsor ? { sponsor: true } : {}),
-            authorization_context: authContext(),
-          });
-        return { id: step.id, txHash: hash };
+        const send = (sponsor: boolean) =>
+          privy()
+            .wallets()
+            .solana()
+            .signAndSendTransaction(wallets.solanaWalletId!, {
+              caip2: SOLANA_MAINNET_CAIP2,
+              transaction: step.transactionBase64,
+              ...(sponsor ? { sponsor: true } : {}),
+              authorization_context: authContext(),
+            });
+        // The next step signs an order that relies on this one, so it has to have landed first.
+        const land = async (sponsor: boolean) => {
+          const { hash } = await send(sponsor);
+          await waitForSolanaTx(hash);
+          return { id: step.id, txHash: hash };
+        };
+        try {
+          return await land(!!step.sponsor);
+        } catch (err) {
+          if (!step.sponsor || !isSponsorshipOff(err)) throw err;
+          // Privy won't pay on this app, so the wallet's own SOL has to cover the network fee.
+          logger.error("ALERT: Solana gas sponsorship is off in the Privy dashboard");
+          if ((await solanaLamports(wallets.solanaAddress!)) < MIN_SOLANA_FEE_LAMPORTS) throw needsSol(wallets.solanaAddress!);
+          return await land(false);
+        }
       }
       const { signed_transaction } = await privy()
         .wallets()
