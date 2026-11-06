@@ -9,6 +9,7 @@ vi.hoisted(() => {
 
 import { BaseError, ContractFunctionRevertedError, HttpRequestError } from "viem";
 import { THESIS_REGISTRY_ABI, anchorArgs, canonicalThesis, isThesisSpecificFailure, thesisHash } from "../src/anchoring";
+import { closeDb, db } from "../src/db/client";
 import { assertSafeForProduction, resetEnvForTests, type Env } from "../src/env";
 import { fillBuckets } from "../src/stats";
 import { buildXQuery, extractTokens, isRelevant, newestXId, parseTelegramPage, parseXResponse, followPost, newFollows, X_ACCOUNTS, xAccountGroups } from "../src/trackers";
@@ -564,6 +565,15 @@ describe("the app's fee", () => {
   it("sends the fee to Flash on quotes and orders", () => {
     const request = { side: "buy", chain: "base", address: TOKEN, decimals: 18, usdcIn: "10", evmAddress: WALLET, solanaAddress: null, priceUsd: "1", notionalUsd: "10" } as const;
     expect(buildFlashParams(request, 50).flashIntegratorFeeBps).toBe("50");
+  });
+});
+
+describe("database connection", () => {
+  it("survives losing an idle connection", async () => {
+    const pool = db().$client;
+    const drop = Object.assign(new Error("read EADDRNOTAVAIL"), { code: "EADDRNOTAVAIL" });
+    expect(() => pool.emit("error", drop, {} as never)).not.toThrow();
+    await closeDb();
   });
 });
 
