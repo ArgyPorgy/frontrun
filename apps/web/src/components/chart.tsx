@@ -123,24 +123,24 @@ export function PriceChart({
       autoSize: true,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "#8f978f",
+        textColor: "#8d9299",
         fontFamily: "var(--font-geist-mono), monospace",
         fontSize: 10,
         // Lightweight Charts' license requires attribution, and this logo satisfies it.
         attributionLogo: true,
       },
-      grid: { vertLines: { color: "#161a17" }, horzLines: { color: "#161a17" } },
+      grid: { vertLines: { color: "#14151a" }, horzLines: { color: "#14151a" } },
       rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.12, bottom: 0.08 } },
       timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false },
       crosshair: { mode: CrosshairMode.Normal },
       localization: { priceFormatter: (price: number) => formatPrice(price).replace("$", "") },
     });
     const series = chart.addSeries(CandlestickSeries, {
-      upColor: "#35d990",
-      downColor: "#ff5d5d",
+      upColor: "#35db98",
+      downColor: "#eb5271",
       borderVisible: false,
-      wickUpColor: "#35d990",
-      wickDownColor: "#ff5d5d",
+      wickUpColor: "#35db98",
+      wickDownColor: "#eb5271",
       priceFormat: { type: "custom", minMove: 1e-12, formatter: (price: number) => formatPrice(price).replace("$", "") },
     });
     chartRef.current = chart;

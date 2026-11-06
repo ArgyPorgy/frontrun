@@ -16,21 +16,21 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const detail = `${t.verified ? `Holding ${formatCompactUsd(t.positionUsdAtPost)} · ` : ""}Posted at ${formatPrice(t.priceAtPost)}`;
   return new ImageResponse(
     (
-      <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between", background: "#0a0c0b", color: "#f1f4ef", padding: 64, fontFamily: "sans-serif" }}>
+      <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between", background: "#050507", color: "#f5f4f7", padding: 64, fontFamily: "sans-serif" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div style={{ fontSize: 56, fontWeight: 700 }}>{t.token.symbol}</div>
-            <div style={{ fontSize: 24, color: "#8f978f" }}>{CHAINS[t.token.chain].name}</div>
+            <div style={{ fontSize: 24, color: "#8d9299" }}>{CHAINS[t.token.chain].name}</div>
           </div>
-          {t.returnPct !== null && <div style={{ fontSize: 64, fontWeight: 700, color: up ? "#35d990" : "#ff5d5d" }}>{formatPct(t.returnPct)}</div>}
+          {t.returnPct !== null && <div style={{ fontSize: 64, fontWeight: 700, color: up ? "#35db98" : "#eb5271" }}>{formatPct(t.returnPct)}</div>}
         </div>
         <div style={{ fontSize: 36, lineHeight: 1.3, display: "flex" }}>{body}</div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", fontSize: 26, color: "#8f978f" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", fontSize: 26, color: "#8d9299" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ color: "#f1f4ef", fontWeight: 600 }}>{t.author.username}</div>
+            <div style={{ color: "#f5f4f7", fontWeight: 600 }}>{t.author.username}</div>
             <div style={{ display: "flex" }}>{detail}</div>
           </div>
-          <div style={{ color: "#c8f135", fontWeight: 700 }}>Front Run</div>
+          <div style={{ color: "#6deab2", fontWeight: 700 }}>frontrun</div>
         </div>
       </div>
     ),

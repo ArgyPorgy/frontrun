@@ -1,60 +1,90 @@
 "use client";
 
-import { CHAIN_KEYS, CHAINS, formatPct, type TokenListItem } from "@frontrun/core";
+import { formatPct, type TokenListItem } from "@frontrun/core";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { LogoMark, Wordmark } from "@/components/brand";
+import { ArcStudioBadge } from "@/components/shell";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { ChainLogo, TokenIcon } from "@/components/ui";
-import { WaybackInstall } from "@/components/wayback-install";
 
-function Wordmark() {
-  return (
-    <span className="flex items-center gap-2">
-      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden className="text-signal">
-        <path fill="currentColor" d="M13.5 2 4 13.5h6.2L9 22l10-12.5h-6.4L13.5 2Z" />
-      </svg>
-      <span className="font-display text-lg font-semibold tracking-tight">Front Run</span>
-    </span>
-  );
-}
+const CARD_LABEL = "num text-[11px] tracking-[0.14em] uppercase";
 
 function Header() {
   const { login } = useAuth();
   return (
-    <header className="sticky top-0 z-30 border-b border-line/50 bg-bg/70 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-        <Link href="/" aria-label="Front Run home">
-          <Wordmark />
-        </Link>
-        <nav aria-label="Sections" className="hidden items-center gap-1 md:flex">
-          <a href="#markets" className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted hover:text-ink">
-            Markets
-          </a>
-          <a href="#features" className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted hover:text-ink">
-            Features
-          </a>
-          <Link href="/analytics" className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted hover:text-ink">
-            Analytics
-          </Link>
-          <a href="#wayback" className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted hover:text-ink">
-            Install app
-          </a>
-        </nav>
-        <div className="flex items-center gap-2">
-          <button onClick={login} className="hidden rounded-xl px-3 py-2 text-sm font-semibold text-muted hover:text-ink sm:block">
-            Log in
-          </button>
-          <button onClick={login} className="rounded-xl bg-signal px-4 py-2 text-sm font-semibold text-signal-ink transition-opacity hover:opacity-90">
-            Start trading
-          </button>
-        </div>
-      </div>
+    <header className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-5 py-5">
+      <Link href="/" aria-label="Front Run home">
+        <Wordmark />
+      </Link>
+      <button onClick={login} className="font-display rounded-full border border-line bg-raised px-4 py-2 text-sm font-semibold transition-colors hover:border-faint">
+        launch app
+      </button>
     </header>
   );
 }
 
+function HeroArt() {
+  return (
+    <div aria-hidden className="relative mx-auto aspect-[10/9] w-full max-w-[560px]">
+      <div className="absolute top-[8%] left-[6%] h-[70%] w-[62%] rounded-full bg-up/25 blur-[70px]" />
+      <div className="absolute top-[24%] right-0 h-[66%] w-[50%] rounded-full bg-cyan/25 blur-[70px]" />
+      {[32, 46, 60].map((top, i) => (
+        <div key={top} className="absolute left-[2%] h-[3px] rounded-full bg-gradient-to-r from-transparent to-signal/70" style={{ top: `${top}%`, width: i === 1 ? "28%" : "22%", marginLeft: i === 1 ? "6%" : 0 }} />
+      ))}
+      <div className="animate-float absolute top-[20%] left-[28%] w-[64%] drop-shadow-[0_0_34px_rgba(109,234,178,0.55)]">
+        <LogoMark width={1000} className="h-auto w-full" />
+      </div>
+      <svg viewBox="0 0 520 170" className="absolute right-0 bottom-[4%] w-full" fill="none">
+        <defs>
+          <linearGradient id="hero-area" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#5ac4f1" stopOpacity="0.28" />
+            <stop offset="1" stopColor="#5ac4f1" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d="M0 150 52 138 104 148 156 118 208 126 260 92 312 100 364 62 416 34 520 10V170H0Z" fill="url(#hero-area)" />
+        <path d="M0 150 52 138 104 148 156 118 208 126 260 92 312 100 364 62 416 34 520 10" stroke="#5ac4f1" strokeWidth="3" strokeLinejoin="round" />
+      </svg>
+      <div className="absolute top-[2%] left-[2%] flex items-center gap-2.5 rounded-2xl border border-cyan/40 bg-surface/90 px-3 py-2">
+        <span className="font-display flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-signal to-cyan text-xs font-bold text-signal-ink">C</span>
+        <span>
+          <span className="num block text-[10px] text-muted">@caller_one posted</span>
+          <span className="block text-xs font-semibold">&ldquo;this is going to zillions!&rdquo;</span>
+        </span>
+      </div>
+      <div className="absolute right-[2%] bottom-[24%] rounded-2xl border border-line bg-surface/95 px-3 py-2">
+        <span className="num block text-[10px] text-muted">you copied it early</span>
+        <span className="font-display text-brand block text-xl font-bold">+424%</span>
+      </div>
+    </div>
+  );
+}
+
+function Hero() {
+  const { login } = useAuth();
+  return (
+    <section className="relative mx-auto grid max-w-6xl items-center gap-6 px-5 pt-6 pb-10 md:grid-cols-2 md:pt-10 md:pb-16">
+      <div className="animate-rise">
+        <h1 className="font-display text-[46px] leading-[1.02] font-bold tracking-tight md:text-[68px]">
+          frontrun your favourite <span className="text-brand">traders.</span>
+        </h1>
+        <p className="font-display mt-5 max-w-sm text-lg text-muted">trade everything, from stocks to memes. all in one place.</p>
+        <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+          <button onClick={login} className="font-display rounded-full bg-signal px-8 py-3.5 font-semibold text-signal-ink shadow-[0_0_34px_rgba(109,234,178,0.35)] transition-opacity hover:opacity-90">
+            start trading
+          </button>
+          <a href="#inside" className="font-display rounded-full border border-line bg-raised px-8 py-3.5 text-center font-semibold transition-colors hover:border-faint">
+            see what&apos;s inside
+          </a>
+        </div>
+      </div>
+      <HeroArt />
+    </section>
+  );
+}
+
+/** Real prices from the market feed, so the numbers on the page are never made up. */
 function LiveTape() {
   const market = useQuery({
     queryKey: ["market", "trending", "all"],
@@ -64,13 +94,12 @@ function LiveTape() {
   });
   const items: TokenListItem[] = market.data?.items ?? [];
   if (items.length < 6) return null;
-  const row = items.slice(0, 18);
+  const row = items.slice(0, 16);
   return (
-    <div className="relative overflow-hidden border-y border-line/50 bg-surface/30 py-2.5">
-      <div className="animate-tape flex w-max gap-7 pl-6">
+    <div className="relative overflow-hidden border-y border-line/50 py-3">
+      <div className="animate-tape flex w-max gap-2.5 pl-4">
         {[...row, ...row].map((t, i) => (
-          <span key={`${t.chain}:${t.address}:${i}`} className="num flex items-center gap-2 text-sm whitespace-nowrap">
-            <TokenIcon symbol={t.symbol} imageUrl={t.imageUrl} size={18} />
+          <span key={`${t.chain}:${t.address}:${i}`} className="num flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1 text-xs whitespace-nowrap">
             <span className="font-semibold">{t.symbol}</span>
             <span className={t.priceChangePct.h24 >= 0 ? "text-up" : "text-down"}>{formatPct(t.priceChangePct.h24)}</span>
           </span>
@@ -82,188 +111,318 @@ function LiveTape() {
   );
 }
 
-function Hero() {
-  const { login } = useAuth();
+const GLOWS = {
+  "top-left": "-top-20 -left-20 bg-up/25",
+  "top-right": "-top-20 -right-20 bg-cyan/20",
+  "bottom-center": "-bottom-28 left-1/3 bg-cyan/15",
+  "bottom-right": "-right-20 -bottom-24 bg-up/20",
+  "bottom-left": "-bottom-24 -left-20 bg-cyan/20",
+} as const;
+
+function FeatureCard(props: { eyebrow: string; tone: "mint" | "blue"; title: ReactNode; body: string; art: ReactNode; artFirst?: boolean; glow: keyof typeof GLOWS; badge?: string }) {
   return (
-    <section className="relative isolate overflow-hidden">
-      {/* Cosmic backdrop, layered from gradients and a gradient starfield — no image assets. */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-        <div className="starfield animate-float absolute inset-0 opacity-70" />
-        <div className="absolute inset-x-0 top-0 h-[560px] bg-[radial-gradient(60%_80%_at_50%_-10%,rgba(200,241,53,0.16),transparent_70%)]" />
-        <div className="absolute -bottom-40 left-1/2 h-[520px] w-[920px] -translate-x-1/2 rounded-[50%] bg-[radial-gradient(50%_50%_at_50%_50%,rgba(91,141,239,0.18),transparent_70%)]" />
-        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-b from-transparent to-bg" />
-      </div>
-
-      <div className="mx-auto max-w-4xl px-4 pt-20 pb-14 text-center md:pt-28 md:pb-20">
-        <span className="animate-rise inline-flex items-center gap-2 rounded-full border border-line bg-surface/60 px-3.5 py-1.5 text-xs font-medium text-muted">
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-signal opacity-60" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-signal" />
-          </span>
-          Non-custodial social trading, live on Arc
-        </span>
-
-        <h1 className="font-display animate-rise mx-auto mt-6 max-w-3xl text-balance text-[13vw] leading-[1.02] font-semibold tracking-tight sm:text-6xl md:text-7xl">
-          Trade any token
-          <br />
-          <span className="text-signal">from one balance.</span>
-        </h1>
-
-        <p className="animate-rise mx-auto mt-5 max-w-xl text-pretty text-base text-muted md:text-lg">
-          Buy on 8 chains from a single USDC balance on Arc — in one tap. Every thesis shows the author&apos;s real position, and whether they were right.
-        </p>
-
-        <div className="animate-rise mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <button
-            onClick={login}
-            className="w-full rounded-xl bg-signal px-7 py-3.5 font-semibold text-signal-ink shadow-lg shadow-signal/20 transition-opacity hover:opacity-90 sm:w-auto"
-          >
-            Start trading
-          </button>
-          <Link
-            href="/discovery"
-            className="w-full rounded-xl border border-line bg-surface/60 px-7 py-3.5 text-center font-semibold text-ink transition-colors hover:bg-raised sm:w-auto"
-          >
-            Explore markets
-          </Link>
+    <section className="rounded-[28px] bg-gradient-to-br from-up/50 via-line/60 to-cyan/50 p-px">
+      <div className="relative grid items-center gap-8 overflow-hidden rounded-[27px] bg-[#09090c] p-6 md:grid-cols-2 md:gap-10 md:p-10">
+        <div aria-hidden className={`pointer-events-none absolute h-72 w-72 rounded-full blur-[70px] ${GLOWS[props.glow]}`} />
+        <div className={`relative ${props.artFirst ? "md:order-2" : ""}`}>
+          <p className={`${CARD_LABEL} flex flex-wrap items-center gap-2 ${props.tone === "mint" ? "text-signal" : "text-cyan"}`}>
+            {props.eyebrow}
+            {props.badge && <span className="rounded-full border border-line bg-raised px-2 py-0.5 text-[10px] text-ink normal-case">{props.badge}</span>}
+          </p>
+          <h2 className="font-display mt-3 text-[34px] leading-[1.05] font-bold tracking-tight md:text-[42px]">{props.title}</h2>
+          <p className="font-display mt-3 max-w-md text-muted">{props.body}</p>
         </div>
-
-        <p className="animate-rise mt-6 text-sm text-faint">No seed phrases · No bridging · You hold the keys</p>
+        <div aria-hidden className={`relative min-w-0 ${props.artFirst ? "md:order-1" : ""}`}>
+          {props.art}
+        </div>
       </div>
     </section>
   );
 }
 
-function ChainsRow() {
+function AlphaFeedArt() {
+  const rows = [
+    { initial: "C", tint: "bg-gradient-to-br from-signal to-cyan text-signal-ink", handle: "@caller_one", tag: "thesis", tagClass: "bg-signal text-signal-ink", body: "NVDA breaks out after earnings. sized in, stop at 180." },
+    { initial: "𝕏", tint: "bg-ink text-bg", handle: "@ct_whale", tag: "𝕏 alpha", tagClass: "bg-raised text-ink border border-line", body: "wallets are loading $WIF again. volume 6x in an hour." },
+    { initial: "T", tint: "bg-cyan text-signal-ink", handle: "alpha group", tag: "telegram", tagClass: "bg-cyan/20 text-cyan", body: "early call: new meme on Base, liquidity locked." },
+  ];
   return (
-    <section id="markets" className="mx-auto w-full max-w-5xl px-4 pb-4 pt-10">
-      <p className="text-center text-xs font-medium tracking-wide text-faint uppercase">One USDC balance. Eight chains.</p>
-      <div className="mt-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-4">
-        {CHAIN_KEYS.map((chain) => (
-          <span key={chain} className="flex items-center gap-2 text-sm text-muted">
-            <ChainLogo chain={chain} size={22} />
-            <span className="hidden sm:inline">{CHAINS[chain].name}</span>
-          </span>
-        ))}
-      </div>
-    </section>
+    <div className="space-y-2.5">
+      {rows.map((r) => (
+        <div key={r.handle} className="rounded-2xl bg-raised p-3.5">
+          <div className="flex items-center gap-2.5">
+            <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${r.tint}`}>{r.initial}</span>
+            <span className="text-sm font-semibold">{r.handle}</span>
+            <span className={`num ml-auto rounded-full px-2 py-0.5 text-[10px] uppercase ${r.tagClass}`}>{r.tag}</span>
+          </div>
+          <p className="mt-2 text-sm">{r.body}</p>
+        </div>
+      ))}
+    </div>
   );
 }
 
-function FeatureIcon({ children }: { children: ReactNode }) {
+function SafetyNetArt() {
   return (
-    <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-line bg-bg text-signal">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        {children}
-      </svg>
+    <div className="rounded-2xl border border-line bg-[#060608] p-3">
+      <div className="relative overflow-hidden rounded-xl">
+        <svg viewBox="0 0 400 240" className="w-full" fill="none">
+          <defs>
+            <linearGradient id="net-area" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="#5ac4f1" stopOpacity="0.32" />
+              <stop offset="1" stopColor="#5ac4f1" stopOpacity="0.02" />
+            </linearGradient>
+            <linearGradient id="net-line" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stopColor="#5ac4f1" />
+              <stop offset="1" stopColor="#6deab2" />
+            </linearGradient>
+          </defs>
+          <rect width="400" height="48" fill="#35db98" fillOpacity="0.1" />
+          <rect y="196" width="400" height="44" fill="#eb5271" fillOpacity="0.1" />
+          <path d="M0 48H400" stroke="#35db98" strokeWidth="2" strokeDasharray="4 5" />
+          <path d="M0 140H400" stroke="#8d9299" strokeOpacity="0.5" strokeDasharray="4 5" />
+          <path d="M0 196H400" stroke="#eb5271" strokeWidth="1.5" strokeDasharray="4 5" />
+          <path d="M0 128 50 142 80 148 110 142 150 118 190 126 230 92 270 98 310 70 345 76 380 50V240H0Z" fill="url(#net-area)" />
+          <path d="M0 128 50 142 80 148 110 142 150 118 190 126 230 92 270 98 310 70 345 76 380 50" stroke="url(#net-line)" strokeWidth="3" strokeLinejoin="round" />
+          <circle cx="80" cy="148" r="7" fill="#050507" stroke="#f5f4f7" strokeWidth="2.5" />
+          <circle cx="380" cy="50" r="13" stroke="#6deab2" strokeOpacity="0.4" strokeWidth="2" />
+          <circle cx="380" cy="50" r="7" fill="#6deab2" />
+          <text x="10" y="32" fill="#6deab2" fontFamily="monospace" fontSize="14">TAKE PROFIT +60%</text>
+          <text x="10" y="124" fill="#f5f4f7" fontFamily="monospace" fontSize="13">LIMIT BUY · FILLED</text>
+          <text x="10" y="224" fill="#eb5271" fontFamily="monospace" fontSize="14">STOP LOSS -10%</text>
+        </svg>
+      </div>
+      <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-up/30 bg-up/10 px-3 py-2 text-xs font-semibold">
+        <span className="text-up">✓</span> position protected
+      </div>
+    </div>
+  );
+}
+
+function Toggle({ on }: { on: boolean }) {
+  return (
+    <span className={`flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 ${on ? "justify-end bg-signal" : "justify-start bg-line"}`}>
+      <span className="h-5 w-5 rounded-full bg-ink" />
     </span>
   );
 }
 
-const FEATURES: Array<{ title: string; body: string; icon: ReactNode }> = [
-  {
-    title: "One balance, every chain",
-    body: "Hold USDC on Arc and buy tokens across 8 chains. No bridging, no juggling gas, no wrapped detours.",
-    icon: (
-      <>
-        <circle cx="12" cy="12" r="9" />
-        <path d="M3 12h18" />
-        <path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18" />
-      </>
-    ),
-  },
-  {
-    title: "Thesis you can trust",
-    body: "Every post is pinned to the chart and shows the author's real position size — and whether the call paid off.",
-    icon: (
-      <>
-        <path d="M3 17l6-6 4 4 8-8" />
-        <path d="M15 7h6v6" />
-      </>
-    ),
-  },
-  {
-    title: "Trade in one tap",
-    body: "Approve once within your own limits, then every trade clears with no pop-ups. Non-custodial the whole way.",
-    icon: (
-      <>
-        <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />
-      </>
-    ),
-  },
-  {
-    title: "Guardrails by default",
-    body: "Price-impact checks, pool-share limits and risk flags run before anything is signed, so you never get trapped.",
-    icon: (
-      <>
-        <path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6l7-3Z" />
-        <path d="m9 12 2 2 4-4" />
-      </>
-    ),
-  },
-];
+function AutoCopyArt() {
+  const rows = [
+    { initial: "AI", tile: "bg-gradient-to-br from-signal to-cyan text-signal-ink", name: "momentum bot", detail: "AI bot · $50 per trade", gain: "+31%", on: true },
+    { initial: "C", tile: "bg-up/20 text-signal", name: "@caller_one", detail: "KOL · $100 per trade", gain: "+424%", on: true },
+    { initial: "R", tile: "bg-line text-muted", name: "@caller_two", detail: "KOL · paused", gain: "+12%", on: false },
+  ];
+  return (
+    <div className="space-y-2.5">
+      {rows.map((r) => (
+        <div key={r.name} className={`flex items-center gap-3 rounded-2xl border p-3 ${r.on ? "border-up/30 bg-raised" : "border-transparent bg-raised/70"}`}>
+          <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold ${r.tile}`}>{r.initial}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold">{r.name}</span>
+            <span className="block truncate text-xs text-muted">{r.detail}</span>
+          </span>
+          <span className={`num text-xs ${r.on ? "text-up" : "text-muted"}`}>{r.gain}</span>
+          <Toggle on={r.on} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ReputationArt() {
+  const others = [
+    { rank: "02", name: "@caller_two", score: 84, tone: "from-signal to-cyan" },
+    { rank: "03", name: "@caller_three", score: 79, tone: "from-signal to-cyan" },
+    { rank: "—", name: "@loud_kol", score: 22, tone: "from-down to-down" },
+  ];
+  return (
+    <div className="space-y-2.5">
+      <div className="flex items-center gap-5 rounded-2xl bg-raised p-4">
+        <div className="relative h-16 w-28 shrink-0">
+          <svg viewBox="0 0 120 68" className="w-full" fill="none">
+            <defs>
+              <linearGradient id="gauge" x1="0" y1="1" x2="1" y2="0">
+                <stop offset="0" stopColor="#5ac4f1" />
+                <stop offset="1" stopColor="#6deab2" />
+              </linearGradient>
+            </defs>
+            <path d="M8 62a52 52 0 0 1 104 0" stroke="#24262c" strokeWidth="9" strokeLinecap="round" />
+            <path d="M8 62a52 52 0 0 1 100-20" stroke="url(#gauge)" strokeWidth="9" strokeLinecap="round" />
+          </svg>
+          <span className="font-display absolute inset-x-0 bottom-0 text-center text-2xl font-semibold">92</span>
+        </div>
+        <div className="min-w-0">
+          <p className="font-semibold">@caller_one</p>
+          <p className="text-xs text-muted">reputation score</p>
+          <p className="num mt-1 text-[11px] text-signal">TOP 1% · 41 RIGHT CALLS</p>
+        </div>
+      </div>
+      {others.map((o) => (
+        <div key={o.name} className="flex items-center gap-3 rounded-xl bg-raised px-3.5 py-2.5">
+          <span className="num w-5 text-xs text-muted">{o.rank}</span>
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{o.name}</span>
+          <span className="h-1.5 w-20 overflow-hidden rounded-full bg-line">
+            <span className={`block h-full rounded-full bg-gradient-to-r ${o.tone}`} style={{ width: `${o.score}%` }} />
+          </span>
+          <span className={`num w-6 text-right text-sm ${o.score < 50 ? "text-down" : ""}`}>{o.score}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PortfolioArt() {
+  const legend = [
+    { label: "stocks 47%", color: "bg-signal", width: 47 },
+    { label: "crypto 36%", color: "bg-cyan", width: 36 },
+    { label: "currency 8%", color: "bg-ink/80", width: 8 },
+    { label: "memes 7%", color: "bg-[#a8f0d0]", width: 7 },
+  ];
+  const rows = [
+    { symbol: "NVDA", kind: "stock", value: "$4,820", change: "+12.4%", tint: "text-signal" },
+    { symbol: "TSLA", kind: "stock", value: "$2,140", change: "+4.2%", tint: "text-signal" },
+    { symbol: "BTC", kind: "crypto", value: "$3,900", change: "+8.1%", tint: "text-cyan" },
+    { symbol: "ETH", kind: "crypto", value: "$1,450", change: "+1.8%", tint: "text-cyan" },
+    { symbol: "EURC", kind: "currency", value: "$1,200", change: "+0.4%", tint: "text-ink" },
+    { symbol: "PEPE", kind: "memecoin", value: "$640", change: "+88%", tint: "text-signal" },
+    { symbol: "WIF", kind: "memecoin", value: "$310", change: "+41%", tint: "text-signal" },
+  ];
+  return (
+    <div className="rounded-2xl bg-raised p-4">
+      <p className={`${CARD_LABEL} text-muted`}>portfolio</p>
+      <div className="mt-1 flex items-end justify-between gap-2">
+        <p className="font-display text-3xl font-bold">$14,660</p>
+        <span className="num rounded-full bg-up/15 px-2.5 py-1 text-[11px] text-up">+18.4% this month</span>
+      </div>
+      <div className="mt-3 flex h-1.5 gap-1">
+        {legend.map((l) => (
+          <span key={l.label} className={`rounded-full ${l.color}`} style={{ width: `${l.width}%` }} />
+        ))}
+      </div>
+      <div className="num mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted">
+        {legend.map((l) => (
+          <span key={l.label} className="flex items-center gap-1">
+            <span className={`h-1.5 w-1.5 rounded-full ${l.color}`} />
+            {l.label}
+          </span>
+        ))}
+      </div>
+      <div className="mt-3 divide-y divide-line/60">
+        {rows.map((r) => (
+          <div key={r.symbol} className="flex items-center gap-3 py-2">
+            <span className={`flex h-8 w-8 items-center justify-center rounded-full bg-line/70 text-[10px] font-bold ${r.tint}`}>{r.symbol.slice(0, 2)}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold">{r.symbol}</span>
+              <span className={`num block text-[10px] uppercase ${r.tint}`}>{r.kind}</span>
+            </span>
+            <span className="text-right">
+              <span className="num block text-sm">{r.value}</span>
+              <span className="num block text-[11px] text-up">{r.change}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function Features() {
   return (
-    <section id="features" className="mx-auto w-full max-w-5xl px-4 py-16 md:py-24">
-      <div className="mx-auto max-w-2xl text-center">
-        <h2 className="font-display text-3xl font-semibold tracking-tight md:text-4xl">Built for traders who do the work.</h2>
-        <p className="mt-3 text-muted">Everything you need to find conviction, act on it fast, and stay in control of your funds.</p>
-      </div>
-      <div className="mt-12 grid gap-4 sm:grid-cols-2">
-        {FEATURES.map((f) => (
-          <div key={f.title} className="rounded-2xl border border-line bg-surface/60 p-6 transition-colors hover:border-line hover:bg-surface">
-            <FeatureIcon>{f.icon}</FeatureIcon>
-            <h3 className="mt-4 text-lg font-semibold tracking-tight">{f.title}</h3>
-            <p className="mt-2 text-sm leading-relaxed text-muted">{f.body}</p>
-          </div>
-        ))}
-      </div>
-    </section>
+    <div id="inside" className="mx-auto max-w-5xl scroll-mt-6 space-y-4 px-4 py-10 md:py-14">
+      <FeatureCard
+        eyebrow="alpha feed"
+        tone="mint"
+        glow="top-left"
+        title={
+          <>
+            all the alpha.
+            <br />
+            one feed.
+          </>
+        }
+        body="theses from your favourite traders, plus live alpha from X and Telegram."
+        art={<AlphaFeedArt />}
+      />
+      <FeatureCard
+        eyebrow="protect yourself"
+        tone="blue"
+        glow="top-right"
+        artFirst
+        title={
+          <>
+            ape in.
+            <br />
+            with a safety net.
+          </>
+        }
+        body="limit orders, stop losses and take profits on every trade."
+        art={<SafetyNetArt />}
+      />
+      <FeatureCard
+        eyebrow="auto copy"
+        badge="coming soon"
+        tone="mint"
+        glow="bottom-center"
+        title={
+          <>
+            copy the best.
+            <br />
+            on autopilot.
+          </>
+        }
+        body="follow AI bots or your favourite KOLs. their trades copy to you, automatically."
+        art={<AutoCopyArt />}
+      />
+      <FeatureCard
+        eyebrow="reputation score"
+        tone="mint"
+        glow="bottom-right"
+        artFirst
+        title={
+          <>
+            ranked for
+            <br />
+            being right.
+          </>
+        }
+        body="every caller gets a score. loud doesn't count. right does."
+        art={<ReputationArt />}
+      />
+      <FeatureCard
+        eyebrow="one platform"
+        tone="blue"
+        glow="bottom-left"
+        title={
+          <>
+            stocks to memes.
+            <br />
+            one place.
+          </>
+        }
+        body="your entire portfolio, managed right here."
+        art={<PortfolioArt />}
+      />
+    </div>
   );
 }
 
-const STEPS: Array<{ n: string; title: string; body: string }> = [
-  { n: "01", title: "Sign in", body: "Google, email or wallet. A non-custodial wallet is created for you in seconds." },
-  { n: "02", title: "Add USDC", body: "Fund one balance on Arc. That's all you need to trade anything, anywhere." },
-  { n: "03", title: "Trade any token", body: "Search or tap a trending token and buy in one tap. Post your thesis if you want." },
-];
-
-function Steps() {
+function Closing() {
   return (
-    <section className="mx-auto w-full max-w-5xl px-4 pb-4">
-      <div className="grid gap-4 md:grid-cols-3">
-        {STEPS.map((s) => (
-          <div key={s.n} className="rounded-2xl border border-line/70 bg-surface/40 p-6">
-            <span className="num font-display text-2xl font-semibold text-signal">{s.n}</span>
-            <h3 className="mt-3 font-semibold tracking-tight">{s.title}</h3>
-            <p className="mt-1.5 text-sm text-muted">{s.body}</p>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function FinalCta() {
-  const { login } = useAuth();
-  return (
-    <section className="mx-auto w-full max-w-5xl px-4 pb-20">
-      <div className="relative overflow-hidden rounded-3xl border border-line bg-gradient-to-b from-surface to-bg p-10 text-center md:p-16">
-        <div aria-hidden className="starfield pointer-events-none absolute inset-0 opacity-40" />
-        <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-10 h-40 bg-[radial-gradient(50%_80%_at_50%_0,rgba(200,241,53,0.18),transparent)]" />
-        <div className="relative">
-          <h2 className="font-display text-3xl font-semibold tracking-tight md:text-5xl">Where traders become legends.</h2>
-          <p className="mx-auto mt-3 max-w-md text-muted">Start from one USDC balance. Trade any token, back it with a thesis, and let your record speak.</p>
-          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <button onClick={login} className="w-full rounded-xl bg-signal px-7 py-3.5 font-semibold text-signal-ink transition-opacity hover:opacity-90 sm:w-auto">
-              Start trading
-            </button>
-            <Link href="/discovery" className="w-full rounded-xl border border-line bg-surface/60 px-7 py-3.5 text-center font-semibold text-ink transition-colors hover:bg-raised sm:w-auto">
-              Explore markets
-            </Link>
-          </div>
-        </div>
+    <section className="relative overflow-hidden pt-14 pb-20 text-center">
+      <div aria-hidden className="pointer-events-none absolute top-1/3 left-[12%] h-96 w-[45%] rounded-full bg-up/25 blur-[90px]" />
+      <div aria-hidden className="pointer-events-none absolute top-1/3 right-[10%] h-96 w-[42%] rounded-full bg-cyan/20 blur-[90px]" />
+      <div className="relative px-4">
+        <p className="font-display text-3xl leading-tight font-bold tracking-tight md:text-5xl">
+          we frontrun <span className="text-brand">for</span> you.
+          <br />
+          not against you.
+        </p>
+        <p className="font-display mt-16 text-[15vw] leading-[1] font-bold tracking-tight whitespace-nowrap md:mt-24 md:text-[128px]">
+          don&rsquo;t fomo.
+          <br />
+          <span className="text-brand">be early.</span>
+        </p>
       </div>
     </section>
   );
@@ -272,14 +431,11 @@ function FinalCta() {
 function Footer() {
   return (
     <footer className="border-t border-line/60">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 md:flex-row md:items-center md:justify-between">
-        <div className="max-w-sm">
-          <Wordmark />
-          <p className="mt-3 text-sm text-muted">Non-custodial social trading. Trade any token from one USDC balance on Arc.</p>
-        </div>
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-8 md:flex-row md:items-center md:justify-between">
+        <Wordmark />
         <nav aria-label="Legal" className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted">
           <Link href="/discovery" className="hover:text-ink">
-            Markets
+            Discover
           </Link>
           <Link href="/analytics" className="hover:text-ink">
             Analytics
@@ -295,25 +451,21 @@ function Footer() {
           </Link>
         </nav>
       </div>
-      <p className="mx-auto max-w-6xl px-4 pb-10 text-xs text-faint">
-        Trading involves risk, including the loss of principal. Nothing here is financial advice.
-      </p>
+      <p className="mx-auto max-w-6xl px-5 text-xs text-faint">Trading involves risk, including the loss of principal. Nothing here is financial advice. Names and figures in the examples above are illustrative.</p>
+      <ArcStudioBadge />
     </footer>
   );
 }
 
 export function Landing() {
   return (
-    <div className="min-h-dvh bg-bg text-ink">
+    <div className="min-h-dvh overflow-x-hidden bg-bg text-ink">
       <Header />
       <main>
         <Hero />
         <LiveTape />
-        <ChainsRow />
         <Features />
-        <Steps />
-        <WaybackInstall />
-        <FinalCta />
+        <Closing />
       </main>
       <Footer />
     </div>

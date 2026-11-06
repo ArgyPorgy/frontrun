@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { LogoMark } from "@/components/brand";
 import { Landing } from "@/components/landing";
 import { useAuth } from "@/lib/auth";
 
@@ -10,9 +11,7 @@ import { useAuth } from "@/lib/auth";
 function Splash() {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-bg">
-      <svg width="40" height="40" viewBox="0 0 24 24" aria-hidden className="animate-shimmer text-signal">
-        <path fill="currentColor" d="M13.5 2 4 13.5h6.2L9 22l10-12.5h-6.4L13.5 2Z" />
-      </svg>
+      <LogoMark width={48} className="animate-shimmer" />
       <span className="sr-only">Loading</span>
     </div>
   );

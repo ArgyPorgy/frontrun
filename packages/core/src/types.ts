@@ -321,6 +321,16 @@ export interface TradeView {
   pendingSteps: ExecStep[] | null;
 }
 
+/** What a closed position's shared result card shows. Public, like the rest of someone's PnL. */
+export interface TradeCardView {
+  id: string;
+  symbol: string;
+  username: string;
+  entryPriceUsd: string;
+  exitPriceUsd: string;
+  returnPct: number;
+}
+
 export type TrackerSource = "x" | "telegram";
 
 export type TrackerPostKind = "post" | "quote" | "reply" | "repost" | "follow";

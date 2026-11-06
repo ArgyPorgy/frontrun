@@ -75,6 +75,25 @@ export function positionValue(state: PositionState, priceUsd: Numeric): string {
   return D(state.qty).mul(priceUsd).toFixed();
 }
 
+/** Which photo a shared result card gets: bigger moves earn bigger pictures. */
+export type PnlCardTier = "exchange" | "lambo" | "moon" | "rough" | "boom" | "grill";
+
+export function pnlCardTier(pct: number): PnlCardTier {
+  if (pct >= 500) return "moon";
+  if (pct >= 100) return "lambo";
+  if (pct >= 0) return "exchange";
+  if (pct <= -75) return "grill";
+  if (pct <= -25) return "boom";
+  return "rough";
+}
+
+/** A card's headline number: +84.0%, +424%, +1,240%, -12.4%. */
+export function formatCardPct(pct: number): string {
+  const size = Math.abs(pct);
+  const digits = size < 100 ? size.toFixed(1) : Math.round(size).toLocaleString("en-US");
+  return `${pct < 0 ? "\u2212" : "+"}${digits}%`;
+}
+
 export function returnPct(state: PositionState, priceUsd: Numeric): number {
   const cost = D(state.costBasisUsd);
   if (cost.lte(0)) return 0;

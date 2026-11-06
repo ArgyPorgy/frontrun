@@ -6,18 +6,18 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 const AVATAR_PALETTE: Array<[string, string]> = [
-  ["#c8f135", "#2f6b3a"],
-  ["#5b8def", "#1d2c6b"],
-  ["#ff8a5c", "#6b1d3a"],
-  ["#f5b945", "#6b3a1d"],
-  ["#35d990", "#124a4a"],
-  ["#d38bff", "#3a1d6b"],
-  ["#ff5d8f", "#5c1740"],
+  ["#6deab2", "#0f5a4a"],
+  ["#5ac4f1", "#123f66"],
+  ["#00e6ba", "#0b4a52"],
+  ["#7c9bff", "#1d2c6b"],
+  ["#35db98", "#124a3a"],
+  ["#b79bff", "#34206b"],
+  ["#eb5271", "#5c1730"],
   ["#50e3c2", "#17415c"],
-  ["#ffd166", "#5c3a17"],
+  ["#f5b945", "#5c3a17"],
   ["#9bb0ff", "#2b2f66"],
-  ["#b7f06a", "#1f4d2c"],
-  ["#ff9f9f", "#5c1f1f"],
+  ["#a8f0d0", "#1f4d3c"],
+  ["#ff9fb0", "#5c1f2f"],
 ];
 
 export const AVATAR_CHOICES = AVATAR_PALETTE.map((_, i) => `gen:${i}`);

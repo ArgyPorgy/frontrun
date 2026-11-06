@@ -1,6 +1,7 @@
 "use client";
 
 import { APP_NAME, D, formatUsd } from "@frontrun/core";
+import { Wordmark } from "./brand";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -63,7 +64,7 @@ function Icon({ name, active }: { name: IconName; active?: boolean }) {
 }
 
 const TABS: Array<{ href: string; label: string; icon: IconName; match: (p: string) => boolean }> = [
-  { href: "/discovery", label: "Trending", icon: "trending", match: (p) => p === "/discovery" || p.startsWith("/token") || p.startsWith("/thesis") || p.startsWith("/leaderboard") },
+  { href: "/discovery", label: "Discover", icon: "trending", match: (p) => p === "/discovery" || p.startsWith("/token") || p.startsWith("/thesis") || p.startsWith("/leaderboard") },
   { href: "/search", label: "Search", icon: "search", match: (p) => p.startsWith("/search") },
   { href: "/portfolio", label: "Portfolio", icon: "portfolio", match: (p) => p.startsWith("/portfolio") || p.startsWith("/deposit") },
   { href: "/analytics", label: "Analytics", icon: "analytics", match: (p) => p.startsWith("/analytics") },
@@ -108,10 +109,7 @@ const WIDE_NAV: Array<{ href: string; label: string; match: (p: string) => boole
 function Logo() {
   return (
     <Link href="/discovery" className="hidden shrink-0 items-center gap-2 md:flex" aria-label={APP_NAME}>
-      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden className="text-signal">
-        <path fill="currentColor" d="M13.5 2 4 13.5h6.2L9 22l10-12.5h-6.4L13.5 2Z" />
-      </svg>
-      <span className="text-lg font-semibold tracking-tight">{APP_NAME}</span>
+      <Wordmark />
     </Link>
   );
 }
@@ -257,7 +255,7 @@ function InstallHint() {
 }
 
 /** Arc Studio's own watermark: same label, logo, link and look. It floats on a wide screen, but on a phone it would cover the tab bar, so it ends the page there, except on a token page, where the trade bar would sit on top of it. */
-function ArcStudioBadge() {
+export function ArcStudioBadge() {
   const pathname = usePathname();
   const display = pathname.startsWith("/token/") ? "hidden md:flex" : "flex";
   return (

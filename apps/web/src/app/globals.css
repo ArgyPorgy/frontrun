@@ -1,17 +1,18 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #0a0c0b;
-  --color-surface: #121513;
-  --color-raised: #1a1e1b;
-  --color-line: #252a26;
-  --color-ink: #f1f4ef;
-  --color-muted: #8f978f;
-  --color-faint: #5f675f;
-  --color-signal: #c8f135;
-  --color-signal-ink: #10140a;
-  --color-up: #35d990;
-  --color-down: #ff5d5d;
+  --color-bg: #050507;
+  --color-surface: #0c0d10;
+  --color-raised: #15161a;
+  --color-line: #24262c;
+  --color-ink: #f5f4f7;
+  --color-muted: #8d9299;
+  --color-faint: #5c6168;
+  --color-signal: #6deab2;
+  --color-signal-ink: #04130e;
+  --color-cyan: #5ac4f1;
+  --color-up: #35db98;
+  --color-down: #eb5271;
   --color-warn: #f5b945;
 
   --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
@@ -63,20 +64,15 @@
   }
 }
 
-/* Cosmic backdrop for the marketing landing: a drifting starfield painted with layered
-   radial gradients, so it needs no image asset and stays within the img/font CSP. */
-.starfield {
-  background-image:
-    radial-gradient(1.5px 1.5px at 18% 32%, rgba(241, 244, 239, 0.9), transparent),
-    radial-gradient(1.5px 1.5px at 72% 18%, rgba(241, 244, 239, 0.7), transparent),
-    radial-gradient(1px 1px at 44% 64%, rgba(241, 244, 239, 0.8), transparent),
-    radial-gradient(1px 1px at 88% 52%, rgba(200, 241, 53, 0.7), transparent),
-    radial-gradient(1.5px 1.5px at 28% 82%, rgba(241, 244, 239, 0.6), transparent),
-    radial-gradient(1px 1px at 62% 88%, rgba(155, 176, 255, 0.7), transparent),
-    radial-gradient(1px 1px at 8% 60%, rgba(241, 244, 239, 0.6), transparent),
-    radial-gradient(1.5px 1.5px at 94% 78%, rgba(241, 244, 239, 0.5), transparent);
-  background-repeat: repeat;
-  background-size: 420px 420px;
+/* The brand gradient, from the logo. Every solid accent button picks it up from here. */
+.bg-signal {
+  background-image: linear-gradient(95deg, #6eedaf, #5ac4f1);
+}
+.text-brand {
+  background-image: linear-gradient(95deg, #6eedaf, #5ac4f1);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
 }
 
 html {

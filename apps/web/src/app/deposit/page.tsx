@@ -13,7 +13,7 @@ import { useToast } from "@/lib/toast";
 function AddressQr({ address }: { address: string }) {
   const [svg, setSvg] = useState<string | null>(null);
   useEffect(() => {
-    void QRCode.toString(address, { type: "svg", margin: 1, color: { dark: "#0a0c0b", light: "#ffffff" } }).then(setSvg);
+    void QRCode.toString(address, { type: "svg", margin: 1, color: { dark: "#050507", light: "#ffffff" } }).then(setSvg);
   }, [address]);
   if (!svg) return <div className="h-44 w-44 rounded-2xl bg-raised" />;
   // The SVG is generated locally from the wallet address, so there's no outside markup to escape.

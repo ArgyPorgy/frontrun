@@ -11,6 +11,7 @@ import {
   schema,
   submitWalletSteps,
   tokenRefFor,
+  tradeCard,
   tradeToView,
 } from "@frontrun/server";
 import { and, desc, eq, lt } from "drizzle-orm";
@@ -53,6 +54,14 @@ export async function registerTradingRoutes(app: FastifyInstance) {
     const user = await requireUser(req);
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     return cancelOrder(user.id, id);
+  });
+
+  // Public on purpose: a shared result card has to load for anyone who opens the link.
+  app.get("/v1/trades/:id/card", async (req) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const card = await tradeCard(id);
+    if (!card) throw notFound("Trade");
+    return card;
   });
 
   app.get("/v1/trades/:id", async (req) => {

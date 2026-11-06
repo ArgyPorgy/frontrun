@@ -28,7 +28,7 @@ vi.hoisted(() => {
   });
 });
 
-import { ApiClient, ApiError, tokenKey, type ChainKey, type TokenSnapshot } from "@frontrun/core";
+import { ApiClient, ApiError, tokenKey, type ChainKey, type TokenSnapshot, type TradeCardView } from "@frontrun/core";
 import {
   DEX_BACKGROUND_PER_MINUTE,
   DexBusyError,
@@ -288,6 +288,30 @@ describe("closing a position", () => {
     const me = await client.me();
     const profile = await client.profile(me.username);
     expect(profile.stats.resolved).toBe(1);
+  });
+
+  it("publishes a result card for a closed position, with what was paid and received", async () => {
+    const { client } = await loginFunded("carded");
+    await setPrice("arc", TOKEN_A, "2");
+    const bought = await buy(client, TOKEN_A, "100");
+    await setPrice("arc", TOKEN_A, "3");
+    const { trade } = await sell(client, TOKEN_A, 100);
+
+    const open = await fetch(`${baseUrl}/v1/trades/${trade.id}/card`);
+    expect(open.status).toBe(200);
+    const card = (await open.json()) as TradeCardView;
+    expect(card.username).toBe("carded");
+    expect(card.symbol).toBe("TKN");
+    expect(card.returnPct).toBeGreaterThan(0);
+    const exit = Number(trade.usdOut) / Number(trade.qty);
+    expect(Number(card.exitPriceUsd)).toBeCloseTo(exit, 6);
+    expect((Number(card.exitPriceUsd) / Number(card.entryPriceUsd) - 1) * 100).toBeCloseTo(card.returnPct, 6);
+
+    // A buy, or a sale that left the position open, has no card.
+    expect((await fetch(`${baseUrl}/v1/trades/${bought.trade.id}/card`)).status).toBe(404);
+    await buy(client, TOKEN_A, "100");
+    const part = await sell(client, TOKEN_A, 25);
+    expect((await fetch(`${baseUrl}/v1/trades/${part.trade.id}/card`)).status).toBe(404);
   });
 
   it("keeps the thesis open after a partial sale", async () => {

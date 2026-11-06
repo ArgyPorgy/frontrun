@@ -7,10 +7,27 @@ import {
   portfolioTotals,
   reconcile,
   returnPct,
+  formatCardPct,
+  pnlCardTier,
   unrealizedPnl,
   winRate,
 } from "../src/pnl";
 import { D } from "../src/money";
+
+describe("result cards", () => {
+  it("picks the photo by how big the move was", () => {
+    expect([0, 99.9, 100, 499, 500, 5000].map(pnlCardTier)).toEqual(["exchange", "exchange", "lambo", "lambo", "moon", "moon"]);
+    expect([-0.1, -24.9, -25, -74.9, -75, -100].map(pnlCardTier)).toEqual(["rough", "rough", "boom", "boom", "grill", "grill"]);
+  });
+
+  it("formats the headline the way the card design does", () => {
+    expect(formatCardPct(84)).toBe("+84.0%");
+    expect(formatCardPct(424.4)).toBe("+424%");
+    expect(formatCardPct(1240)).toBe("+1,240%");
+    expect(formatCardPct(-12.44)).toBe("\u221212.4%");
+    expect(formatCardPct(-100)).toBe("\u2212100%");
+  });
+});
 
 describe("weighted average cost", () => {
   it("averages cost across buys", () => {

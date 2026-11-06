@@ -2,6 +2,7 @@
 
 import { APP_NAME, D, explorerTxUrl, formatPct, formatPrice, formatQty, formatUsd, type TradeView } from "@frontrun/core";
 import { useState } from "react";
+import { APP_URL } from "@/lib/api";
 import { Button, ChainLogo, Sheet, TokenIcon } from "./ui";
 
 /** The card marks a closed position, or says why a trade failed. An open position has its own panel. */
@@ -16,13 +17,21 @@ function tradePnl(trade: TradeView): { usd: number; pct: number | null } | null 
   return { usd, pct: cost > 0 ? (usd / cost) * 100 : null };
 }
 
-function shareTrade(trade: TradeView, pnl: { usd: number; pct: number | null } | null) {
+/** Shares the card image where the device can, and otherwise a link that previews as the card. */
+async function shareTrade(trade: TradeView, pnl: { usd: number; pct: number | null } | null) {
   const verb = trade.side === "buy" ? "Bought" : "Sold";
   const result = pnl ? ` ${formatUsd(pnl.usd, { sign: true })}${pnl.pct !== null ? ` (${formatPct(pnl.pct)})` : ""}` : "";
   const text = `${verb} $${trade.token.symbol}${result} on ${APP_NAME}`;
-  const share = (navigator as Navigator & { share?: (data: ShareData) => Promise<void> }).share;
-  if (share) void share.call(navigator, { text }).catch(() => {});
-  else window.open(`https://x.com/intent/post?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+  const url = `${APP_URL}/pnl/${trade.id}`;
+  const canShare = typeof navigator.share === "function";
+  if (canShare) {
+    const image = await fetch(`/api/og/pnl/${trade.id}`).then((res) => (res.ok ? res.blob() : null)).catch(() => null);
+    const file = image ? new File([image], `frontrun-${trade.token.symbol}.png`, { type: "image/png" }) : null;
+    const data: ShareData = file && navigator.canShare?.({ files: [file] }) ? { files: [file], text, url } : { text, url };
+    await navigator.share(data).catch(() => {});
+    return;
+  }
+  window.open(`https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, "_blank", "noopener");
 }
 
 function FilledCard({ trade }: { trade: TradeView }) {
@@ -30,8 +39,34 @@ function FilledCard({ trade }: { trade: TradeView }) {
   const [details, setDetails] = useState(false);
   const isBuy = trade.side === "buy";
   const up = (pnl?.usd ?? 0) >= 0;
+  const [cardFailed, setCardFailed] = useState(false);
+  const showCard = !!pnl && trade.closedPosition && !cardFailed;
   return (
     <>
+      {showCard && (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/api/og/pnl/${trade.id}`}
+            alt={`Closed ${trade.token.symbol}${pnl.pct !== null ? ` at ${formatPct(pnl.pct)}` : ""}`}
+            width={1200}
+            height={675}
+            onError={() => setCardFailed(true)}
+            className="w-full rounded-2xl border border-line bg-surface"
+          />
+          <dl className="num mt-3 space-y-1.5 text-sm">
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">Realized PnL</dt>
+              <dd className={up ? "text-up" : "text-down"}>{formatUsd(pnl.usd, { sign: true })}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">Received</dt>
+              <dd>{formatUsd(trade.usdOut)}</dd>
+            </div>
+          </dl>
+        </>
+      )}
+      {!showCard && (
       <div className={`rounded-2xl border border-line p-4 ${pnl ? (up ? "bg-up/10" : "bg-down/10") : "bg-raised"}`}>
         <div className="flex items-center gap-2.5">
           <span className="relative shrink-0">
@@ -71,11 +106,12 @@ function FilledCard({ trade }: { trade: TradeView }) {
           </div>
         </dl>
       </div>
+      )}
       <div className="mt-3 flex items-center justify-between">
         <button onClick={() => setDetails(!details)} className="text-sm text-muted underline underline-offset-2">
           {details ? "Hide details" : "Details"}
         </button>
-        <button onClick={() => shareTrade(trade, pnl)} className="text-sm font-semibold text-signal">
+        <button onClick={() => void shareTrade(trade, pnl)} className="text-sm font-semibold text-signal">
           Share
         </button>
       </div>

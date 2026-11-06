@@ -200,7 +200,7 @@ export function PrivyAuth({
       appId={appId}
       config={{
         loginMethods: ["google", "email", "wallet"],
-        appearance: { theme: "dark", accentColor: "#c8f135", walletChainType: "ethereum-and-solana" },
+        appearance: { theme: "dark", accentColor: "#6deab2", walletChainType: "ethereum-and-solana" },
         defaultChain: arc,
         supportedChains: [arc, robinhood, base, arbitrum, mainnet, bsc, hyperEvm],
         solana: { rpcs: solanaRpcs },

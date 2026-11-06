@@ -27,6 +27,7 @@ import {
   type SignerStatus,
   type StepResult,
   type TokenRef,
+  type TradeCardView,
   type TradeStatus,
   type TradeView,
 } from "@frontrun/core";
@@ -373,6 +374,24 @@ export function tradeToView(row: typeof schema.trades.$inferSelect, token: Token
     createdAt: row.createdAt.toISOString(),
     filledAt: row.filledAt?.toISOString() ?? null,
     pendingSteps: row.status === "awaiting_signature" ? (state?.pendingSteps ?? null) : null,
+  };
+}
+
+/** Only a sale that closed a position gets a card. Entry and exit are what the person actually paid and got. */
+export async function tradeCard(id: string): Promise<TradeCardView | null> {
+  const [row] = await db().select({ trade: schema.trades, username: schema.users.username }).from(schema.trades).innerJoin(schema.users, eq(schema.users.id, schema.trades.userId)).where(eq(schema.trades.id, id));
+  if (!row) return null;
+  const { trade } = row;
+  if (trade.side !== "sell" || trade.status !== "filled" || !trade.closedPosition || trade.pnlUsd === null || !trade.usdOut || !trade.qty || D(trade.qty).lte(0)) return null;
+  const cost = D(trade.usdOut).sub(trade.pnlUsd);
+  const token = await tokenRefFor(trade.tokenChain, trade.tokenAddr);
+  return {
+    id: trade.id,
+    symbol: token.symbol,
+    username: row.username,
+    entryPriceUsd: cost.div(trade.qty).toFixed(),
+    exitPriceUsd: D(trade.usdOut).div(trade.qty).toFixed(),
+    returnPct: cost.gt(0) ? D(trade.pnlUsd).div(cost).mul(100).toNumber() : 0,
   };
 }
 
