@@ -74,6 +74,8 @@ export type GuardrailCode =
 export interface GuardrailIssue {
   code: GuardrailCode;
   message: string;
+  /** Only someone looking at the trade can accept this, so an order running in the background stops instead. */
+  attended?: boolean;
 }
 
 export interface GuardrailResult {
@@ -85,8 +87,9 @@ export interface GuardrailResult {
 }
 
 /**
- * Buys get the hard limits. Sells never get a hard stop on impact, size or risk flags: a token that
- * turns bad after purchase must stay exitable, so those become a visible confirm instead.
+ * Price impact and size are the person's call, so going over a limit asks them to confirm rather than
+ * refusing. Risk flags and the denylist still stop a buy. Sells never get a hard stop: a token that turns
+ * bad after purchase must stay exitable, so those become a visible confirm instead.
  */
 const SMALL_TRADE_USD = 10;
 
@@ -106,12 +109,11 @@ export function evaluateGuardrails(input: GuardrailInput): GuardrailResult {
   if (input.priceImpact !== null) {
     const pct = (input.priceImpact * 100).toFixed(1);
     if (input.priceImpact > GUARDRAILS.maxPriceImpact) {
-      // On a small trade this is mostly the route's fixed costs, with little at stake, so it's the
-      // person's call. A thin pool is still stopped by the pool share check below.
+      // On a small trade this is mostly the route's fixed costs, not the pool moving.
       if (D(input.notionalUsd).lt(SMALL_TRADE_USD)) {
         result.confirm.push({ code: "price_impact_high", message: `Route costs would take ${pct}% of this small trade.` });
       } else {
-        hard.push({ code: "price_impact_high", message: `Price impact is ${pct}%, above the 5% limit.` });
+        result.confirm.push({ code: "price_impact_high", message: `Price impact is ${pct}%, so you'd get noticeably less than the market price.`, attended: input.side === "buy" });
       }
     } else if (input.priceImpact > GUARDRAILS.warnPriceImpact) {
       result.warnings.push({ code: "price_impact_warn", message: `Price impact is ${pct}%.` });
@@ -120,9 +122,10 @@ export function evaluateGuardrails(input: GuardrailInput): GuardrailResult {
   if (input.poolLiquidityUsd !== null && D(input.poolLiquidityUsd).gt(0)) {
     const share = D(input.notionalUsd).div(input.poolLiquidityUsd);
     if (share.gt(GUARDRAILS.maxPoolShare)) {
-      hard.push({
+      result.confirm.push({
         code: "size_over_pool_share",
-        message: `This trade is ${share.mul(100).toFixed(1)}% of pool liquidity, above the 2% limit.`,
+        message: `This trade is ${share.mul(100).toFixed(1)}% of the pool's liquidity, so it will move the price.`,
+        attended: input.side === "buy",
       });
     }
   }

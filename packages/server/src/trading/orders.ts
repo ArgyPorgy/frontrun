@@ -242,6 +242,9 @@ export async function checkWatchedOrders(limit = 200): Promise<number> {
         side: row.side as "buy" | "sell",
         ...(row.side === "buy" ? { amountUsd: row.amountUsd! } : { sellPct: row.sellPct ?? 100 }),
       });
+      // Nobody's there to accept a high price impact, so a background buy stops rather than fill at it.
+      const needsPerson = quote.confirmReasons.find((r) => r.attended);
+      if (needsPerson) throw unprocessable("blocked", needsPerson.message);
       const trade = await executeTrade(row.userId, { quoteId: quote.id, idempotencyKey: `order:${row.id}:${row.attempts}`, confirmed: true });
       await db().update(schema.orders).set({ tradeId: trade.id, updatedAt: new Date() }).where(eq(schema.orders.id, row.id));
       if (trade.status === "failed") await closeWithFailure(row, trade.error ?? "The trade didn't go through.");

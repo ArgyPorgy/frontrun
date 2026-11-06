@@ -214,6 +214,21 @@ describe("orders", () => {
     expect((await client.myPosition("arc", TOKEN_A)).position).not.toBeNull();
   });
 
+  it("won't fill a background buy at a high impact, since nobody's there to accept it", async () => {
+    const { client } = await loginFunded("nightbuy");
+    await setPrice(THIN, "1");
+    const order = await client.createOrder({ chain: "arc", address: THIN, type: "limit_buy", triggerPriceUsd: "0.8", amountUsd: "100" });
+    expect(order.status).toBe("open");
+    const key = tokenKey("arc", THIN);
+    await redis().set(KEYS.price(key), "0.75", "EX", 3600);
+    await redis().set(KEYS.snapshot(key), JSON.stringify(snapshot("arc", THIN, "0.75", "1000", "THIN")), "EX", 3600);
+    await checkWatchedOrders();
+    const [done] = (await client.orders({ status: "all" })).items;
+    expect(done?.status).toBe("failed");
+    expect(done?.error).toMatch(/pool's liquidity/);
+    expect((await client.myPosition("arc", THIN)).position).toBeNull();
+  });
+
   it("fires a stop-loss when the price drops, and closes the position", async () => {
     const { client } = await loginFunded("stoploss");
     await setPrice(TOKEN_A, "1");
@@ -578,11 +593,23 @@ describe("buying", () => {
 });
 
 describe("guardrails", () => {
-  it("blocks a buy over 2% of pool liquidity", async () => {
-    const { client } = await loginFunded("whale");
+  async function enabledWhale() {
+    const session = await loginFunded("whale");
+    await enableOneTap(session.client);
+    return session;
+  }
+
+  it("asks before a buy that's big for its pool, and goes ahead on a yes", async () => {
+    const { client } = await enabledWhale();
     const quote = await client.quote({ chain: "arc", address: THIN, side: "buy", amountUsd: "100" });
-    expect(quote.blocked.map((b) => b.code)).toContain("size_over_pool_share");
-    await expectApiError(client.executeTrade({ quoteId: quote.id, idempotencyKey: "whale-key", confirmed: true }), "blocked");
+    expect(quote.blocked).toEqual([]);
+    expect(quote.oneTap).toBe(false);
+    expect(quote.confirmReasons.map((b) => b.code)).toContain("size_over_pool_share");
+    await expectApiError(client.executeTrade({ quoteId: quote.id, idempotencyKey: "whale-key" }), "needs_confirm");
+
+    const fresh = await client.quote({ chain: "arc", address: THIN, side: "buy", amountUsd: "100" });
+    const trade = await client.executeTrade({ quoteId: fresh.id, idempotencyKey: "whale-key-2", confirmed: true });
+    expect(trade.status).toBe("pending");
   });
 
   it("blocks buying a flagged token, but always lets a holder out", async () => {

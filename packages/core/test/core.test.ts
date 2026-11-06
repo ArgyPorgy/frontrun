@@ -77,15 +77,20 @@ describe("guardrails", () => {
     expect(r.warnings).toEqual([]);
   });
 
-  it("blocks buys over 5% impact and warns over 2%", () => {
-    expect(evaluateGuardrails({ ...ok, priceImpact: 0.051 }).blocked[0]?.code).toBe("price_impact_high");
+  it("asks before a buy over 5% impact, and warns over 2%", () => {
+    const high = evaluateGuardrails({ ...ok, priceImpact: 0.051 });
+    expect(high.blocked).toEqual([]);
+    expect(high.confirm[0]).toMatchObject({ code: "price_impact_high", attended: true });
+    expect(high.confirm[0]?.message).toContain("5.1%");
     expect(evaluateGuardrails({ ...ok, priceImpact: 0.03 }).warnings[0]?.code).toBe("price_impact_warn");
     expect(evaluateGuardrails({ ...ok, priceImpact: 0.03 }).blocked).toEqual([]);
   });
 
-  it("blocks buys over 2% of pool liquidity", () => {
-    expect(evaluateGuardrails({ ...ok, notionalUsd: 2500, poolLiquidityUsd: 100_000 }).blocked[0]?.code).toBe("size_over_pool_share");
-    expect(evaluateGuardrails({ ...ok, notionalUsd: 2000, poolLiquidityUsd: 100_000 }).blocked).toEqual([]);
+  it("asks before a buy over 2% of pool liquidity", () => {
+    const big = evaluateGuardrails({ ...ok, notionalUsd: 2500, poolLiquidityUsd: 100_000 });
+    expect(big.blocked).toEqual([]);
+    expect(big.confirm[0]).toMatchObject({ code: "size_over_pool_share", attended: true });
+    expect(evaluateGuardrails({ ...ok, notionalUsd: 2000, poolLiquidityUsd: 100_000 }).confirm).toEqual([]);
   });
 
   it("blocks risk-flagged buys", () => {
@@ -96,6 +101,8 @@ describe("guardrails", () => {
     const r = evaluateGuardrails({ ...ok, side: "sell", riskFlagged: true, priceImpact: 0.2, denylisted: true, notionalUsd: 50_000, poolLiquidityUsd: 100_000 });
     expect(r.blocked).toEqual([]);
     expect(r.confirm.map((i) => i.code).sort()).toEqual(["price_impact_high", "risk_flagged", "size_over_pool_share", "token_denied"]);
+    // A stop-loss has to be able to run with nobody watching.
+    expect(r.confirm.some((i) => i.attended)).toBe(false);
   });
 
   it("handles unknown impact and liquidity", () => {
@@ -302,20 +309,21 @@ describe("small trades", () => {
     expect(confirm[0]?.message).toBe("Route costs would take 36.0% of this small trade.");
   });
 
-  it("still stops a small buy in a pool too thin for it", () => {
-    const { blocked } = evaluateGuardrails({ ...base, notionalUsd: "5", priceImpact: 0.3, poolLiquidityUsd: "100" });
-    expect(blocked.map((b) => b.code)).toEqual(["size_over_pool_share"]);
+  it("still flags a small buy in a pool too thin for it", () => {
+    const { blocked, confirm } = evaluateGuardrails({ ...base, notionalUsd: "5", priceImpact: 0.3, poolLiquidityUsd: "100" });
+    expect(blocked).toEqual([]);
+    expect(confirm.map((b) => b.code)).toContain("size_over_pool_share");
   });
 
-  it("stops a buy of $10 or more at the 5% limit", () => {
+  it("asks about a buy of $10 or more over the 5% limit", () => {
     const { blocked, confirm } = evaluateGuardrails({ ...base, notionalUsd: "10", priceImpact: 0.06 });
-    expect(blocked[0]?.code).toBe("price_impact_high");
-    expect(confirm).toEqual([]);
+    expect(blocked).toEqual([]);
+    expect(confirm[0]).toMatchObject({ code: "price_impact_high", attended: true });
   });
 
   it("keeps the price impact wording on a normal size", () => {
-    const { blocked } = evaluateGuardrails({ ...base, notionalUsd: "500", priceImpact: 0.08 });
-    expect(blocked[0]?.message).toBe("Price impact is 8.0%, above the 5% limit.");
+    const { confirm } = evaluateGuardrails({ ...base, notionalUsd: "500", priceImpact: 0.08 });
+    expect(confirm[0]?.message).toBe("Price impact is 8.0%, so you'd get noticeably less than the market price.");
   });
 });
 

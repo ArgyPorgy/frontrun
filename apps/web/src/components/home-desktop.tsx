@@ -175,6 +175,7 @@ function TokensPanel({ items, isLoading, isError, attribution, tab, setTab, chai
         toast(quote.blocked[0]!.message, { tone: "bad" });
       } else if (!quote.oneTap) {
         // Anything that needs a look first goes where the details are.
+        if (quote.confirmReasons[0]) toast(`${quote.confirmReasons[0].message} Check it before you buy.`, { tone: "bad" });
         router.push(`/token/${token.chain}/${token.address}`);
       } else {
         await execute(quote);

@@ -102,14 +102,17 @@ function ConfirmSheet({
         </div>
       )}
       {quote.confirmReasons.length > 0 && (
-        <ul className="mt-3 space-y-1 rounded-xl bg-warn/10 p-3 text-sm text-warn">
-          {quote.confirmReasons.map((r) => (
-            <li key={r.message}>{r.message}</li>
-          ))}
-        </ul>
+        <div role="alert" className="mt-3 rounded-xl bg-warn/10 p-3 text-sm text-warn">
+          <ul className="space-y-1">
+            {quote.confirmReasons.map((r) => (
+              <li key={r.message}>{r.message}</li>
+            ))}
+          </ul>
+          <p className="mt-1.5 font-semibold">Are you sure you want to take this trade?</p>
+        </div>
       )}
       <Button onClick={onConfirm} disabled={busy} className="mt-4 w-full">
-        {busy ? "Working…" : `Confirm ${isBuy ? "buy" : "sell"}`}
+        {busy ? "Working…" : quote.confirmReasons.length > 0 ? `Yes, ${isBuy ? "buy" : "sell"} anyway` : `Confirm ${isBuy ? "buy" : "sell"}`}
       </Button>
       {!quote.oneTap && quote.confirmReasons.length === 0 && (
         <p className="mt-3 text-center text-xs text-muted">
