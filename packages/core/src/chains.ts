@@ -46,6 +46,16 @@ export const PERMIT2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
 /** DefinitiveFlashAllowance on Arc: the spender in the one-tap approval. */
 export const FLASH_ALLOWANCE_ARC = "0x5d00000873b6BF41539e6f5365B0Ff7d3c368f78";
 export const EVM_NATIVE_SENTINEL = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+/** LI.FI's contract on each chain, from its own /chains list. The signer policy allows these and no others. */
+export const LIFI_CONTRACTS: Partial<Record<ChainKey, string>> = {
+  arc: "0xA4072583658Fae592A3506A42431cb6316a8d40b",
+  robinhood: "0xB477751B76CF82d00a686A1232f5fCD772414Af3",
+  base: "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE",
+  arbitrum: "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE",
+  ethereum: "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE",
+  bsc: "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE",
+  hyperevm: "0x0a0758d937d1059c356D4714e57F5df0239bce1A",
+};
 
 /** Uniswap deployments on Arc, from Uniswap's own deployment tables and sdk-core. */
 export const UNISWAP_ARC = {

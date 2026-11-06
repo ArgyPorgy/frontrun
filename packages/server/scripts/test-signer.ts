@@ -10,7 +10,7 @@
  * something a real trade needs, fails the run.
  */
 import { randomUUID } from "node:crypto";
-import { ARC_USDC, CHAINS, FLASH_ALLOWANCE_ARC, UNISWAP_ARC } from "@frontrun/core";
+import { ARC_USDC, CHAINS, FLASH_ALLOWANCE_ARC, LIFI_CONTRACTS, UNISWAP_ARC, type ChainKey } from "@frontrun/core";
 import { PrivyClient } from "@privy-io/node";
 import {
   appendTransactionMessageInstruction,
@@ -297,18 +297,16 @@ async function evmSuite() {
   await denied("Sign a message that only looks like a cancel", () => signMessage("Definitive Flash v1 - Cancel Order\nOrder: 1"));
   await denied("Sign a message that starts differently", () => signMessage(`Transfer everything \nDefinitive Flash v1 \u2014 Cancel Order\nOrder: ${randomUUID()}`));
 
-  // LI.FI: its contract can change by route, so this shows whether the allowlist still fits.
+  // LI.FI: a sell starts on the token's own chain, and its contract there can differ from Arc's.
+  for (const [chain, contract] of Object.entries(LIFI_CONTRACTS) as Array<[ChainKey, string]>) {
+    const chainId = CHAINS[chain].chainId!;
+    const approval = encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [contract as Hex, 1000n] });
+    await allowed(`Approve LI.FI on ${chain}`, () => signTx(wallet.id, { to: BASE_WETH, data: approval, chainId }));
+    await allowed(`Call LI.FI on ${chain}`, () => signTx(wallet.id, { to: contract, data: "0x", chainId }));
+  }
   try {
     const lifi = await lifiProvider.quote(flashReq);
-    const to = (lifi.raw as { transactionRequest?: { to?: string; data?: string } }).transactionRequest;
-    if (to?.to) {
-      try {
-        await signTx(wallet.id, { to: to.to, data: to.data });
-        console.log(`  PASS  LI.FI route ${to.to} is on the allowlist`);
-      } catch {
-        console.log(`  INFO  LI.FI route ${to.to} isn't on the allowlist. One-tap will refuse it, and Flash remains the route.`);
-      }
-    }
+    console.log(`  PASS  LI.FI's live route fits the list: ${lifi.provider}`);
   } catch (err) {
     console.log(`  INFO  LI.FI quote unavailable: ${explain(err)}`);
   }

@@ -19,7 +19,8 @@ import { gaslessEnabled, sponsorshipConfigured } from "../src/trading/sponsor";
 import { pairToSnapshot, bestSnapshot, type DexPair } from "../src/market/dexscreener";
 import { parseSwapReceipt } from "../src/onchain";
 import { assertApprovalMatches, assertOrderMatches, buildFlashParams, flashStatusToUpdate } from "../src/providers/flash";
-import { lifiStatusToUpdate } from "../src/providers/lifi";
+import { assertKnownLifiContract, lifiStatusToUpdate } from "../src/providers/lifi";
+import { friendlyFailure } from "../src/trading/service";
 import { paperFill, syntheticQuote } from "../src/providers/paper";
 import { assertSwapMatches } from "../src/providers/uniswap";
 import type { RouteRequest } from "../src/providers/types";
@@ -547,6 +548,28 @@ describe("gas sponsorship", () => {
   });
 });
 
+describe("LI.FI's contracts", () => {
+  const route = (contract: string) => ({ estimate: { approvalAddress: contract } as never, transactionRequest: { to: contract, data: "0x" } });
+
+  it("takes a sell from Robinhood Chain through LI.FI's contract there", () => {
+    expect(() => assertKnownLifiContract("robinhood", route("0xb477751b76cf82d00a686a1232f5fcd772414af3"))).not.toThrow();
+  });
+
+  it("won't offer a route through a contract the signer policy doesn't list", () => {
+    expect(() => assertKnownLifiContract("robinhood", route("0xA4072583658Fae592A3506A42431cb6316a8d40b"))).toThrow(/doesn't list/);
+    expect(() => assertKnownLifiContract("base", route("0x000000000000000000000000000000000000bEEF"))).toThrow(/doesn't list/);
+  });
+
+  it("leaves Solana alone, where there's no contract to approve", () => {
+    expect(() => assertKnownLifiContract("solana", { estimate: {} as never, transactionRequest: { data: "AAAA" } })).not.toThrow();
+  });
+
+  it("says plainly that nothing moved when the signer policy refuses", () => {
+    const message = friendlyFailure(new Error('400 {"error":"RPC request denied due to policy violation","code":"policy_violation"}'));
+    expect(message).toMatch(/Nothing was sent/);
+  });
+});
+
 describe("the app's fee", () => {
   const quote = (provider: string) => ({ provider }) as ProviderQuote;
 
@@ -570,7 +593,7 @@ describe("the app's fee", () => {
 
 describe("database connection", () => {
   it("survives losing an idle connection", async () => {
-    const pool = db().$client;
+    const pool = (db() as unknown as { $client: { emit(event: string, ...args: unknown[]): boolean } }).$client;
     const drop = Object.assign(new Error("read EADDRNOTAVAIL"), { code: "EADDRNOTAVAIL" });
     expect(() => pool.emit("error", drop, {} as never)).not.toThrow();
     await closeDb();

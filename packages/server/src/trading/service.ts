@@ -386,7 +386,7 @@ async function audit(userId: string, action: string, detail: unknown) {
   await db().insert(schema.auditLog).values({ userId, action, detail: detail as object });
 }
 
-function friendlyFailure(err: unknown): string {
+export function friendlyFailure(err: unknown): string {
   if (err instanceof AppError) return err.message;
   if (err instanceof HttpError) {
     if (err.status === 429) return "The trading venue is busy. Try again in a moment.";
@@ -402,6 +402,11 @@ function friendlyFailure(err: unknown): string {
   if (err instanceof Error) {
     if (/insufficient funds/i.test(err.message)) return "Not enough balance to cover this and its gas.";
     if (/Refusing to sign/.test(err.message)) return err.message;
+    // The signer's policy refused before anything was signed, so this one is ours to fix.
+    if (/policy_violation/.test(err.message)) {
+      logger.error({ err: err.message.slice(0, 200) }, "ALERT: the signer policy refused a trade");
+      return "This route isn't available for your wallet right now. Nothing was sent, and your funds are safe.";
+    }
     // Gas estimation runs the trade without sending it, so this failure costs nothing.
     if (err.name === "EstimateGasExecutionError" || /estimate ?gas/i.test(err.message)) return "This trade would fail right now, so nothing was sent.";
     if (/reverted/i.test(err.message)) return "The transaction reverted on-chain.";
