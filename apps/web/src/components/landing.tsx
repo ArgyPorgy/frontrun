@@ -114,10 +114,10 @@ function LiveTape() {
   const row = useBasket().filter((t) => t.group !== "currency");
   if (row.length < 6) return null;
   return (
-    <div className="relative overflow-hidden border-y border-line/50 py-3">
-      <div className="animate-tape flex w-max gap-2.5 pl-4">
+    <div className="tape-hover relative overflow-hidden border-y border-line/50 py-3">
+      <div className="animate-tape flex w-max">
         {[...row, ...row].map((t, i) => (
-          <Link key={`${t.chain}:${t.address}:${i}`} href={`/token/${t.chain}/${t.address}`} className="num flex items-center gap-2 rounded-full border border-line bg-surface py-1 pr-3 pl-1.5 text-xs whitespace-nowrap transition-colors hover:border-faint">
+          <Link key={`${t.chain}:${t.address}:${i}`} href={`/token/${t.chain}/${t.address}`} className="num mr-2.5 flex items-center gap-2 rounded-full border border-line bg-surface py-1 pr-3 pl-1.5 text-xs whitespace-nowrap transition-colors hover:border-faint">
             <TokenIcon symbol={t.symbol} imageUrl={t.imageUrl} size={22} eager />
             <span className="font-semibold">{t.symbol}</span>
             <span className={t.change24h >= 0 ? "text-up" : "text-down"}>{formatPct(t.change24h)}</span>

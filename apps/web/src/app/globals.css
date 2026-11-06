@@ -47,8 +47,8 @@
     to { transform: translateY(0); opacity: 1; }
   }
   @keyframes tape {
-    from { transform: translateX(0); }
-    to { transform: translateX(-50%); }
+    from { transform: translateX(-50%); }
+    to { transform: translateX(0); }
   }
   @keyframes shimmer {
     0%, 100% { opacity: 0.5; }
@@ -73,6 +73,11 @@
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
+}
+
+/* Tickers hold still under the pointer, so the links in them can be clicked. */
+.tape-hover:hover .animate-tape {
+  animation-play-state: paused;
 }
 
 html {

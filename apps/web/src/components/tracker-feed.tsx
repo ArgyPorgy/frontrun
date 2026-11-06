@@ -1,7 +1,7 @@
 "use client";
 
-import { timeAgo, type TrackerPostKind, type TrackerPostView, type TrackerSource } from "@frontrun/core";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { timeAgo, type ChainKey, type TrackerPostKind, type TrackerPostView, type TrackerSource } from "@frontrun/core";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 import { api } from "@/lib/api";
@@ -63,6 +63,32 @@ function TrackerCard({ post }: { post: TrackerPostView }) {
         </a>
       </div>
     </article>
+  );
+}
+
+/** Live posts on X that mention this token's contract address. */
+export function TokenTweetsPanel({ chain, address }: { chain: ChainKey; address: string }) {
+  const query = useQuery({ queryKey: ["token-tweets", chain, address], queryFn: () => api.tokenTweets(chain, address), refetchInterval: 60_000, staleTime: 30_000 });
+  const data = query.data;
+  if (data && !data.configured) return null;
+  return (
+    <section aria-label="Posts on X about this token">
+      <div className="flex items-baseline justify-between gap-2 px-4 pt-3">
+        <p className="text-sm font-semibold">On X</p>
+        <p className="text-xs text-faint">Posts with this contract address</p>
+      </div>
+      {query.isLoading ? (
+        <RowSkeletons />
+      ) : data?.items.length ? (
+        <div className="max-h-96 divide-y divide-line/60 overflow-y-auto">
+          {data.items.map((post) => (
+            <TrackerCard key={post.id} post={post} />
+          ))}
+        </div>
+      ) : (
+        <p className="px-4 py-4 text-sm text-muted">{query.isError || data?.unavailable ? "X can't be read right now. This will try again shortly." : "No recent posts mention this contract address yet."}</p>
+      )}
+    </section>
   );
 }
 

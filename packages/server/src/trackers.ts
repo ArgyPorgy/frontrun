@@ -1,4 +1,4 @@
-import type { LandingVoices, TrackerPostKind, TrackerPostView, TrackerSource } from "@frontrun/core";
+import type { LandingVoices, TokenTweets, TrackerPostKind, TrackerPostView, TrackerSource } from "@frontrun/core";
 import { and, desc, eq, gt, lt, sql } from "drizzle-orm";
 import { db, schema } from "./db/client";
 import { env } from "./env";
@@ -65,7 +65,7 @@ interface ParsedPost {
   postedAt: Date;
 }
 
-interface XResponse {
+export interface XResponse {
   tweets?: Array<{
     id: string;
     text: string;
@@ -394,4 +394,60 @@ export async function landingVoices(): Promise<LandingVoices> {
     }
     return { named, recent };
   });
+}
+
+const TOKEN_TWEETS_TTL_SECONDS = 300;
+const TOKEN_TWEETS_RETRY_SECONDS = 30;
+/** Each fresh search is billed, and this endpoint is public, so this caps what it can ever cost in an hour. */
+const TOKEN_SEARCHES_PER_HOUR = 240;
+const TOKEN_TWEETS_PER_AUTHOR = 2;
+const TOKEN_TWEETS_MAX = 20;
+
+/** Keeps posts that really contain the address, and stops one account from filling the feed with shilling. */
+export function pickTokenTweets(res: XResponse, address: string): TrackerPostView[] {
+  const wanted = address.startsWith("0x") ? address.toLowerCase() : address;
+  const perAuthor = new Map<string, number>();
+  const picked: TrackerPostView[] = [];
+  for (const post of parseXResponse(res)) {
+    if (post.kind === "repost") continue;
+    const text = address.startsWith("0x") ? post.body.toLowerCase() : post.body;
+    if (!text.includes(wanted)) continue;
+    const seen = perAuthor.get(post.authorHandle.toLowerCase()) ?? 0;
+    if (seen >= TOKEN_TWEETS_PER_AUTHOR) continue;
+    perAuthor.set(post.authorHandle.toLowerCase(), seen + 1);
+    picked.push({ ...post, kind: post.kind as TrackerPostKind, tokens: extractTokens(post.body), postedAt: post.postedAt.toISOString() });
+    if (picked.length === TOKEN_TWEETS_MAX) break;
+  }
+  return picked;
+}
+
+/** Searches X for a token's contract address when its page opens. Results are shared for a few minutes. */
+export async function tokenTweets(address: string): Promise<TokenTweets> {
+  const key = env().TWITTERAPI_IO_KEY;
+  if (!key) return { items: [], configured: false, unavailable: false };
+  const r = redis();
+  const cacheKey = `tracker:x:token:${address}`;
+  const hit = await r.get(cacheKey);
+  if (hit) return JSON.parse(hit) as TokenTweets;
+
+  const budgetKey = `tracker:x:token-budget:${Math.floor(Date.now() / 3_600_000)}`;
+  const spent = await r.incr(budgetKey);
+  if (spent === 1) await r.expire(budgetKey, 3_600);
+  if (spent > TOKEN_SEARCHES_PER_HOUR) {
+    logger.warn("Token tweet searches hit the hourly limit");
+    return { items: [], configured: true, unavailable: true };
+  }
+
+  const params = new URLSearchParams({ query: address, queryType: "Latest" });
+  try {
+    const res = await fetchJson<XResponse>(`${X_API}?${params}`, { headers: { "x-api-key": key }, timeoutMs: 10_000 });
+    const result: TokenTweets = { items: pickTokenTweets(res, address), configured: true, unavailable: false };
+    await r.set(cacheKey, JSON.stringify(result), "EX", TOKEN_TWEETS_TTL_SECONDS);
+    return result;
+  } catch (err) {
+    logger.warn({ status: err instanceof HttpError ? err.status : undefined }, "Token tweet search failed");
+    const result: TokenTweets = { items: [], configured: true, unavailable: true };
+    await r.set(cacheKey, JSON.stringify(result), "EX", TOKEN_TWEETS_RETRY_SECONDS);
+    return result;
+  }
 }

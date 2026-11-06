@@ -27,6 +27,7 @@ import { SocialPanel } from "@/components/home-desktop";
 import { ThesisCard, ThesisComposer } from "@/components/thesis-card";
 import { OpenOrders } from "@/components/orders-list";
 import { TradeBar } from "@/components/trade-bar";
+import { TokenTweetsPanel } from "@/components/tracker-feed";
 import { Button, ChainBadge, CopyButton, EmptyState, LiveNumber, Pct, PillFilter, RowSkeletons, Segmented, Sheet, Skeleton, Stat, TokenIcon } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -365,6 +366,9 @@ function TokenScreen({ chain, address }: { chain: ChainKey; address: string }) {
         {/* On a wide screen the stats sit under the trade panel instead, like the reference layout. */}
         <div className="lg:hidden">
           <StatsPanel token={t} />
+          <div className="border-t border-line/70">
+            <TokenTweetsPanel chain={chain} address={address} />
+          </div>
         </div>
 
         <div className="flex items-center justify-between border-t border-line/70 px-3 pt-2">
@@ -403,6 +407,9 @@ function TokenScreen({ chain, address }: { chain: ChainKey; address: string }) {
         <div className="mt-3 hidden overflow-hidden rounded-2xl border border-line bg-surface lg:block">
           <p className="px-4 pt-3 text-sm font-semibold">About {t.symbol}</p>
           <StatsPanel token={t} />
+        </div>
+        <div className="mt-3 hidden overflow-hidden rounded-2xl border border-line bg-surface lg:block">
+          <TokenTweetsPanel chain={chain} address={address} />
         </div>
       </aside>
 

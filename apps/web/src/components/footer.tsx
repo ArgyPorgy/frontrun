@@ -29,19 +29,27 @@ export function Footer() {
   return (
     <footer className="fixed inset-x-0 bottom-0 z-30 hidden border-t border-line/70 bg-bg/95 backdrop-blur md:block">
       <div className="flex h-10 items-center gap-6 px-4">
-        <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-5 overflow-x-auto">
-          {items.map((t) => (
-            <Link
-              key={`${t.chain}:${t.address}`}
-              href={`/token/${t.chain}/${t.address}`}
-              className="flex shrink-0 items-center gap-1.5 text-xs transition-opacity hover:opacity-80"
-            >
-              <TokenIcon symbol={t.symbol} imageUrl={t.imageUrl} size={16} />
-              <span className="font-semibold">{t.symbol}</span>
-              <span className="num text-muted">{formatPrice(t.priceUsd)}</span>
-              <span className={`num ${t.priceChangePct.h24 >= 0 ? "text-up" : "text-down"}`}>{formatPct(t.priceChangePct.h24)}</span>
-            </Link>
-          ))}
+        <div className="tape-hover min-w-0 flex-1 overflow-hidden">
+          {/* Two copies back to back, so the strip loops with no gap. */}
+          <div className="animate-tape flex w-max items-center">
+            {[0, 1].map((copy) => (
+              <div key={copy} aria-hidden={copy === 1 ? true : undefined} className="flex shrink-0 items-center">
+                {items.map((t) => (
+                  <Link
+                    key={`${t.chain}:${t.address}`}
+                    href={`/token/${t.chain}/${t.address}`}
+                    tabIndex={copy === 1 ? -1 : undefined}
+                    className="mr-5 flex shrink-0 items-center gap-1.5 text-xs transition-opacity hover:opacity-80"
+                  >
+                    <TokenIcon symbol={t.symbol} imageUrl={t.imageUrl} size={16} eager />
+                    <span className="font-semibold">{t.symbol}</span>
+                    <span className="num text-muted">{formatPrice(t.priceUsd)}</span>
+                    <span className={`num ${t.priceChangePct.h24 >= 0 ? "text-up" : "text-down"}`}>{formatPct(t.priceChangePct.h24)}</span>
+                  </Link>
+                ))}
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-3.5 text-xs text-muted">

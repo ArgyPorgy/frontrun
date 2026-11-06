@@ -12,6 +12,7 @@ import {
   landingVoices,
   marketList,
   tokenBasket,
+  tokenTweets,
   notFound,
   positionForToken,
   searchTokens,
@@ -59,6 +60,11 @@ export async function registerMarketRoutes(app: FastifyInstance) {
     if (!detail) throw notFound("Token");
     await markActive(chain, address);
     return detail;
+  });
+
+  app.get("/v1/tokens/:chain/:address/tweets", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (req) => {
+    const { address } = parseToken(req.params);
+    return tokenTweets(address);
   });
 
   app.get("/v1/tokens/:chain/:address/candles", async (req) => {

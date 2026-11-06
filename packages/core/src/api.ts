@@ -7,6 +7,7 @@ import type {
   BasketToken,
   LandingVoices,
   LeaderboardRow,
+  TokenTweets,
   MeView,
   NotificationView,
   OrderView,
@@ -119,6 +120,8 @@ export class ApiClient {
   portfolio = () => this.request<PortfolioView>("GET", "/v1/portfolio");
 
   stats = () => this.request<StatsView>("GET", "/v1/stats");
+
+  tokenTweets = (chain: ChainKey, address: string) => this.request<TokenTweets>("GET", `/v1/tokens/${chain}/${address}/tweets`);
 
   marketBasket = () => this.request<{ items: BasketToken[] }>("GET", "/v1/market/basket");
 

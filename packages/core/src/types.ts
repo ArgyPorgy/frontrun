@@ -359,6 +359,14 @@ export interface TrackerPostView {
   postedAt: string;
 }
 
+/** Posts on X that mention a token's contract address. */
+export interface TokenTweets {
+  items: TrackerPostView[];
+  configured: boolean;
+  /** X couldn't be read just now, so an empty list doesn't mean nobody's talking about it. */
+  unavailable: boolean;
+}
+
 /** Real posts for the landing page, always shown with who wrote them and a link to the original. */
 export interface LandingVoices {
   named: Record<string, TrackerPostView>;

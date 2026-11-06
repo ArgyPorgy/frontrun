@@ -21,9 +21,9 @@ function Tape({ items }: { items: TokenListItem[] }) {
   const row = items.slice(0, 16);
   return (
     <div className="overflow-hidden border-y border-line/70 py-2" aria-hidden>
-      <div className="animate-tape flex w-max gap-6 pl-4">
+      <div className="animate-tape flex w-max">
         {[...row, ...row].map((t, i) => (
-          <span key={`${t.chain}:${t.address}:${i}`} className="num flex items-center gap-1.5 text-xs whitespace-nowrap">
+          <span key={`${t.chain}:${t.address}:${i}`} className="num mr-6 flex items-center gap-1.5 text-xs whitespace-nowrap">
             <span className="font-semibold">{t.symbol}</span>
             <span className={t.priceChangePct.h24 >= 0 ? "text-up" : "text-down"}>{formatPct(t.priceChangePct.h24)}</span>
           </span>
