@@ -51,7 +51,7 @@ export function Avatar({ user, size = 32 }: { user: Pick<UserSummary, "username"
   return <GeneratedAvatar index={index} label={user.username} size={size} />;
 }
 
-export function TokenIcon({ symbol, imageUrl, size = 36 }: { symbol: string; imageUrl: string | null; size?: number }) {
+export function TokenIcon({ symbol, imageUrl, size = 36, eager = false }: { symbol: string; imageUrl: string | null; size?: number; eager?: boolean }) {
   const [failed, setFailed] = useState(false);
   if (imageUrl && !failed) {
     return (
@@ -62,7 +62,7 @@ export function TokenIcon({ symbol, imageUrl, size = 36 }: { symbol: string; ima
         alt=""
         width={size}
         height={size}
-        loading="lazy"
+        loading={eager ? "eager" : "lazy"}
         onError={() => setFailed(true)}
         className="shrink-0 rounded-full bg-raised object-cover"
         style={{ width: size, height: size }}
