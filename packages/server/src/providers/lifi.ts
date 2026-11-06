@@ -1,4 +1,4 @@
-import { ARC_USDC, CHAINS, D, GUARDRAILS, LIFI_CONTRACTS, fromBaseUnits, toBaseUnits, type ChainKey, type ExecStep } from "@frontrun/core";
+import { ARC_USDC, CHAINS, D, GUARDRAILS, fromBaseUnits, toBaseUnits, type ExecStep } from "@frontrun/core";
 import { env } from "../env";
 import { fetchJson } from "../http";
 import { encodeApprove, erc20Decimals } from "../onchain";
@@ -35,18 +35,10 @@ async function amountAndDecimals(req: RouteRequest): Promise<string> {
   return toBaseUnits(req.qtyIn!, decimals).toString();
 }
 
-/** The signer policy only allows LI.FI's listed contract, so a route through another one can't be signed. Better no route than a failed trade. */
-export function assertKnownLifiContract(chain: ChainKey, raw: Pick<LifiQuote, "estimate" | "transactionRequest">) {
-  if (CHAINS[chain].type !== "evm") return;
-  const known = LIFI_CONTRACTS[chain]?.toLowerCase();
-  for (const contract of [raw.estimate.approvalAddress, raw.transactionRequest?.to]) {
-    if (contract && contract.toLowerCase() !== known) throw new Error(`LI.FI's route on ${chain} uses ${contract}, which the signer policy doesn't list.`);
-  }
-}
-
 export const lifiProvider: RouteProvider = {
   id: "lifi",
-  enabled: () => true,
+  // Off: Flash covers these routes itself now, directly or in two steps. Trades already placed still report through status().
+  enabled: () => false,
   // Only a fallback for cross-chain. Arc same-chain races Uniswap against Flash.
   supports: (req) => isCrossChain(req),
 
@@ -69,7 +61,6 @@ export const lifiProvider: RouteProvider = {
       ...(env().LIFI_FEE ? { fee: env().LIFI_FEE! } : {}),
     });
     const raw = await fetchJson<LifiQuote>(`${BASE}/quote?${params}`, { headers: headers(), timeoutMs: 4_000, signal });
-    assertKnownLifiContract(source, raw);
     const out = fromBaseUnits(BigInt(raw.estimate.toAmount), raw.action.toToken.decimals);
     const sum = (items?: Array<{ amountUSD?: string }>) => (items ?? []).reduce((acc, c) => acc.add(c.amountUSD ?? 0), D(0));
     const gas = sponsorshipConfigured(source) ? D(0) : sum(raw.estimate.gasCosts);

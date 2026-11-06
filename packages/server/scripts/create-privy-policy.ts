@@ -10,17 +10,19 @@
  *
  * `pnpm signer:test` checks these rules against Privy with a wallet that holds no funds.
  */
-import { FLASH_ALLOWANCE_ARC, LIFI_CONTRACTS, PERMIT2, UNISWAP_ARC } from "@frontrun/core";
+import { FLASH_ALLOWANCE_ARC, PERMIT2, UNISWAP_ARC } from "@frontrun/core";
 import { env } from "../src/env";
 import { privy } from "../src/trading/signer";
 import { SMART_ACCOUNT_IMPLEMENTATION } from "../src/trading/sponsor";
 
+/** LI.FI's contract on Arc, read from a live quote. Add others here if the route's contract changes. */
+const LIFI_ARC = "0xA4072583658Fae592A3506A42431cb6316a8d40b";
+
 /** Privy's docs don't say how addresses are compared, so both spellings are listed. */
 const anyCase = (addresses: string[]) => [...new Set(addresses.flatMap((a) => [a, a.toLowerCase()]))];
 
-const LIFI = Object.values(LIFI_CONTRACTS);
-const ROUTERS = anyCase([UNISWAP_ARC.universalRouter212, UNISWAP_ARC.v3SwapRouter02, ...LIFI]);
-const APPROVABLE_SPENDERS = anyCase([FLASH_ALLOWANCE_ARC, PERMIT2, UNISWAP_ARC.v3SwapRouter02, ...LIFI]);
+const ROUTERS = anyCase([UNISWAP_ARC.universalRouter212, UNISWAP_ARC.v3SwapRouter02, LIFI_ARC]);
+const APPROVABLE_SPENDERS = anyCase([FLASH_ALLOWANCE_ARC, PERMIT2, UNISWAP_ARC.v3SwapRouter02, LIFI_ARC]);
 
 const APPROVE_ABI = [
   {

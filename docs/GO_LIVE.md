@@ -17,7 +17,7 @@ Restart the API and workers after changing `.env`. A file watcher doesn't count:
 | What | Where | Goes in | Without it |
 |---|---|---|---|
 | CoinGecko Demo key (free) | coingecko.com/en/api/pricing | `COINGECKO_API_KEY` | About 5 data calls a minute, so charts and lists lag badly. Demo allows 100. For a paid key, also set `COINGECKO_PLAN=pro`. |
-| Flash integrator key | app.definitive.fi > More > Flash | `FLASH_API_KEY` | No Flash routes, so LI.FI only cross-chain |
+| Flash integrator key | app.definitive.fi > More > Flash | `FLASH_API_KEY` | No routes outside Arc, since LI.FI is switched off |
 | Uniswap API key | developers.uniswap.org/dashboard | `UNISWAP_API_KEY` | Direct v3 route only, which is single-hop USDC pairs |
 
 **Stage 2: real Google login.** Fills stay simulated, so this still can't move money. It creates real wallets for whoever signs in.
@@ -134,6 +134,8 @@ The deck asks for this, and it's the biggest open risk. Signing, policies and th
 - **Solana sells.** Flash's docs say sponsored delegation is "off for new accounts", and token account rent (about 0.002 SOL each) is never sponsored. The app tries Privy sponsorship, but rent may still need real SOL in the wallet. This conflicts with the "users only hold USDC" rule and may need a small SOL top-up.
 - **Slippage.** So one-tap orders execute instead of reverting, the app allows 20% on cross-chain and 5% on Arc, set in `GUARDRAILS` in `packages/core/src/routing.ts`. Flash suggests 15% on cross-chain, and FOMO reportedly defaults to 40%. A wide limit can cost more: a $100 cross-chain buy could fill up to $20 under its quote.
 - **Orders expiring.** One real $2.50 Arc to Base order closed with `REASON_ORDER_EXPIRED` after 37 seconds, with no funds moved, while the next one filled in 39 seconds. It's order `30494f56-85eb-44e4-8559-fbc750c097be`, and it's worth asking Definitive why. Wider limits may help, but that isn't proven.
+- **Two-step trades.** Flash can't bridge Robinhood's stock tokens like NVDA directly, so these run as two Flash orders through USDG on Robinhood Chain. This costs more than a direct route, about 4% on a $3.70 NVDA sell, and takes longer. If the second order fails six times, or one-tap is turned off in between, the trade closes at USDG, which shows up in the portfolio to sell normally. Look for `ALERT: a two-step trade stopped` in the worker logs. The orders are proven against Privy's rules and Flash from an empty wallet (`signer:test`), but no funded two-step trade has run yet.
+- **LI.FI is off.** `lifiProvider.enabled` returns false, so it isn't quoted. The Privy policy still allows its Arc contract, which nothing uses now.
 - **"Bought" shows early.** Once an order is accepted, the toast says "Bought" about 3 seconds before the expected fill. If the order then fails, the toast and receipt correct it. Users can briefly see "Bought" on a trade that fails.
 - **Gasless is only as good as its funding.** Once `PIMLICO_API_KEY` is set, Pimlico pays gas on Arc, Robinhood Chain, Base, Arbitrum, Ethereum and BNB Chain from your credit, and users never see it. Run out of credit and trades stop with "briefly unavailable". Set a spending limit in Pimlico's dashboard and put its id in `PIMLICO_SPONSORSHIP_POLICY_ID`.
 - **Not gasless yet.** HyperEVM first sells still use the gas wallet's top-up, because Pimlico lists no EIP-7702 support there. Solana sells still need SOL for token accounts and setup. Withdrawals from Arc pay a few cents of USDC, since the wallet sends them and the signer policy rightly can't.

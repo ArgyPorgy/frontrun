@@ -2,9 +2,11 @@ import {
   ARC_USDC,
   CHAINS,
   D,
+  Decimal,
   FLASH_ALLOWANCE_ARC,
   GUARDRAILS,
   PERMIT2,
+  TWO_STEP_CONNECTORS,
   normalizeAddress,
   resolveSlippage,
   toBaseUnits,
@@ -86,9 +88,9 @@ export function buildFlashParams(req: RouteRequest, feeBps: number): FlashParams
   const source = spentChain(req);
   const params: FlashParams = {
     targetChain: CHAINS[req.chain].flashSlug,
-    contraChain: "arc",
+    contraChain: req.contra ? CHAINS[req.contra.chain].flashSlug : "arc",
     targetAsset: req.address,
-    contraAsset: ARC_USDC,
+    contraAsset: req.contra?.asset ?? ARC_USDC,
     side: req.side,
     qty: req.side === "buy" ? req.usdcIn! : req.qtyIn!,
     orderType: "market",
@@ -182,6 +184,117 @@ async function requestQuote(req: RouteRequest, feeBps: number, signal?: AbortSig
   });
 }
 
+type Connector = NonNullable<(typeof TWO_STEP_CONNECTORS)[ChainKey]>;
+
+export interface TwoStepLeg {
+  request: RouteRequest;
+  raw: FlashQuoteRaw;
+  orderId?: string | null;
+  fill?: StatusUpdate;
+}
+
+/** Stored as the quote's raw field. A trade through this has two Flash orders, one after the other. */
+export interface TwoStepRoute {
+  twoStep: true;
+  connector: Connector;
+  current: 0 | 1;
+  legs: [TwoStepLeg, TwoStepLeg];
+  /** Bumped by whoever moves the trade on, so a second copy of the workers can't send the same order. */
+  revision: number;
+  attempts: number;
+  nextAttemptAt: number | null;
+  lastError: string | null;
+}
+
+export function isTwoStep(raw: unknown): raw is TwoStepRoute {
+  return typeof raw === "object" && raw !== null && (raw as { twoStep?: unknown }).twoStep === true;
+}
+
+export function isNoBridgeRoute(err: unknown): boolean {
+  return err instanceof HttpError && err.status === 404 && /no bridge routes/i.test(err.body);
+}
+
+/** A sell starts on the token's chain and a buy starts on Arc, so the bridge comes second and first respectively. */
+export function firstLegRequest(req: RouteRequest, c: Connector): RouteRequest {
+  if (req.side === "sell") return { ...req, contra: { chain: req.chain, asset: c.address, decimals: c.decimals } };
+  return { ...req, address: c.address, decimals: c.decimals, priceUsd: "1" };
+}
+
+export function secondLegRequest(req: RouteRequest, c: Connector, connectorQty: string): RouteRequest {
+  if (req.side === "sell") return { ...req, address: c.address, decimals: c.decimals, qtyIn: connectorQty, priceUsd: "1", notionalUsd: connectorQty };
+  return { ...req, usdcIn: connectorQty, notionalUsd: connectorQty, contra: { chain: req.chain, asset: c.address, decimals: c.decimals } };
+}
+
+/** The app's fee goes on the step that touches Arc, which is how every other trade pays it. */
+function legFeeBps(leg: RouteRequest): number {
+  return isCrossChain(leg) ? env().FLASH_INTEGRATOR_FEE_BPS : 0;
+}
+
+/** Quotes one step, and keeps its fee so the order that follows signs for the same one. */
+export async function quoteLeg(leg: RouteRequest, signal?: AbortSignal): Promise<FlashQuoteRaw> {
+  const feeBps = legFeeBps(leg);
+  return { ...(await requestQuote(leg, feeBps, signal)), feeBps };
+}
+
+/** The stablecoin a finished first step left in the wallet. */
+export function connectorReceived(side: RouteRequest["side"], fill: StatusUpdate): string {
+  return (side === "sell" ? fill.usdOut : fill.qty) ?? "0";
+}
+
+/** Puts the two fills together as the one trade the person placed. */
+export function finishTwoStep(req: Pick<RouteRequest, "side">, first: StatusUpdate, last: StatusUpdate): StatusUpdate {
+  const sell = req.side === "sell";
+  const qty = sell ? first.qty : last.qty;
+  const usd = sell ? last.usdOut : first.usdIn;
+  return {
+    status: "filled",
+    qty,
+    ...(sell ? { usdOut: usd } : { usdIn: usd }),
+    priceUsd: qty && usd && D(qty).gt(0) ? D(usd).div(qty).toFixed() : undefined,
+    feeUsd: D(first.feeUsd ?? 0).add(last.feeUsd ?? 0).toFixed(),
+    revenueUsd: D(first.revenueUsd ?? 0).add(last.revenueUsd ?? 0).toFixed(),
+    srcTx: first.srcTx,
+    dstTx: last.dstTx ?? last.srcTx,
+  };
+}
+
+async function quoteTwoStep(req: RouteRequest, c: Connector, started: number, signal?: AbortSignal): Promise<ProviderQuote> {
+  const first = firstLegRequest(req, c);
+  const firstRaw = await quoteLeg(first, signal);
+  const qty = D(firstRaw.to.amount).toDecimalPlaces(c.decimals, Decimal.ROUND_DOWN).toFixed();
+  const second = secondLegRequest(req, c, qty);
+  const secondRaw = await quoteLeg(second, signal);
+  const impact = (raw: FlashQuoteRaw) => Math.max(Number(raw.estimatedPriceImpact ?? 0), 0);
+  const route: TwoStepRoute = {
+    twoStep: true,
+    connector: c,
+    current: 0,
+    legs: [
+      { request: first, raw: firstRaw },
+      { request: second, raw: secondRaw },
+    ],
+    revision: 0,
+    attempts: 0,
+    nextAttemptAt: null,
+    lastError: null,
+  };
+  return {
+    provider: "flash",
+    netOutputUsd: secondRaw.to.notional,
+    expectedOut: secondRaw.to.amount,
+    feeUsd: D(firstRaw.fees?.estimatedFeeNotional ?? 0).add(secondRaw.fees?.estimatedFeeNotional ?? 0).toFixed(),
+    gasUsd: "0",
+    etaSeconds: 45,
+    priceImpact: impact(firstRaw) + impact(secondRaw),
+    recommendedSlippage: null,
+    crossChain: true,
+    needsSetup: !!firstRaw.evm?.approveTx || !!secondRaw.evm?.approveTx,
+    sponsoredSetup: false,
+    latencyMs: Date.now() - started,
+    raw: route,
+  };
+}
+
 export const flashProvider: RouteProvider = {
   id: "flash",
   enabled: () => !!env().FLASH_API_KEY,
@@ -189,111 +302,24 @@ export const flashProvider: RouteProvider = {
 
   async quote(req, signal) {
     const started = Date.now();
-    const raw = await requestQuote(req, env().FLASH_INTEGRATOR_FEE_BPS, signal);
-    return quoteToProvider(raw, req, Date.now() - started);
+    try {
+      const raw = await requestQuote(req, env().FLASH_INTEGRATOR_FEE_BPS, signal);
+      return quoteToProvider(raw, req, Date.now() - started);
+    } catch (err) {
+      const connector = TWO_STEP_CONNECTORS[req.chain];
+      if (!connector || !isNoBridgeRoute(err) || normalizeAddress(req.chain, req.address) === connector.address) throw err;
+      return quoteTwoStep(req, connector, started, signal);
+    }
   },
 
   async advance(ctx: ExecContext): Promise<AdvanceResult> {
-    const { request: req } = ctx;
-    let raw = ctx.quote.raw as FlashQuoteRaw;
-    const source = spentChain(req);
-    const steps: ExecStep[] = [];
-
-    if (CHAINS[source].type === "solana") {
-      for (const [i, tx] of (raw.setupTxs ?? []).entries()) {
-        const id = `setup-${i}`;
-        if (!completedStep(ctx, id)) {
-          // Rent and fees for these come from the funder unless Privy sponsors them.
-          steps.push({ id, kind: "svm_tx", chain: "solana", label: "Set up token account", transactionBase64: tx, broadcast: true, sponsor: true });
-          return { steps };
-        }
-      }
-      if (raw.svm?.sponsoredDelegateTx && !completedStep(ctx, "delegate")) {
-        steps.push({ id: "delegate", kind: "svm_tx", chain: "solana", label: "Authorize selling", transactionBase64: raw.svm.sponsoredDelegateTx, broadcast: false });
-      }
-      if (!completedStep(ctx, "order")) {
-        if (!raw.svm?.orderMessage) throw new Error("The quote came back without an order to sign.");
-        steps.push({ id: "order", kind: "svm_message", chain: "solana", label: "Sign order", message: raw.svm.orderMessage });
-      }
-      if (steps.length) return { steps };
-    } else {
-      const spentToken = req.side === "buy" ? ARC_USDC : req.address;
-      if (raw.evm?.approveTx && !completedStep(ctx, "approve")) {
-        assertApprovalMatches(raw.evm.approveTx, spentToken, KNOWN_SPENDERS);
-        steps.push({
-          id: "approve",
-          kind: "evm_tx",
-          chain: source,
-          label: "Approve once",
-          to: raw.evm.approveTx.to,
-          data: raw.evm.approveTx.data,
-          waitForReceipt: true,
-        });
-        return { steps };
-      }
-      if (completedStep(ctx, "approve") && !raw.topupRecovered) {
-        // If the approval needed a gas top-up, re-quote with the cost added to the integrator fee,
-        // so it comes out of this sell's proceeds instead of a separate transfer from the user.
-        const extraBps = await unsettledTopupBps(ctx);
-        if (extraBps > 0) {
-          const feeBps = Math.min(env().FLASH_INTEGRATOR_FEE_BPS + extraBps, MAX_INTEGRATOR_FEE_BPS);
-          const fresh = await requestQuote(req, feeBps);
-          raw = { ...fresh, feeBps, topupRecovered: true };
-          ctx.quote.raw = raw;
-          ctx.quote.netOutputUsd = fresh.to.notional;
-          ctx.quote.expectedOut = fresh.to.amount;
-          await db().update(schema.gasTopups).set({ settledAt: new Date() }).where(and(eq(schema.gasTopups.tradeId, ctx.tradeId), isNull(schema.gasTopups.settledAt)));
-        } else {
-          raw = { ...raw, topupRecovered: true };
-          ctx.quote.raw = raw;
-        }
-      }
-      if (raw.evm?.permitTypedData && !completedStep(ctx, "permit")) {
-        steps.push({ id: "permit", kind: "evm_typed_data", chain: source, label: "Approve Permit2", typedData: raw.evm.permitTypedData });
-      }
-      if (!completedStep(ctx, "order")) {
-        const typed = raw.evm?.orderTypedData;
-        if (!typed) throw new Error("The quote came back without an order to sign.");
-        assertOrderMatches(typed, {
-          funder: req.evmAddress,
-          spentToken,
-          chainId: CHAINS[source].chainId!,
-          fromAmount:
-            req.side === "buy"
-              ? toBaseUnits(req.usdcIn!, CHAINS.arc.usdcDecimals)
-              : req.decimals !== null
-                ? toBaseUnits(req.qtyIn!, req.decimals)
-                : undefined,
-        });
-        steps.push({ id: "order", kind: "evm_typed_data", chain: source, label: "Sign order", typedData: typed });
-      }
-      if (steps.length) return { steps };
-    }
-
-    const signature = completedStep(ctx, "order")?.signature;
-    if (!signature) throw new Error("Order signature is missing.");
-    const permit = completedStep(ctx, "permit")?.signature;
-    const delegate = completedStep(ctx, "delegate")?.signedTransaction;
-    const body = {
-      // The fee on the order has to equal the fee on the quote it signs.
-      ...buildFlashParams(req, raw.feeBps ?? env().FLASH_INTEGRATOR_FEE_BPS),
-      quoteId: raw.quoteId,
-      ...(raw.bridgeQuoteId ? { bridgeQuoteId: raw.bridgeQuoteId } : {}),
-      userSignature: signature,
-      ...(CHAINS[source].type === "evm"
-        ? {
-            evmOrderTypedData: raw.evm?.orderTypedData,
-            ...(permit ? { evmPermitTypedData: raw.evm?.permitTypedData, evmPermitSignature: permit } : {}),
-          }
-        : {
-            svmNonce: raw.svm?.nonce,
-            svmDeadline: raw.svm?.deadline,
-            ...(delegate ? { svmSponsoredDelegateTx: delegate } : {}),
-          }),
-    };
-    await orderLimiter.acquire();
-    const res = await fetchJson<{ orderId: string }>(`${BASE}/order`, { method: "POST", headers: headers(), body, timeoutMs: 15_000 });
-    return { done: { providerOrderId: res.orderId } };
+    const route = ctx.quote.raw;
+    if (!isTwoStep(route)) return advanceOrder(ctx);
+    const leg = route.legs[route.current];
+    const legCtx = { ...ctx, request: leg.request, quote: { ...ctx.quote, raw: leg.raw } };
+    const result = await advanceOrder(legCtx);
+    leg.raw = legCtx.quote.raw as FlashQuoteRaw;
+    return result;
   },
 
   async status(input: StatusInput): Promise<StatusUpdate> {
@@ -307,6 +333,109 @@ export const flashProvider: RouteProvider = {
     return flashStatusToUpdate(res, input.request);
   },
 };
+
+async function advanceOrder(ctx: ExecContext): Promise<AdvanceResult> {
+  const { request: req } = ctx;
+  let raw = ctx.quote.raw as FlashQuoteRaw;
+  const source = spentChain(req);
+  const steps: ExecStep[] = [];
+
+  if (CHAINS[source].type === "solana") {
+    for (const [i, tx] of (raw.setupTxs ?? []).entries()) {
+      const id = `setup-${i}`;
+      if (!completedStep(ctx, id)) {
+        // Rent and fees for these come from the funder unless Privy sponsors them.
+        steps.push({ id, kind: "svm_tx", chain: "solana", label: "Set up token account", transactionBase64: tx, broadcast: true, sponsor: true });
+        return { steps };
+      }
+    }
+    if (raw.svm?.sponsoredDelegateTx && !completedStep(ctx, "delegate")) {
+      steps.push({ id: "delegate", kind: "svm_tx", chain: "solana", label: "Authorize selling", transactionBase64: raw.svm.sponsoredDelegateTx, broadcast: false });
+    }
+    if (!completedStep(ctx, "order")) {
+      if (!raw.svm?.orderMessage) throw new Error("The quote came back without an order to sign.");
+      steps.push({ id: "order", kind: "svm_message", chain: "solana", label: "Sign order", message: raw.svm.orderMessage });
+    }
+    if (steps.length) return { steps };
+  } else {
+    const spentToken = req.side === "buy" ? (req.contra?.asset ?? ARC_USDC) : req.address;
+    if (raw.evm?.approveTx && !completedStep(ctx, "approve")) {
+      assertApprovalMatches(raw.evm.approveTx, spentToken, KNOWN_SPENDERS);
+      steps.push({
+        id: "approve",
+        kind: "evm_tx",
+        chain: source,
+        label: "Approve once",
+        to: raw.evm.approveTx.to,
+        data: raw.evm.approveTx.data,
+        waitForReceipt: true,
+      });
+      return { steps };
+    }
+    if (completedStep(ctx, "approve") && !raw.topupRecovered) {
+      // If the approval needed a gas top-up, re-quote with the cost added to the integrator fee,
+      // so it comes out of this sell's proceeds instead of a separate transfer from the user.
+      const extraBps = await unsettledTopupBps(ctx);
+      if (extraBps > 0) {
+        const feeBps = Math.min(env().FLASH_INTEGRATOR_FEE_BPS + extraBps, MAX_INTEGRATOR_FEE_BPS);
+        const fresh = await requestQuote(req, feeBps);
+        raw = { ...fresh, feeBps, topupRecovered: true };
+        ctx.quote.raw = raw;
+        ctx.quote.netOutputUsd = fresh.to.notional;
+        ctx.quote.expectedOut = fresh.to.amount;
+        await db().update(schema.gasTopups).set({ settledAt: new Date() }).where(and(eq(schema.gasTopups.tradeId, ctx.tradeId), isNull(schema.gasTopups.settledAt)));
+      } else {
+        raw = { ...raw, topupRecovered: true };
+        ctx.quote.raw = raw;
+      }
+    }
+    if (raw.evm?.permitTypedData && !completedStep(ctx, "permit")) {
+      steps.push({ id: "permit", kind: "evm_typed_data", chain: source, label: "Approve Permit2", typedData: raw.evm.permitTypedData });
+    }
+    if (!completedStep(ctx, "order")) {
+      const typed = raw.evm?.orderTypedData;
+      if (!typed) throw new Error("The quote came back without an order to sign.");
+      assertOrderMatches(typed, {
+        funder: req.evmAddress,
+        spentToken,
+        chainId: CHAINS[source].chainId!,
+        fromAmount:
+          req.side === "buy"
+            ? toBaseUnits(req.usdcIn!, req.contra?.decimals ?? CHAINS.arc.usdcDecimals)
+            : req.decimals !== null
+              ? toBaseUnits(req.qtyIn!, req.decimals)
+              : undefined,
+      });
+      steps.push({ id: "order", kind: "evm_typed_data", chain: source, label: "Sign order", typedData: typed });
+    }
+    if (steps.length) return { steps };
+  }
+
+  const signature = completedStep(ctx, "order")?.signature;
+  if (!signature) throw new Error("Order signature is missing.");
+  const permit = completedStep(ctx, "permit")?.signature;
+  const delegate = completedStep(ctx, "delegate")?.signedTransaction;
+  const body = {
+    // The fee on the order has to equal the fee on the quote it signs.
+    ...buildFlashParams(req, raw.feeBps ?? env().FLASH_INTEGRATOR_FEE_BPS),
+    quoteId: raw.quoteId,
+    ...(raw.bridgeQuoteId ? { bridgeQuoteId: raw.bridgeQuoteId } : {}),
+    userSignature: signature,
+    ...(CHAINS[source].type === "evm"
+      ? {
+          evmOrderTypedData: raw.evm?.orderTypedData,
+          ...(permit ? { evmPermitTypedData: raw.evm?.permitTypedData, evmPermitSignature: permit } : {}),
+        }
+      : {
+          svmNonce: raw.svm?.nonce,
+          svmDeadline: raw.svm?.deadline,
+          ...(delegate ? { svmSponsoredDelegateTx: delegate } : {}),
+        }),
+  };
+  await orderLimiter.acquire();
+  const res = await fetchJson<{ orderId: string }>(`${BASE}/order`, { method: "POST", headers: headers(), body, timeoutMs: 15_000 });
+  return { done: { providerOrderId: res.orderId } };
+}
 
 export interface RestingOrderParams {
   targetChain: string;

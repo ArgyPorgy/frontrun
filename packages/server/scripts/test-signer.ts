@@ -10,7 +10,7 @@
  * something a real trade needs, fails the run.
  */
 import { randomUUID } from "node:crypto";
-import { ARC_USDC, CHAINS, FLASH_ALLOWANCE_ARC, LIFI_CONTRACTS, UNISWAP_ARC, type ChainKey } from "@frontrun/core";
+import { ARC_USDC, CHAINS, FLASH_ALLOWANCE_ARC, UNISWAP_ARC, type StepResult } from "@frontrun/core";
 import { PrivyClient } from "@privy-io/node";
 import {
   appendTransactionMessageInstruction,
@@ -27,7 +27,7 @@ import { encodeFunctionData, erc20Abi, parseAbi, parseTransaction, recoverTransa
 import { env } from "../src/env";
 import { SMART_ACCOUNT_IMPLEMENTATION } from "../src/trading/sponsor";
 import { HttpError } from "../src/http";
-import { assertOrderMatches, flashProvider, requestRestingQuote, submitRestingOrder, type FlashQuoteRaw, type RestingOrderParams } from "../src/providers/flash";
+import { assertOrderMatches, flashProvider, isTwoStep, requestRestingQuote, submitRestingOrder, type FlashQuoteRaw, type RestingOrderParams } from "../src/providers/flash";
 import { lifiProvider } from "../src/providers/lifi";
 import type { RouteRequest } from "../src/providers/types";
 import { uniswapProvider } from "../src/providers/uniswap";
@@ -242,6 +242,57 @@ async function evmSuite() {
     console.log(`  FAIL  Uniswap sell route: ${explain(err)}`);
   }
 
+  // Two-step route: a stock token's orders have to pass the rules already in place, with no new ones.
+  const stock = { chain: "robinhood" as const, address: "0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec", priceUsd: "186" };
+  const twoStepTrades: Array<[string, RouteRequest]> = [
+    ["sell", req({ ...stock, side: "sell", usdcIn: undefined, qtyIn: "0.02", notionalUsd: "3.7" })],
+    ["buy", req({ ...stock, usdcIn: "4", notionalUsd: "4" })],
+  ];
+  for (const [name, request] of twoStepTrades) {
+    const quote = await flashProvider.quote(request).catch((err: unknown) => {
+      failures++;
+      console.log(`  FAIL  Stock ${name} quote: ${explain(err)}`);
+      return null;
+    });
+    if (!quote) continue;
+    const route = quote.raw;
+    if (!isTwoStep(route)) {
+      console.log(`  INFO  Flash can do the stock ${name} directly now, so it doesn't need two steps`);
+      continue;
+    }
+    for (const i of [0, 1] as const) {
+      const label = `Stock ${name}, step ${i + 1}`;
+      route.current = i;
+      try {
+        const ctx = { tradeId: randomUUID(), userId: "test", request, quote, completed: [] as StepResult[] };
+        let next = await flashProvider.advance(ctx);
+        while ("steps" in next) {
+          for (const step of next.steps) {
+            if (step.kind === "evm_tx") {
+              await allowed(`${label}: ${step.label}`, () => signTx(wallet.id, { to: step.to, data: step.data, chainId: CHAINS[step.chain].chainId! }));
+              ctx.completed.push({ id: step.id, txHash: "0xskipped" });
+            } else if (step.kind === "evm_typed_data") {
+              const signed = await allowed(`${label}: ${step.label}`, () => signTyped(wallet.id, step.typedData));
+              if (!signed) throw new Error("the rules refused the order");
+              ctx.completed.push({ id: step.id, signature: signed.signature });
+            }
+          }
+          next = await flashProvider.advance(ctx);
+        }
+        failures++;
+        console.log(`  FAIL  ${label}: Flash took an order from an empty wallet: ${JSON.stringify(next.done)}`);
+      } catch (err) {
+        const text = explain(err);
+        if (err instanceof HttpError && /balance|allowance/i.test(text) && !/signature|validation/i.test(text)) {
+          console.log(`  PASS  ${label}: Flash read the order and refused it because the wallet is empty: ${text.slice(0, 120)}`);
+        } else {
+          failures++;
+          console.log(`  FAIL  ${label}: ${text}`);
+        }
+      }
+    }
+  }
+
   // Gasless path: the same limits have to hold inside a user operation, including hidden in a batch.
   const execute = (target: Hex, value: bigint, data: Hex) => encodeFunctionData({ abi: SMART_ACCOUNT_ABI, functionName: "execute", args: [target, value, data] });
   const batch = (calls: Array<[Hex, bigint, Hex]>) => encodeFunctionData({ abi: SMART_ACCOUNT_ABI, functionName: "executeBatch", args: [calls.map(([target, value, data]) => ({ target, value, data }))] });
@@ -297,16 +348,18 @@ async function evmSuite() {
   await denied("Sign a message that only looks like a cancel", () => signMessage("Definitive Flash v1 - Cancel Order\nOrder: 1"));
   await denied("Sign a message that starts differently", () => signMessage(`Transfer everything \nDefinitive Flash v1 \u2014 Cancel Order\nOrder: ${randomUUID()}`));
 
-  // LI.FI: a sell starts on the token's own chain, and its contract there can differ from Arc's.
-  for (const [chain, contract] of Object.entries(LIFI_CONTRACTS) as Array<[ChainKey, string]>) {
-    const chainId = CHAINS[chain].chainId!;
-    const approval = encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [contract as Hex, 1000n] });
-    await allowed(`Approve LI.FI on ${chain}`, () => signTx(wallet.id, { to: BASE_WETH, data: approval, chainId }));
-    await allowed(`Call LI.FI on ${chain}`, () => signTx(wallet.id, { to: contract, data: "0x", chainId }));
-  }
+  // LI.FI: its contract can change by route, so this shows whether the allowlist still fits.
   try {
     const lifi = await lifiProvider.quote(flashReq);
-    console.log(`  PASS  LI.FI's live route fits the list: ${lifi.provider}`);
+    const to = (lifi.raw as { transactionRequest?: { to?: string; data?: string } }).transactionRequest;
+    if (to?.to) {
+      try {
+        await signTx(wallet.id, { to: to.to, data: to.data });
+        console.log(`  PASS  LI.FI route ${to.to} is on the allowlist`);
+      } catch {
+        console.log(`  INFO  LI.FI route ${to.to} isn't on the allowlist. One-tap will refuse it, and Flash remains the route.`);
+      }
+    }
   } catch (err) {
     console.log(`  INFO  LI.FI quote unavailable: ${explain(err)}`);
   }

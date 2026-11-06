@@ -38,7 +38,7 @@ Browser (Next.js PWA) ── websocket, 1s ticks ──┐
 apps/api (Fastify, Socket.IO) ◄── Redis pub/sub ── apps/workers
       │                                              price feed, trade indexer,
       ▼                                              lists, reconcile, moderation
-routing race: Uniswap / Flash / LI.FI          Postgres
+routing race: Uniswap / Flash                  Postgres
 ```
 
 | Path | What it is |

@@ -1,4 +1,4 @@
-import { ARC_USDC, FLASH_ALLOWANCE_ARC, UNISWAP_ARC } from "@frontrun/core";
+import { ARC_USDC, FLASH_ALLOWANCE_ARC, TWO_STEP_CONNECTORS, UNISWAP_ARC } from "@frontrun/core";
 import { encodeFunctionData, erc20Abi, encodeAbiParameters, keccak256, toHex } from "viem";
 import { describe, expect, it, vi } from "vitest";
 
@@ -18,13 +18,15 @@ import type { ProviderQuote } from "../src/providers/types";
 import { gaslessEnabled, sponsorshipConfigured } from "../src/trading/sponsor";
 import { pairToSnapshot, bestSnapshot, type DexPair } from "../src/market/dexscreener";
 import { parseSwapReceipt } from "../src/onchain";
-import { assertApprovalMatches, assertOrderMatches, buildFlashParams, flashStatusToUpdate } from "../src/providers/flash";
-import { assertKnownLifiContract, lifiStatusToUpdate } from "../src/providers/lifi";
+import { assertApprovalMatches, assertOrderMatches, buildFlashParams, firstLegRequest, flashStatusToUpdate, isNoBridgeRoute, secondLegRequest } from "../src/providers/flash";
+import { providersFor } from "../src/providers";
+import { isCrossChain, spentChain } from "../src/providers/types";
+import { lifiStatusToUpdate } from "../src/providers/lifi";
 import { friendlyFailure } from "../src/trading/service";
 import { paperFill, syntheticQuote } from "../src/providers/paper";
 import { assertSwapMatches } from "../src/providers/uniswap";
 import type { RouteRequest } from "../src/providers/types";
-import { RateLimiter, settleWithinWindow } from "../src/http";
+import { HttpError, RateLimiter, settleWithinWindow } from "../src/http";
 import { withinTolerance } from "../src/routing/engine";
 
 const WALLET = "0xf4f0f84e00000000000000000000000000000001";
@@ -548,20 +550,36 @@ describe("gas sponsorship", () => {
   });
 });
 
-describe("LI.FI's contracts", () => {
-  const route = (contract: string) => ({ estimate: { approvalAddress: contract } as never, transactionRequest: { to: contract, data: "0x" } });
+describe("routing", () => {
+  const stock = { chain: "robinhood", address: TOKEN, decimals: 18, evmAddress: WALLET, solanaAddress: null, priceUsd: "186", notionalUsd: "4" } as const;
+  const usdg = TWO_STEP_CONNECTORS.robinhood!;
 
-  it("takes a sell from Robinhood Chain through LI.FI's contract there", () => {
-    expect(() => assertKnownLifiContract("robinhood", route("0xb477751b76cf82d00a686a1232f5fcd772414af3"))).not.toThrow();
+  it("doesn't race LI.FI any more", () => {
+    expect(providersFor({ ...stock, side: "sell", qtyIn: "1" }).map((p) => p.id)).toEqual(["flash"]);
   });
 
-  it("won't offer a route through a contract the signer policy doesn't list", () => {
-    expect(() => assertKnownLifiContract("robinhood", route("0xA4072583658Fae592A3506A42431cb6316a8d40b"))).toThrow(/doesn't list/);
-    expect(() => assertKnownLifiContract("base", route("0x000000000000000000000000000000000000bEEF"))).toThrow(/doesn't list/);
+  it("only falls back to two steps when Flash says it has no bridge", () => {
+    expect(isNoBridgeRoute(new HttpError(404, '{"error":{"message":"flash quote failed: no bridge routes available for this cross-chain transfer"}}', "https://flash.definitive.fi"))).toBe(true);
+    expect(isNoBridgeRoute(new HttpError(404, '{"error":{"message":"token not found"}}', "https://flash.definitive.fi"))).toBe(false);
+    expect(isNoBridgeRoute(new HttpError(500, "no bridge routes", "https://flash.definitive.fi"))).toBe(false);
   });
 
-  it("leaves Solana alone, where there's no contract to approve", () => {
-    expect(() => assertKnownLifiContract("solana", { estimate: {} as never, transactionRequest: { data: "AAAA" } })).not.toThrow();
+  it("builds a sell as token to stablecoin, then stablecoin to Arc", () => {
+    const sell = { ...stock, side: "sell", qtyIn: "0.02" } as const;
+    const first = buildFlashParams(firstLegRequest(sell, usdg), 0);
+    expect(first).toMatchObject({ targetChain: "robinhood", contraChain: "robinhood", targetAsset: TOKEN, contraAsset: usdg.address, side: "sell", qty: "0.02", maxSlippage: "0.05" });
+    expect(first.recipientAddress).toBeUndefined();
+    const second = buildFlashParams(secondLegRequest(sell, usdg, "3.6"), 50);
+    expect(second).toMatchObject({ contraChain: "arc", targetAsset: usdg.address, contraAsset: ARC_USDC, side: "sell", qty: "3.6", recipientAddress: WALLET, flashIntegratorFeeBps: "50" });
+  });
+
+  it("builds a buy as Arc to stablecoin, then stablecoin to token", () => {
+    const buy = { ...stock, side: "buy", usdcIn: "4" } as const;
+    expect(buildFlashParams(firstLegRequest(buy, usdg), 50)).toMatchObject({ contraChain: "arc", targetAsset: usdg.address, contraAsset: ARC_USDC, side: "buy", qty: "4", recipientAddress: WALLET });
+    const second = secondLegRequest(buy, usdg, "3.9");
+    expect(buildFlashParams(second, 0)).toMatchObject({ contraChain: "robinhood", targetAsset: TOKEN, contraAsset: usdg.address, side: "buy", qty: "3.9" });
+    expect(spentChain(second)).toBe("robinhood");
+    expect(isCrossChain(second)).toBe(false);
   });
 
   it("says plainly that nothing moved when the signer policy refuses", () => {

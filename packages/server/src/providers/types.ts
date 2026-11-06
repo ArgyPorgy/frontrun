@@ -15,6 +15,8 @@ export interface RouteRequest {
   /** Live USD price of the token, used for value estimates and impact checks. */
   priceUsd: string;
   notionalUsd: string;
+  /** What this trades against when it isn't USDC on Arc. Only a step of a two-step route sets this, and usdcIn is then in this asset. */
+  contra?: { chain: ChainKey; asset: string; decimals: number };
 }
 
 export interface ProviderQuote {
@@ -87,12 +89,12 @@ export interface RouteProvider {
   status(input: StatusInput): Promise<StatusUpdate>;
 }
 
-export function spentChain(req: Pick<RouteRequest, "side" | "chain">): ChainKey {
-  return req.side === "buy" ? "arc" : req.chain;
+export function spentChain(req: Pick<RouteRequest, "side" | "chain" | "contra">): ChainKey {
+  return req.side === "buy" ? (req.contra?.chain ?? "arc") : req.chain;
 }
 
-export function isCrossChain(req: Pick<RouteRequest, "chain">): boolean {
-  return req.chain !== "arc";
+export function isCrossChain(req: Pick<RouteRequest, "chain" | "contra">): boolean {
+  return req.chain !== (req.contra?.chain ?? "arc");
 }
 
 export function completedStep(ctx: ExecContext, id: string): StepResult | undefined {

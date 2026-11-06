@@ -42,10 +42,16 @@ import { resolveClosedTheses } from "../theses";
 import { arcUsdcBalance, erc20Allowance, tokenBalance } from "../onchain";
 import {
   PROVIDERS,
+  connectorReceived,
+  finishTwoStep,
+  isTwoStep,
   paperFill,
+  quoteLeg,
+  secondLegRequest,
   type ProviderQuote,
   type RouteRequest,
   type StatusUpdate,
+  type TwoStepRoute,
 } from "../providers";
 import { CHANNELS, KEYS, publish, redis } from "../redis";
 import { statsChanged } from "../stats";
@@ -59,6 +65,13 @@ const QUOTE_FRESH_MS = 30_000;
 const QUOTE_RECORD_TTL_S = 180;
 const MAX_STEPS = 10;
 const UNSUBMITTED_TIMEOUT_MS = 2 * 60_000;
+/** A two-step trade's second order gets this many tries before the stablecoin is handed to the person. */
+const TWO_STEP_MAX_ATTEMPTS = 6;
+const TWO_STEP_RETRY_MS = 30_000;
+/** A try counts as still running this long, so it isn't started again while it signs. */
+const TWO_STEP_SUBMIT_GUARD_MS = 2 * 60_000;
+/** The second order must keep this share of the value going in. Otherwise holding the stablecoin is better. */
+const TWO_STEP_MIN_VALUE_KEPT = 0.9;
 
 export interface QuoteRecord {
   id: string;
@@ -470,6 +483,8 @@ export async function executeTrade(
   const serverSigned = decision.oneTap || (gaslessEnabled() && decision.signerReady && !!input.confirmed);
   const mode: ExecState["mode"] = paper ? "paper" : serverSigned ? "server" : "wallet";
   const { request, winner } = record;
+  // The second order is sent in the background, when no wallet is there to sign it.
+  if (mode === "wallet" && isTwoStep(winner.raw)) throw conflict("needs_one_tap", "Turn on one-tap trading to trade this token.");
   const state: ExecState = { request, quote: winner, completed: [], mode, pendingSteps: null, reQuoted, slippage: record.slippage };
   const srcChain: ChainKey = request.side === "buy" ? "arc" : request.chain;
 
@@ -537,6 +552,8 @@ async function drive(tradeId: string): Promise<void> {
   const state = trade.execState as ExecState;
   const provider = PROVIDERS[state.quote.provider];
   const wallets: SigningWallets | null = state.mode === "server" ? await loadSigningWallets(trade.userId) : null;
+  const route = state.quote.raw;
+  const onSecondLeg = isTwoStep(route) && route.current === 1;
 
   try {
     for (let i = 0; i < MAX_STEPS; i++) {
@@ -550,9 +567,9 @@ async function drive(tradeId: string): Promise<void> {
       if ("done" in next) {
         state.pendingSteps = null;
         await saveState(tradeId, {
-          status: "pending",
+          status: onSecondLeg ? "source_confirmed" : "pending",
           providerOrderId: next.done.providerOrderId ?? null,
-          srcTx: next.done.srcTx ?? null,
+          srcTx: next.done.srcTx ?? trade.srcTx,
           execState: state,
         });
         await audit(trade.userId, "trade_submitted", { tradeId, ...next.done });
@@ -573,10 +590,149 @@ async function drive(tradeId: string): Promise<void> {
     throw new Error("Too many signing steps.");
   } catch (err) {
     logger.warn({ err: err instanceof Error ? err.message : err, tradeId }, "trade failed during execution");
+    if (onSecondLeg) {
+      // The first order already filled, so this trade can't simply fail. The poller tries again.
+      await noteSecondLegFailure(tradeId, state, route, err);
+      return;
+    }
     await saveState(tradeId, { status: "failed", error: friendlyFailure(err), execState: state });
     await db().insert(schema.providerEvents).values({ provider: state.quote.provider, kind: "fail" });
     await audit(trade.userId, "trade_failed", { tradeId, error: err instanceof Error ? err.message : String(err) });
   }
+}
+
+async function noteSecondLegFailure(tradeId: string, state: ExecState, route: TwoStepRoute, err: unknown) {
+  const message = err instanceof Error ? err.message : String(err);
+  route.lastError = message.slice(0, 300);
+  route.nextAttemptAt = Date.now() + TWO_STEP_RETRY_MS;
+  logger.warn({ tradeId, attempt: route.attempts, err: route.lastError }, "two-step trade's second order failed");
+  await saveState(tradeId, { execState: state });
+}
+
+/** Writes the next state only if nobody else moved this trade on since it was read. */
+async function claimTwoStep(tradeId: string, state: ExecState, route: TwoStepRoute): Promise<boolean> {
+  const seen = route.revision;
+  route.revision = seen + 1;
+  const claimed = await db()
+    .update(schema.trades)
+    .set({ execState: state, updatedAt: new Date() })
+    .where(and(eq(schema.trades.id, tradeId), sql`(${schema.trades.execState} #>> '{quote,raw,revision}')::int = ${seen}`))
+    .returning({ id: schema.trades.id });
+  return claimed.length > 0;
+}
+
+/** Moves a two-step trade on: watches the working order, and sends the second one when the first has filled. */
+async function pollTwoStep(trade: typeof schema.trades.$inferSelect, state: ExecState, route: TwoStepRoute): Promise<void> {
+  if (!trade.providerOrderId) {
+    if (route.current === 1) return startSecondLeg(trade, state, route);
+    if (Date.now() - trade.updatedAt.getTime() > UNSUBMITTED_TIMEOUT_MS) {
+      await applyStatus(trade.id, { status: "failed", error: "This trade couldn't be submitted." });
+    }
+    return;
+  }
+  const leg = route.legs[route.current];
+  const update = await PROVIDERS.flash.status({ request: leg.request, quote: state.quote, providerOrderId: trade.providerOrderId, srcTx: trade.srcTx });
+  if (!TERMINAL_STATUSES.includes(update.status)) {
+    const status = route.current === 1 ? "source_confirmed" : update.status;
+    if (status !== trade.status) await applyStatus(trade.id, { ...update, status });
+    else await saveState(trade.id, {});
+    return;
+  }
+  if (route.current === 1 && update.status === "filled") {
+    await applyStatus(trade.id, finishTwoStep(state.request, route.legs[0].fill!, update));
+    return;
+  }
+  if (route.current === 0 && update.status !== "filled") {
+    await applyStatus(trade.id, update);
+    return;
+  }
+  // Either the first order just filled, or the second closed without filling and left the stablecoin in the wallet.
+  leg.orderId = trade.providerOrderId;
+  if (route.current === 0) {
+    leg.fill = update;
+    route.current = 1;
+    state.completed = [];
+    // A retry always starts from a fresh quote, so the first order's re-quote allowance has no use here.
+    state.reQuoted = true;
+  } else {
+    route.lastError = update.error ?? "The second order closed without filling.";
+    route.nextAttemptAt = Date.now() + TWO_STEP_RETRY_MS;
+  }
+  // Clearing the order id is what hands this on, so only one copy of the workers gets past this.
+  const moved = await db()
+    .update(schema.trades)
+    .set({ providerOrderId: null, status: "source_confirmed", srcTx: route.legs[0].fill?.srcTx ?? trade.srcTx, execState: state, updatedAt: new Date() })
+    .where(and(eq(schema.trades.id, trade.id), eq(schema.trades.providerOrderId, trade.providerOrderId)))
+    .returning({ id: schema.trades.id });
+  if (moved.length) await publishTrade(trade.id);
+}
+
+async function startSecondLeg(trade: typeof schema.trades.$inferSelect, state: ExecState, route: TwoStepRoute): Promise<void> {
+  if (route.nextAttemptAt && Date.now() < route.nextAttemptAt) {
+    await saveState(trade.id, {});
+    return;
+  }
+  const grant = await signerStatus(trade.userId);
+  if (route.attempts >= TWO_STEP_MAX_ATTEMPTS || !grant.active) return handOverConnector(trade, state, route);
+
+  route.attempts += 1;
+  route.nextAttemptAt = Date.now() + TWO_STEP_SUBMIT_GUARD_MS;
+  if (!(await claimTwoStep(trade.id, state, route))) return;
+
+  try {
+    const { connector } = route;
+    const wallets = await loadSigningWallets(trade.userId);
+    const held = D(await tokenBalance(state.request.chain, connector.address, wallets.evmAddress));
+    // The wallet may hold more of this stablecoin from before, and only what this trade received is for sale.
+    const qty = Decimal.min(held, connectorReceived(state.request.side, route.legs[0].fill!)).toDecimalPlaces(connector.decimals, Decimal.ROUND_DOWN);
+    if (qty.lte(0)) throw new Error("The first order's stablecoin hasn't shown up in the wallet yet.");
+    const request = secondLegRequest(state.request, connector, qty.toFixed());
+    const raw = await quoteLeg(request);
+    if (D(raw.to.notional).lt(D(raw.from.notional).mul(TWO_STEP_MIN_VALUE_KEPT))) throw new Error(`The second order would only return ${raw.to.notional} of ${raw.from.notional}.`);
+    route.legs[1] = { request, raw };
+    // An approval from an earlier try still stands. Anything signed against the old quote doesn't.
+    state.completed = state.completed.filter((s) => !!s.txHash);
+    await saveState(trade.id, { execState: state });
+  } catch (err) {
+    await noteSecondLegFailure(trade.id, state, route, err);
+    return;
+  }
+  await drive(trade.id);
+  await publishTrade(trade.id);
+}
+
+/**
+ * The second order couldn't go through, or the person turned off one-tap while it waited. The first order
+ * did fill, so the money is in the stablecoin. It becomes a normal holding they can sell from their portfolio,
+ * and the trade closes on what actually happened.
+ */
+async function handOverConnector(trade: typeof schema.trades.$inferSelect, state: ExecState, route: TwoStepRoute): Promise<void> {
+  if (!(await claimTwoStep(trade.id, state, route))) return;
+  const { request } = state;
+  const { connector } = route;
+  const first = route.legs[0].fill!;
+  const received = connectorReceived(request.side, first);
+  const original = await tokenRefFor(trade.tokenChain, trade.tokenAddr);
+  await rememberToken({ chain: request.chain, address: connector.address, symbol: connector.symbol, name: connector.name, imageUrl: null }, connector.decimals);
+
+  logger.error({ tradeId: trade.id, attempts: route.attempts, err: route.lastError }, "ALERT: a two-step trade stopped at its stablecoin");
+  await audit(trade.userId, "two_step_handed_over", { tradeId: trade.id, connector: connector.symbol, received, lastError: route.lastError });
+
+  const fill = { status: "filled" as const, feeUsd: first.feeUsd, revenueUsd: first.revenueUsd, srcTx: first.srcTx, dstTx: first.dstTx };
+  if (request.side === "buy") {
+    // What this bought in the end is the stablecoin, so that's what the trade and the position record.
+    await saveState(trade.id, { tokenAddr: connector.address });
+    await applyStatus(trade.id, { ...fill, qty: received, usdIn: first.usdIn, priceUsd: first.usdIn && D(received).gt(0) ? D(first.usdIn).div(received).toFixed() : undefined });
+  } else {
+    await applyStatus(trade.id, { ...fill, qty: first.qty, usdOut: received, priceUsd: first.qty && D(first.qty).gt(0) ? D(received).div(first.qty).toFixed() : undefined });
+    await db().transaction((tx) => applyFillToPosition(tx as unknown as Db, { ...trade, side: "buy", tokenAddr: connector.address, isPaper: false }, { status: "filled", qty: received, usdIn: received }));
+  }
+  const rounded = D(received).toDecimalPlaces(2).toFixed();
+  const message =
+    request.side === "buy"
+      ? `Your ${original.symbol} buy stopped at ${rounded} ${connector.symbol}. It's in your portfolio, so you can sell it or try ${original.symbol} again.`
+      : `Your ${original.symbol} sold, and the ${rounded} ${connector.symbol} couldn't reach your balance yet. It's in your portfolio, so you can sell it from there.`;
+  await notify(trade.userId, { type: "trade_update", message, tradeId: trade.id, tokenChain: request.chain, tokenAddr: connector.address }, { push: true });
 }
 
 /** Expired at submit: one fresh quote at the same slippage, and only if the price still holds. */
@@ -781,6 +937,10 @@ export async function pollActiveTrades(limit = 50): Promise<number> {
             }
           }
           await applyStatus(trade.id, paperFill(state.request, state.quote));
+          return;
+        }
+        if (isTwoStep(state.quote.raw)) {
+          await pollTwoStep(trade, state, state.quote.raw);
           return;
         }
         if (!trade.providerOrderId && !trade.srcTx) {
