@@ -194,7 +194,7 @@ export function Segmented<T extends string>({
   onChange,
   className = "",
 }: {
-  options: Array<{ value: NoInfer<T>; label: string }>;
+  options: Array<{ value: NoInfer<T>; label: ReactNode }>;
   value: T;
   onChange(value: NoInfer<T>): void;
   className?: string;

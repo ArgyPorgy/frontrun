@@ -11,6 +11,7 @@ import {
   TERMINAL_STATUSES,
   applyBuy,
   applySell,
+  formatCompactUsd,
   checkSpendCaps,
   fromBaseUnits,
   normalizeAddress,
@@ -38,7 +39,7 @@ import { AppError, badRequest, conflict, forbidden, notFound, unprocessable } fr
 import { HttpError } from "../http";
 import { logger } from "../logger";
 import { getSnapshot, getTokenDetail, rememberToken } from "../market/service";
-import { notify } from "../notifications";
+import { notify, notifyFollowers } from "../notifications";
 import { resolveClosedTheses } from "../theses";
 import { arcUsdcBalance, erc20Allowance, tokenBalance } from "../onchain";
 import {
@@ -840,7 +841,28 @@ export async function applyStatus(tradeId: string, update: StatusUpdate): Promis
       .insert(schema.providerEvents)
       .values({ provider: outcome.trade.provider, kind: outcome.status === "filled" ? "fill" : "fail" });
     await notifyTradeResult(outcome.trade, outcome.status);
+    if (outcome.status === "filled" && outcome.trade.side === "buy") {
+      notifyFollowersOfBuy(outcome.trade).catch((err: unknown) => logger.warn({ tradeId, err: err instanceof Error ? err.message : err }, "follower fan-out failed"));
+    }
   }
+}
+
+/** Tells followers what someone just bought, and how big the token was at that moment. */
+async function notifyFollowersOfBuy(trade: typeof schema.trades.$inferSelect) {
+  const [buyer, token, snapshot] = await Promise.all([
+    db().query.users.findFirst({ where: eq(schema.users.id, trade.userId) }),
+    tokenRefFor(trade.tokenChain, trade.tokenAddr),
+    getSnapshot(trade.tokenChain as ChainKey, trade.tokenAddr).catch(() => null),
+  ]);
+  if (!buyer) return;
+  const marketCap = snapshot?.marketCapUsd ?? snapshot?.fdvUsd;
+  await notifyFollowers(trade.userId, {
+    type: "followed_buy",
+    actorId: trade.userId,
+    tokenChain: trade.tokenChain,
+    tokenAddr: trade.tokenAddr,
+    message: `${buyer.username} bought ${token.symbol}${marketCap ? ` at ${formatCompactUsd(marketCap)} market cap` : ""}`,
+  });
 }
 
 /** Returns what a sale realized and whether it closed the position. Null when there's nothing to report. */

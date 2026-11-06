@@ -256,7 +256,8 @@ function TokenScreen({ chain, address }: { chain: ChainKey; address: string }) {
   const [composer, setComposer] = useState(false);
   const [copyThesis, setCopyThesis] = useState<ThesisView | null>(null);
   const [pinSheet, setPinSheet] = useState<ThesisView | null>(null);
-  const [focusId, setFocusId] = useState<string | null>(null);
+  // A thesis notification opens here, on the thesis it was about.
+  const [focusId, setFocusId] = useState<string | null>(params.get("thesis"));
   const [newPins, setNewPins] = useState<ThesisView[]>([]);
 
   const token = useQuery({

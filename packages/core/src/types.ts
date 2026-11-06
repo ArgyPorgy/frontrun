@@ -242,7 +242,7 @@ export interface TraderResult extends UserSummary {
 
 export interface NotificationView {
   id: string;
-  type: "thesis_posted" | "thesis_liked" | "thesis_replied" | "followed" | "trade_update" | "deposit" | "copy_buy";
+  type: "thesis_posted" | "followed_buy" | "thesis_liked" | "thesis_replied" | "followed" | "trade_update" | "deposit" | "copy_buy";
   actor: UserSummary | null;
   thesisId: string | null;
   tradeId: string | null;

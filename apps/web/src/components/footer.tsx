@@ -4,15 +4,8 @@ import { formatPct, formatPrice, type TokenListItem } from "@frontrun/core";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { XLogo } from "./brand";
 import { TokenIcon } from "./ui";
-
-function XGlyph() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.714 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-    </svg>
-  );
-}
 
 /** A persistent status bar: a live price ticker on one side, system status, legal and socials on the other.
  *  Desktop only — the phone already has the bottom tab bar. */
@@ -76,7 +69,7 @@ export function Footer() {
             aria-label="frontrun on X"
             className="flex items-center text-muted hover:text-ink"
           >
-            <XGlyph />
+            <XLogo size={15} />
           </a>
         </div>
       </div>

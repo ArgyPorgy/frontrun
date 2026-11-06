@@ -28,6 +28,8 @@ function pushReady(): boolean {
 }
 
 function pushUrl(input: NotifyInput): string {
+  // What someone you follow did is a reason to look at the token, where it can be bought.
+  if (input.type === "thesis_posted" && input.tokenChain && input.tokenAddr) return `/token/${input.tokenChain}/${input.tokenAddr}?thesis=${input.thesisId}`;
   if (input.thesisId) return `/thesis/${input.thesisId}`;
   if (input.tokenChain && input.tokenAddr) return `/token/${input.tokenChain}/${input.tokenAddr}`;
   return "/";

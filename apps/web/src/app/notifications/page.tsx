@@ -11,6 +11,8 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 function hrefFor(n: NotificationView): string {
+  // What someone you follow did opens the token, so it can be bought from there.
+  if (n.type === "thesis_posted" && n.token) return `/token/${n.token.chain}/${n.token.address}?thesis=${n.thesisId}`;
   if (n.thesisId) return `/thesis/${n.thesisId}`;
   if (n.token) return `/token/${n.token.chain}/${n.token.address}`;
   if (n.actor) return `/u/${n.actor.username}`;
@@ -47,6 +49,7 @@ function NotificationBody({ n }: { n: NotificationView }) {
     <>
       {n.actor ? <Avatar user={n.actor} size={34} /> : n.token ? <TokenIcon symbol={n.token.symbol} imageUrl={n.token.imageUrl} size={34} /> : <NotificationGlyph type={n.type} />}
       <p className="min-w-0 flex-1 text-sm">{n.message}</p>
+      {n.actor && n.token && <TokenIcon symbol={n.token.symbol} imageUrl={n.token.imageUrl} size={26} />}
       <span className="num text-xs text-faint">{timeAgo(n.createdAt)}</span>
     </>
   );

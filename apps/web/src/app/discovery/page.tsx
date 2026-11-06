@@ -3,6 +3,7 @@
 import { formatPct, type ChainKey, type TokenListItem } from "@frontrun/core";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { TelegramLogo, XLogo } from "@/components/brand";
 import { HomeDesktop } from "@/components/home-desktop";
 import { CHAIN_OPTIONS, ThesisFeed } from "@/components/thesis-feed";
 import { TokenRow } from "@/components/token-row";
@@ -124,8 +125,8 @@ function HomeMobile() {
           value={tab}
           onChange={setTab}
           options={[
-            { value: "x", label: "X tracker" },
-            { value: "telegram", label: "TG tracker" },
+            { value: "x", label: <span className="flex items-center gap-1.5"><XLogo />Tracker</span> },
+            { value: "telegram", label: <span className="flex items-center gap-1.5"><TelegramLogo />Tracker</span> },
             { value: "trending", label: "Trending" },
             { value: "new", label: "New" },
             { value: "top", label: "Top thesis" },

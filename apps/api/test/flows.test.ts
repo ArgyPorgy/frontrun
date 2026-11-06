@@ -852,6 +852,29 @@ describe("theses", () => {
     expect((await new ApiClient({ baseUrl }).theses({ tab: "following" })).items).toHaveLength(0);
   });
 
+  it("tells followers what someone bought, at what market cap, and links to the token", async () => {
+    const leader = await loginFunded("buyleader");
+    const follower = await login("buyfollower");
+    const stranger = await login("buystranger");
+    await follower.client.follow("buyleader");
+    await buy(leader.client, TOKEN_A, "100");
+    await vi.waitFor(async () => {
+      const inbox = await follower.client.notifications();
+      const alert = inbox.items.find((n) => n.type === "followed_buy");
+      expect(alert?.message).toBe("buyleader bought AAA at $1.00M market cap");
+      expect(alert?.token?.address).toBe(TOKEN_A);
+      expect(alert?.actor?.username).toBe("buyleader");
+      // It belongs to the buyer's trade, so a follower must not be sent to open it.
+      expect(alert?.tradeId).toBeNull();
+    });
+    expect((await stranger.client.notifications()).items.map((n) => n.type)).not.toContain("followed_buy");
+    // Selling isn't announced, and neither is the buyer's own fill.
+    await sell(leader.client, TOKEN_A, 100);
+    expect((await leader.client.notifications()).items.map((n) => n.type)).not.toContain("followed_buy");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect((await follower.client.notifications()).items.filter((n) => n.type === "followed_buy")).toHaveLength(1);
+  });
+
   it("hides blocked users both ways and breaks the follow", async () => {
     const a = await loginFunded("blocker");
     const b = await loginFunded("blockee");

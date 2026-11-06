@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { useLivePrice } from "@/lib/socket";
 import { useToast } from "@/lib/toast";
 import { useTradeRunner } from "@/lib/trade";
+import { TelegramLogo, XLogo } from "./brand";
 import { OpenOrders } from "./orders-list";
 import { CHAIN_OPTIONS, ThesisFeed } from "./thesis-feed";
 import { TrackerFeed } from "./tracker-feed";
@@ -56,8 +57,8 @@ export function SocialPanel() {
       <div className="flex shrink-0 gap-1 border-b border-line/60 px-2 pt-2" role="tablist" aria-label="Feed">
         {(
           [
-            { value: "x", label: "X tracker" },
-            { value: "telegram", label: "TG tracker" },
+            { value: "x", label: <span className="flex items-center justify-center gap-1.5"><XLogo />Tracker</span> },
+            { value: "telegram", label: <span className="flex items-center justify-center gap-1.5"><TelegramLogo />Tracker</span> },
             { value: "thesis", label: "Thesis feed" },
           ] as const
         ).map((f) => (
