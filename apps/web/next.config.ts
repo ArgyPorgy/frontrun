@@ -19,7 +19,7 @@ const csp = [
   "manifest-src 'self'",
   "base-uri 'self'",
   "form-action 'self'",
-  "frame-ancestors 'none'",
+  "frame-ancestors 'self' http://localhost:3000 https://frontrun.onrender.com https://tryfrontrun.xyz https://auth.privy.io",
 ].join("; ");
 
 const config: NextConfig = {
