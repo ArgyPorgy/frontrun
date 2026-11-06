@@ -152,14 +152,20 @@ The deck asks for this, and it's the biggest open risk. Signing, policies and th
 - Read DexScreener's terms. The deck flags that they may bar competing products. If so, replace the price feed with a paid source.
 - Add an error tracker. Logs are structured, but there's no Sentry yet because it needs your DSN.
 
-## 7. Hosting, per the deck
+## 7. Hosting
 
-| Piece | Host | Notes |
+Everything runs on Render, set out in `render.yaml`, in Singapore next to the Neon database. The deck suggested Vercel plus Fly.io or Railway, but one host is simpler, and Vercel's free plan doesn't allow commercial use.
+
+| Piece | Render service | Notes |
 |---|---|---|
-| `apps/web` | Vercel | Set the `NEXT_PUBLIC_*` values at build time. |
-| `apps/api` | Fly.io or Railway | `docker build --build-arg APP=api .` It needs websockets, so not serverless. |
-| `apps/workers` | Fly.io or Railway | `docker build --build-arg APP=workers .` Safe to run more than one: jobs take a Redis lease. |
-| Postgres | Neon or Supabase | The API and workers migrate on boot. |
-| Redis | Upstash | Must support pub/sub. |
+| `apps/web` | `frontrun` | `NEXT_PUBLIC_*` values are fixed at build time, so changing one needs a rebuild. |
+| `apps/api` | `frontrun-api` | Websockets, so it stays always on. |
+| `apps/workers` | `frontrun-workers` | Jobs take a Redis lease, so copies sharing one Redis don't double up. |
+| Redis | `frontrun-redis` | The free plan keeps nothing across a restart, which only loses tracker cursors and follow notes. |
+| Postgres | Neon | The API and workers migrate on boot. |
 
-The Dockerfile hasn't been run, because the Docker daemon was off on this machine. The bundles it builds were booted directly and work.
+To set it up: on Render choose New > Blueprint and pick this repository, then add the server's keys to the `frontrun-server` group, leaving out `NODE_ENV`, `APP_ORIGIN`, `API_PORT`, `REDIS_URL`, `DEV_JWT_SECRET`, `AUTH_MODE`, `TRADING_MODE` and `NEXT_PUBLIC_*`. Add the site's address to the allowed domains in the Privy dashboard, or sign-in fails.
+
+**Only one set of workers per database.** Copies with their own Redis can't see each other's leases, so they'd double-poll providers and collide on TwitterAPI.io's free-tier rate limit. Stop any local copy once the hosted one is running.
+
+Render doesn't use the Dockerfile. It hasn't been run, because the Docker daemon was off on this machine.

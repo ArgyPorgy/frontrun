@@ -1,0 +1,67 @@
+# The whole app on Render, in Singapore next to the Neon database.
+# Secrets aren't listed here: they go straight into the frontrun-server group on Render.
+envVarGroups:
+  - name: frontrun-server
+    envVars:
+      - key: NODE_VERSION
+        value: 24.2.0
+      - key: NODE_ENV
+        value: production
+      - key: AUTH_MODE
+        value: privy
+      - key: TRADING_MODE
+        value: live
+      - key: APP_ORIGIN
+        value: https://frontrun.onrender.com
+
+services:
+  - type: web
+    name: frontrun
+    runtime: node
+    region: singapore
+    buildCommand: corepack pnpm install --frozen-lockfile --prod=false --filter "@frontrun/web..." && corepack pnpm --filter @frontrun/web build
+    startCommand: cd apps/web && node_modules/.bin/next start --port $PORT
+    envVars:
+      - key: NODE_VERSION
+        value: 24.2.0
+      # Next.js fixes these into the site when it builds.
+      - key: NEXT_PUBLIC_API_URL
+        value: https://frontrun-api.onrender.com
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://frontrun.onrender.com
+
+  - type: web
+    name: frontrun-api
+    runtime: node
+    region: singapore
+    healthCheckPath: /health
+    buildCommand: corepack pnpm install --frozen-lockfile --prod=false --filter "@frontrun/api..." && corepack pnpm --filter @frontrun/api build
+    startCommand: API_PORT=$PORT node apps/api/dist/index.js
+    envVars:
+      - fromGroup: frontrun-server
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: frontrun-redis
+          property: connectionString
+
+  - type: worker
+    name: frontrun-workers
+    runtime: node
+    region: singapore
+    buildCommand: corepack pnpm install --frozen-lockfile --prod=false --filter "@frontrun/workers..." && corepack pnpm --filter @frontrun/workers build
+    startCommand: node apps/workers/dist/index.js
+    envVars:
+      - fromGroup: frontrun-server
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: frontrun-redis
+          property: connectionString
+
+  - type: keyvalue
+    name: frontrun-redis
+    region: singapore
+    plan: free
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
