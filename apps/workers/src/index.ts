@@ -43,6 +43,7 @@ import {
   refreshRankScores,
   refreshReputation,
   resolveClosedTheses,
+  runAgents,
   runCopyTrades,
   sendBuyAlerts,
   syncFreshFills,
@@ -221,6 +222,8 @@ async function main() {
   every("buy-alerts", 5_000, () => sendBuyAlerts());
   // A long lease, since a batch of copies waits on signing and sending.
   every("copy-trades", 3_000, () => runCopyTrades(), { leaseMs: 2 * 60_000 });
+  // A long lease, since one agent thinking can take a minute or two, and only one runs at a time.
+  every("agent-runs", 5_000, () => runAgents(), { leaseMs: 10 * 60_000 });
   every("reconcile", 5 * 60_000, () => reconcilePositions(), { leaseMs: 10 * 60_000 });
   every("thesis-resolve", 60_000, async () => {
     await resolveClosedTheses();

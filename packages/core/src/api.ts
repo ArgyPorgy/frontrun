@@ -1,5 +1,7 @@
 import type { ChainKey } from "./chains";
+import type { AgentDetailView, AgentMessageView, AgentModelView, AgentRunView, AgentsView } from "./agents";
 import type { OrderType } from "./routing";
+import type { CreateAgentInput, UpdateAgentInput } from "./schemas";
 import type { CopySettingInput } from "./schemas";
 import type {
   ApiErrorBody,
@@ -9,6 +11,7 @@ import type {
   CopySettingsView,
   LandingVoices,
   LeaderboardRow,
+  LeaderboardVersus,
   TokenTweets,
   MeView,
   NotificationView,
@@ -163,6 +166,18 @@ export class ApiClient {
 
   profile = (username: string) => this.request<ProfileView>("GET", `/v1/users/${username}`);
   userPositions = (username: string) => this.request<{ open: PortfolioView["open"]; closed: PortfolioView["closed"] }>("GET", `/v1/users/${username}/positions`);
+  agents = () => this.request<AgentsView>("GET", "/v1/agents");
+  agentModels = () => this.request<{ items: AgentModelView[] }>("GET", "/v1/agents/models");
+  createAgent = (body: CreateAgentInput) => this.request<AgentDetailView>("POST", "/v1/agents", { body });
+  agent = (id: string) => this.request<AgentDetailView>("GET", `/v1/agents/${id}`);
+  updateAgent = (id: string, body: UpdateAgentInput) => this.request<AgentDetailView>("PATCH", `/v1/agents/${id}`, { body });
+  agentRuns = (id: string) => this.request<{ items: AgentRunView[] }>("GET", `/v1/agents/${id}/runs`);
+  agentMessages = (id: string) => this.request<{ items: AgentMessageView[] }>("GET", `/v1/agents/${id}/messages`);
+  sendAgentMessage = (id: string, body: string) => this.request<{ items: AgentMessageView[] }>("POST", `/v1/agents/${id}/messages`, { body: { body } });
+  runAgentNow = (id: string) => this.request<AgentDetailView>("POST", `/v1/agents/${id}/run`);
+  withdrawFromAgent = (id: string, amountUsd: string) => this.request<AgentDetailView>("POST", `/v1/agents/${id}/withdraw`, { body: { amountUsd } });
+  fundAgentPaper = (id: string, amountUsd: string) => this.request<AgentDetailView>("POST", `/v1/agents/${id}/paper-fund`, { body: { amountUsd } });
+
   copySettings = () => this.request<CopySettingsView>("GET", "/v1/copy");
 
   saveCopySetting = (username: string, body: CopySettingInput) => this.request<CopySettingsView>("PUT", `/v1/copy/${username}`, { body });
@@ -177,7 +192,7 @@ export class ApiClient {
   report = (body: { thesisId?: string; username?: string; reason: "spam" | "scam" | "abuse" | "other"; note?: string }) =>
     this.request<void>("POST", "/v1/reports", { body });
 
-  leaderboard = () => this.request<{ items: LeaderboardRow[]; provisional: LeaderboardRow[]; minResolved: number }>("GET", "/v1/leaderboard");
+  leaderboard = () => this.request<{ items: LeaderboardRow[]; provisional: LeaderboardRow[]; versus: LeaderboardVersus; minResolved: number }>("GET", "/v1/leaderboard");
 
   notifications = () => this.request<{ items: NotificationView[]; unread: number }>("GET", "/v1/notifications");
   markNotificationsRead = () => this.request<void>("POST", "/v1/notifications/read", { body: {} });

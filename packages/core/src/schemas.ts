@@ -50,6 +50,20 @@ export const createOrderSchema = z
   });
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
+export const agentSettingsSchema = z.object({
+  model: z.string().min(3).max(120),
+  strategy: z.string().trim().min(10).max(2000),
+  perTradeUsd: positiveDecimal,
+  dailyLimitUsd: positiveDecimal,
+  thinkEveryMinutes: z.number().int().positive(),
+});
+export const createAgentSchema = agentSettingsSchema.extend({ name: usernameSchema });
+export type CreateAgentInput = z.infer<typeof createAgentSchema>;
+export const updateAgentSchema = agentSettingsSchema.partial().extend({ enabled: z.boolean().optional() });
+export type UpdateAgentInput = z.infer<typeof updateAgentSchema>;
+export const agentMessageSchema = z.object({ body: z.string().trim().min(1).max(1000) });
+export const agentMoneySchema = z.object({ amountUsd: positiveDecimal });
+
 export const copySettingSchema = z.object({
   amountUsd: positiveDecimal,
   dailyLimitUsd: positiveDecimal,

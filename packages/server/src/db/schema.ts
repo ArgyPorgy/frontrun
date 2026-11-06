@@ -27,8 +27,11 @@ export const users = pgTable("users", {
   avatarUrl: text("avatar_url"),
   isBanned: boolean("is_banned").notNull().default(false),
   paperBalanceUsd: usd("paper_balance_usd").notNull().default("0"),
+  /** Set when this account is an AI agent, which trades and ranks like anyone else. */
+  agentOwnerId: uuid("agent_owner_id"),
+  agentModel: text("agent_model"),
   createdAt: ts("created_at").notNull().defaultNow(),
-}, (t) => [uniqueIndex("users_username_lower").on(sql`lower(${t.username})`)]);
+}, (t) => [uniqueIndex("users_username_lower").on(sql`lower(${t.username})`), index("users_agent_owner").on(t.agentOwnerId)]);
 
 export const wallets = pgTable("wallets", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -318,6 +321,51 @@ export const copySettings = pgTable("copy_settings", {
   uniqueIndex("copy_settings_pair").on(t.followerId, t.leaderId),
   index("copy_settings_leader").on(t.leaderId),
 ]);
+
+/** An AI agent's settings. Its account, wallets, trades and theses are the ordinary ones. */
+export const agents = pgTable("agents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  model: text("model").notNull(),
+  strategy: text("strategy").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  perTradeUsd: usd("per_trade_usd").notNull(),
+  dailyLimitUsd: usd("daily_limit_usd").notNull(),
+  thinkEveryMinutes: integer("think_every_minutes").notNull().default(60),
+  nextRunAt: ts("next_run_at"),
+  lastRunAt: ts("last_run_at"),
+  /** Runs that have failed in a row. Enough of these pauses it, so a broken model can't keep billing. */
+  failures: integer("failures").notNull().default(0),
+  createdAt: ts("created_at").notNull().defaultNow(),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+}, (t) => [index("agents_owner").on(t.ownerId), index("agents_due").on(t.nextRunAt).where(sql`enabled`)]);
+
+/** One round of an agent thinking: what it did, why, and what the model cost. */
+export const agentRuns = pgTable("agent_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  agentId: uuid("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
+  trigger: text("trigger", { enum: ["schedule", "chat"] }).notNull(),
+  summary: text("summary"),
+  actions: jsonb("actions").$type<Array<{ tool: string; summary: string; ok: boolean; acted: boolean }>>().notNull().default([]),
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  costUsd: real("cost_usd").notNull().default(0),
+  error: text("error"),
+  createdAt: ts("created_at").notNull().defaultNow(),
+  finishedAt: ts("finished_at"),
+}, (t) => [index("agent_runs_agent").on(t.agentId, t.createdAt), index("agent_runs_created").on(t.createdAt)]);
+
+/** The owner's conversation with their agent. */
+export const agentMessages = pgTable("agent_messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  agentId: uuid("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
+  role: text("role", { enum: ["owner", "agent"] }).notNull(),
+  body: text("body").notNull(),
+  /** Set once the agent has answered this. */
+  handledAt: ts("handled_at"),
+  createdAt: ts("created_at").notNull().defaultNow(),
+}, (t) => [index("agent_messages_agent").on(t.agentId, t.createdAt), index("agent_messages_pending").on(t.createdAt).where(sql`role = 'owner' and handled_at is null`)]);
 
 export const notifications = pgTable("notifications", {
   id: uuid("id").primaryKey().defaultRandom(),

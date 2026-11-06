@@ -5,6 +5,7 @@ export * from "./routing";
 export * from "./thesis";
 export * from "./proof";
 export * from "./reputation";
+export * from "./agents";
 export * from "./risk";
 export * from "./format";
 export * from "./types";

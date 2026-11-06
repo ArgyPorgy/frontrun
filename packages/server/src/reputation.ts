@@ -4,7 +4,9 @@ import {
   REPUTATION_REGISTRY_ARC,
   reputationScore,
   type ClosedPositionStats,
+  type LeaderboardGroup,
   type LeaderboardRow,
+  type LeaderboardVersus,
   type Reputation,
   type ReputationComponents,
   type ReputationView,
@@ -205,7 +207,7 @@ export async function scoresFor(userIds: string[]): Promise<Map<string, number>>
  * so they can see where they'd stand. Realized profit is shown but never ranks: being right matters more here
  * than being big.
  */
-export async function leaderboard(limit = 50): Promise<{ items: LeaderboardRow[]; provisional: LeaderboardRow[] }> {
+export async function leaderboard(limit = 50): Promise<{ items: LeaderboardRow[]; provisional: LeaderboardRow[]; versus: LeaderboardVersus }> {
   const rows = await db()
     .select({ score: schema.reputationScores, user: schema.users })
     .from(schema.reputationScores)
@@ -238,7 +240,30 @@ export async function leaderboard(limit = 50): Promise<{ items: LeaderboardRow[]
   });
   const ranked = rows.filter((r) => r.score.closed >= LEADERBOARD_MIN_RESOLVED).slice(0, limit).map(toRow);
   const provisional = rows.filter((r) => r.score.closed < LEADERBOARD_MIN_RESOLVED).slice(0, limit).map(toRow);
-  return { items: ranked, provisional };
+  return { items: ranked, provisional, versus: await humansVersusAgents() };
+}
+
+/** Every scored human against every scored agent, however short their records so far. */
+async function humansVersusAgents(): Promise<LeaderboardVersus> {
+  const rows = await db()
+    .select({
+      isAgent: sql<boolean>`${schema.users.agentOwnerId} is not null`,
+      traders: sql<number>`count(*)::int`,
+      avgScore: sql<number>`avg(${schema.reputationScores.score})::float`,
+      closed: sql<number>`sum(${schema.reputationScores.closed})::int`,
+      wins: sql<number>`sum(${schema.reputationScores.wins})::int`,
+      avgReturnPct: sql<number>`(sum(${schema.reputationScores.avgReturnPct} * ${schema.reputationScores.closed}) / nullif(sum(${schema.reputationScores.closed}), 0))::float`,
+    })
+    .from(schema.reputationScores)
+    .innerJoin(schema.users, eq(schema.users.id, schema.reputationScores.userId))
+    .where(eq(schema.users.isBanned, false))
+    .groupBy(sql`${schema.users.agentOwnerId} is not null`);
+  const group = (isAgent: boolean): LeaderboardGroup | null => {
+    const row = rows.find((r) => r.isAgent === isAgent);
+    if (!row || !row.closed) return null;
+    return { traders: row.traders, avgScore: row.avgScore, winRatePct: (row.wins / row.closed) * 100, avgReturnPct: row.avgReturnPct, closed: row.closed };
+  };
+  return { humans: group(false), agents: group(true) };
 }
 
 /** Worker: writes changed scores to Arc, one at a time since they share the relayer's nonce. */

@@ -21,7 +21,7 @@ import {
 } from "@frontrun/core";
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { db, schema } from "./db/client";
-import { AppError, badRequest, forbidden, notFound, unprocessable } from "./errors";
+import { AppError, badRequest, conflict, forbidden, notFound, unprocessable } from "./errors";
 import { logger } from "./logger";
 import { getPrices, getSnapshot, rememberToken } from "./market/service";
 import { notify, notifyFollowers } from "./notifications";
@@ -125,7 +125,7 @@ async function positionAtPost(userId: string, chain: ChainKey, address: string, 
   return { usd: usd.toFixed(), qty: qty.toFixed(), avgEntry, verified: usd.gte(VERIFIED_MIN_USD) };
 }
 
-export async function createThesis(user: UserRow, input: { chain: ChainKey; address: string; body: string }): Promise<ThesisView> {
+export async function createThesis(user: UserRow, input: { chain: ChainKey; address: string; body: string }, opts: { mustHold?: boolean } = {}): Promise<ThesisView> {
   const check = checkBody(input.body);
   if (!check.ok) throw badRequest(check.reason!, BODY_REJECTION_MESSAGES[check.reason!]);
   const address = normalizeAddress(input.chain, input.address);
@@ -136,6 +136,7 @@ export async function createThesis(user: UserRow, input: { chain: ChainKey; addr
   await rememberToken(snap);
 
   const position = await positionAtPost(user.id, input.chain, address, snap.priceUsd);
+  if (opts.mustHold && !position.verified) throw conflict("must_hold", "You can only post a thesis on a token you hold.");
   const now = new Date();
   const [thesis] = await db()
     .insert(schema.theses)

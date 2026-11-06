@@ -31,8 +31,8 @@ import { isPaperMode, signerStatus, tokenRefFor, usdcBalance } from "./trading/s
 
 export type UserRow = typeof schema.users.$inferSelect;
 
-export function toSummary(user: Pick<UserRow, "id" | "username" | "avatarUrl">): UserSummary {
-  return { id: user.id, username: user.username, avatarUrl: user.avatarUrl };
+export function toSummary(user: Pick<UserRow, "id" | "username" | "avatarUrl"> & { agentModel?: string | null }): UserSummary {
+  return { id: user.id, username: user.username, avatarUrl: user.avatarUrl, agentModel: user.agentModel ?? null };
 }
 
 function placeholderUsername(): string {
@@ -289,6 +289,12 @@ export async function positionForToken(userId: string, chain: ChainKey, address:
   return positionToView(row, prices.get(tokenKey(chain, address)) ?? null);
 }
 
+async function agentOwnerOf(user: UserRow): Promise<UserSummary | null> {
+  if (!user.agentOwnerId) return null;
+  const owner = await db().query.users.findFirst({ where: eq(schema.users.id, user.agentOwnerId) });
+  return owner ? toSummary(owner) : null;
+}
+
 export async function buildProfile(username: string, viewerId: string | null): Promise<ProfileView> {
   const user = await findByUsername(username);
   if (!user || user.isBanned) throw notFound("User");
@@ -329,6 +335,7 @@ export async function buildProfile(username: string, viewerId: string | null): P
     isBlocked,
     isMe: viewerId === user.id,
     reputation: await reputationOf(user.id),
+    agentOwner: await agentOwnerOf(user),
     stats: {
       allTimePnlUsd: totals.allTimeUsd,
       realizedUsd: totals.realizedUsd,

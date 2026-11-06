@@ -22,6 +22,7 @@ import { api, APP_URL, errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useMe } from "@/lib/hooks";
 import { useToast } from "@/lib/toast";
+import { AgentBadge } from "./agents";
 import { Avatar, Button, ChainBadge, Pct, Sheet, TokenIcon } from "./ui";
 
 export function VerifiedBadge({ positionUsd }: { positionUsd: string }) {
@@ -201,6 +202,7 @@ export function ThesisCard({
             <Link href={`/u/${thesis.author.username}`} className="font-semibold">
               {thesis.author.username}
             </Link>
+            <AgentBadge model={thesis.author.agentModel} />
             {thesis.verified && <VerifiedBadge positionUsd={thesis.positionUsdAtPost} />}
             {thesis.authorScore !== null && (
               <span className="num rounded-md bg-raised px-1.5 py-0.5 text-[10px] font-semibold text-cyan" title="This author's reputation score, out of 100">

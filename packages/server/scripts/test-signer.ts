@@ -25,6 +25,7 @@ import {
 } from "@solana/kit";
 import { encodeFunctionData, erc20Abi, parseAbi, parseTransaction, recoverTransactionAddress, verifyTypedData, type Hex, type TransactionSerialized } from "viem";
 import { env } from "../src/env";
+import { agentEvmRules } from "../src/trading/policy";
 import { SMART_ACCOUNT_IMPLEMENTATION } from "../src/trading/sponsor";
 import { HttpError } from "../src/http";
 import { assertOrderMatches, flashProvider, isTwoStep, requestRestingQuote, submitRestingOrder, type FlashQuoteRaw, type RestingOrderParams } from "../src/providers/flash";
@@ -320,6 +321,29 @@ async function evmSuite() {
   const upgrade = (contract: string) => client.wallets().ethereum().sign7702Authorization(wallet.id, { params: { chain_id: ARC_ID, contract, nonce: 0 }, authorization_context });
   await allowed("Gasless: upgrade the wallet to the known account", () => upgrade(SMART_ACCOUNT_IMPLEMENTATION));
   await denied("Gasless: upgrade the wallet to any other contract", () => upgrade("0xe6Cae83BdE06E4c305530e199D7217f42808555B"));
+
+  // An agent's wallet: the same rules, plus sending USDC back to its owner and nowhere else.
+  const OWNER = "0x00000000000000000000000000000000000a11ce" as Hex;
+  const agentPolicy = await client.policies().create({ version: "1.0", name: "Front Run agent signer test", chain_type: "ethereum", owner_id: e.PRIVY_SIGNER_ID!, rules: agentEvmRules(OWNER) });
+  const agentWallet = await client.wallets().create({ chain_type: "ethereum", owner_id: e.PRIVY_SIGNER_ID, policy_ids: [agentPolicy.id] });
+  const transferCall = (to: Hex) => encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [to, 1_000_000n] });
+  const signAgentOperation = (call_data: Hex) =>
+    client.wallets().ethereum().signUserOperation(agentWallet.id, {
+      params: {
+        chain_id: ARC_ID,
+        contract: SMART_ACCOUNT_IMPLEMENTATION,
+        user_operation: { sender: agentWallet.address as Hex, nonce: "0x10000000000000000", call_data, call_gas_limit: "0x30000", verification_gas_limit: "0x30000", pre_verification_gas: "0x10000", max_fee_per_gas: "0x4a817c800", max_priority_fee_per_gas: "0x3b9aca00" },
+      },
+      authorization_context,
+    });
+  await allowed("Agent: send USDC back to its owner", () => signTx(agentWallet.id, { to: usdc, data: transferCall(OWNER) }));
+  await denied("Agent: send USDC to anyone else", () => signTx(agentWallet.id, { to: usdc, data: transferCall(ATTACKER) }));
+  await denied("Agent: send another token, even to its owner", () => signTx(agentWallet.id, { to: BASE_WETH, data: transferCall(OWNER) }));
+  await denied("Agent: send native USDC to its owner", () => signTx(agentWallet.id, { to: OWNER, value: "0x1" }));
+  await allowed("Agent gasless: send USDC back to its owner", () => signAgentOperation(execute(usdc, 0n, transferCall(OWNER))));
+  await denied("Agent gasless: send USDC to anyone else", () => signAgentOperation(execute(usdc, 0n, transferCall(ATTACKER))));
+  await denied("Agent gasless: hide a theft in a batch with a withdrawal", () => signAgentOperation(batch([[usdc, 0n, transferCall(OWNER)], [usdc, 0n, transferCall(ATTACKER)]])));
+  await allowed("Agent gasless: approve USDC to Flash", () => signAgentOperation(execute(usdc, 0n, approveCall(FLASH_ALLOWANCE_ARC as Hex))));
 
   // Orders that rest on Flash: real limit and stop orders, signed under the policy, refused only for the balance.
   for (const [name, extra] of [

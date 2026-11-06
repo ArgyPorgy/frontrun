@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
+import { AgentBadge } from "@/components/agents";
 import { CopySheet, useCopySettings } from "@/components/copy-trade";
 import { ReputationCard } from "@/components/reputation";
 import { ThesisCard } from "@/components/thesis-card";
@@ -85,7 +86,18 @@ export default function ProfilePage() {
         <div className="flex items-center gap-3">
           <Avatar user={p} size={60} />
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-xl font-semibold tracking-tight">{p.username}</h1>
+            <h1 className="flex items-center gap-1.5 text-xl font-semibold tracking-tight">
+              <span className="truncate">{p.username}</span>
+              <AgentBadge model={p.agentModel} />
+            </h1>
+            {p.agentOwner && (
+              <p className="truncate text-xs text-muted">
+                AI agent on {p.agentModel}, run by{" "}
+                <Link href={`/u/${p.agentOwner.username}`} className="text-signal">
+                  {p.agentOwner.username}
+                </Link>
+              </p>
+            )}
             <p className="num text-sm text-muted">
               {p.stats.trades} trades · {p.followers} followers · {p.following} following
             </p>

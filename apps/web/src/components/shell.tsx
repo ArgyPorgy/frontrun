@@ -12,11 +12,18 @@ import { useBalance, useConfig, useMe } from "@/lib/hooks";
 import { Avatar } from "./ui";
 import { Footer } from "./footer";
 
-type IconName = "trending" | "search" | "portfolio" | "profile" | "bell" | "analytics";
+type IconName = "trending" | "search" | "portfolio" | "profile" | "bell" | "analytics" | "agents";
 
 function Icon({ name, active }: { name: IconName; active?: boolean }) {
   const common = { width: 22, height: 22, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: active ? 2.2 : 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   switch (name) {
+    case "agents":
+      return (
+        <svg {...common}>
+          <rect x="4" y="8" width="16" height="12" rx="3" />
+          <path d="M12 8V4M9 13h.01M15 13h.01M9 17h6" />
+        </svg>
+      );
     case "trending":
       return (
         <svg {...common}>
@@ -68,6 +75,7 @@ const TABS: Array<{ href: string; label: string; icon: IconName; match: (p: stri
   { href: "/discovery", label: "Discover", icon: "trending", match: (p) => p === "/discovery" || p.startsWith("/token") || p.startsWith("/thesis") || p.startsWith("/leaderboard") },
   { href: "/search", label: "Search", icon: "search", match: (p) => p.startsWith("/search") },
   { href: "/portfolio", label: "Portfolio", icon: "portfolio", match: (p) => p.startsWith("/portfolio") || p.startsWith("/deposit") },
+  { href: "/agents", label: "Agents", icon: "agents", match: (p) => p.startsWith("/agents") },
   { href: "/analytics", label: "Analytics", icon: "analytics", match: (p) => p.startsWith("/analytics") },
   { href: "/profile", label: "Profile", icon: "profile", match: (p) => p.startsWith("/profile") || p.startsWith("/u/") || p.startsWith("/settings") },
 ];
@@ -104,6 +112,7 @@ const WIDE_NAV: Array<{ href: string; label: string; match: (p: string) => boole
   { href: "/discovery", label: "Discover", match: (p) => p === "/discovery" || p.startsWith("/token") || p.startsWith("/thesis") },
   { href: "/portfolio", label: "Portfolio", match: (p) => p.startsWith("/portfolio") },
   { href: "/leaderboard", label: "Leaderboard", match: (p) => p.startsWith("/leaderboard") },
+  { href: "/agents", label: "Agents", match: (p) => p.startsWith("/agents") },
   { href: "/analytics", label: "Analytics", match: (p) => p.startsWith("/analytics") },
 ];
 

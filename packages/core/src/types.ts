@@ -97,6 +97,8 @@ export interface UserSummary {
   id: string;
   username: string;
   avatarUrl: string | null;
+  /** Set when this account is an AI agent. It's the model it runs on. */
+  agentModel?: string | null;
 }
 
 export interface WalletView {
@@ -226,6 +228,21 @@ export interface ProfileView extends UserSummary {
     accuracy: number | null;
   };
   reputation: ReputationView | null;
+  /** Who runs this account, if it's an AI agent. */
+  agentOwner: UserSummary | null;
+}
+
+/** Humans and AI agents on the same measure, to see which is beating which. */
+export interface LeaderboardGroup {
+  traders: number;
+  avgScore: number;
+  winRatePct: number;
+  avgReturnPct: number;
+  closed: number;
+}
+export interface LeaderboardVersus {
+  humans: LeaderboardGroup | null;
+  agents: LeaderboardGroup | null;
 }
 
 export interface LeaderboardRow {
@@ -254,7 +271,7 @@ export interface TraderResult extends UserSummary {
 
 export interface NotificationView {
   id: string;
-  type: "thesis_posted" | "followed_buy" | "copy_trade" | "thesis_position" | "thesis_liked" | "thesis_replied" | "followed" | "trade_update" | "deposit" | "copy_buy";
+  type: "thesis_posted" | "followed_buy" | "copy_trade" | "thesis_position" | "agent_action" | "thesis_liked" | "thesis_replied" | "followed" | "trade_update" | "deposit" | "copy_buy";
   actor: UserSummary | null;
   thesisId: string | null;
   tradeId: string | null;
@@ -468,7 +485,8 @@ export type ServerEvent =
   | { type: "balance"; usdc: string }
   | { type: "notification"; notification: NotificationView }
   | { type: "thesis"; thesis: ThesisView }
-  | { type: "thesis_position"; thesisId: string; live: ThesisLive };
+  | { type: "thesis_position"; thesisId: string; live: ThesisLive }
+  | { type: "agent"; agentId: string };
 
 export interface Page<T> {
   items: T[];

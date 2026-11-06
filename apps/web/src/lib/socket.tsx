@@ -104,6 +104,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         void queryClient.invalidateQueries({ queryKey: ["balance"] });
         void queryClient.invalidateQueries({ queryKey: ["position"] });
       });
+      socket.on("agent", () => void queryClient.invalidateQueries({ queryKey: ["agents"] }));
       socket.on("stats", () => void queryClient.invalidateQueries({ queryKey: ["stats"] }));
       socket.on("balance", () => {
         void queryClient.invalidateQueries({ queryKey: ["balance"] });
@@ -111,7 +112,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       });
       socket.on("notification", (e: { notification: NotificationView }) => {
         void queryClient.invalidateQueries({ queryKey: ["notifications"] });
-        if (e.notification.type === "deposit" || e.notification.type === "thesis_posted") toast(e.notification.message);
+        if (e.notification.type === "deposit" || e.notification.type === "thesis_posted" || e.notification.type === "thesis_position" || e.notification.type === "agent_action") toast(e.notification.message);
       });
       heartbeat = setInterval(() => socket?.emit("heartbeat"), 30_000);
     })();

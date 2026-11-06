@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { AppError, DexBusyError, GeckoBusyError, HttpError, appOrigins, env, logger, redis } from "@frontrun/server";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { ZodError } from "zod";
+import { registerAgentRoutes } from "./routes/agents";
 import { registerMarketRoutes } from "./routes/market";
 import { registerMeRoutes } from "./routes/me";
 import { registerSignerRoutes } from "./routes/signer";
@@ -92,6 +93,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registerMeRoutes(app);
   await registerMarketRoutes(app);
   await registerTradingRoutes(app);
+  await registerAgentRoutes(app);
   await registerSignerRoutes(app);
   await registerThesisRoutes(app);
   await registerSocialRoutes(app);

@@ -78,6 +78,10 @@ const schema = z.object({
 
   /** Reads the X tracker's accounts through TwitterAPI.io, billed per post read. While unset, that tab says it isn't connected. */
   TWITTERAPI_IO_KEY: optional,
+  /** One gateway for every AI agent's model, so agents can run on any provider or open-source model. */
+  OPENROUTER_API_KEY: optional,
+  /** Stops agents thinking for the day once their model bills reach this, across all of them. */
+  AGENT_DAILY_BUDGET_USD: z.coerce.number().min(0).default(10),
   /** Seconds between X tracker requests. Lower is fresher and costs more. Free accounts are limited to one every 5 seconds. */
   X_TRACKER_INTERVAL_SECONDS: z.coerce.number().min(5).default(20),
 
