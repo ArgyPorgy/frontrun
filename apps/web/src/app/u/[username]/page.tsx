@@ -110,10 +110,10 @@ export default function ProfilePage() {
           <Stat
             label="Thesis accuracy"
             value={p.stats.accuracy !== null ? formatPct(p.stats.accuracy, { sign: false }) : "—"}
-            sub={p.stats.resolved ? `${p.stats.right} of ${p.stats.resolved} right` : `${p.stats.theses} open`}
+            sub={p.stats.resolved ? `${p.stats.right} of ${p.stats.resolved} in profit` : `${p.stats.theses} open`}
           />
         </div>
-        <p className="mt-2 px-1 text-xs text-faint">Thesis accuracy is how often the price rose after posting. A thesis closes when its author sells out, at their sale price, or after 24 hours.</p>
+        <p className="mt-2 px-1 text-xs text-faint">Thesis accuracy is how often a thesis ended in a realized profit. A thesis closes when its author sells out, and stays open until then.</p>
       </section>
       <Segmented
         className="px-3 pb-1"

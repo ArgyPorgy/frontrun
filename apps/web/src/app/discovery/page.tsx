@@ -124,12 +124,12 @@ function HomeMobile() {
           value={tab}
           onChange={setTab}
           options={[
+            { value: "x", label: "X tracker" },
+            { value: "telegram", label: "TG tracker" },
             { value: "trending", label: "Trending" },
             { value: "new", label: "New" },
             { value: "top", label: "Top thesis" },
             { value: "following", label: "Following" },
-            { value: "x", label: "X tracker" },
-            { value: "telegram", label: "TG tracker" },
           ]}
         />
         {tab !== "x" && tab !== "telegram" && <PillFilter className="mt-2 px-4" value={chain} onChange={setChain} options={CHAIN_OPTIONS} />}

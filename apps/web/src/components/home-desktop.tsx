@@ -52,9 +52,9 @@ function SocialPanel() {
       <div className="flex shrink-0 gap-1 border-b border-line/60 px-2 pt-2" role="tablist" aria-label="Feed">
         {(
           [
-            { value: "thesis", label: "Thesis feed" },
             { value: "x", label: "X tracker" },
             { value: "telegram", label: "TG tracker" },
+            { value: "thesis", label: "Thesis feed" },
           ] as const
         ).map((f) => (
           <button

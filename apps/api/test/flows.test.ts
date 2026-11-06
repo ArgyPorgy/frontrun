@@ -28,7 +28,7 @@ vi.hoisted(() => {
   });
 });
 
-import { ApiClient, ApiError, THESIS_RESOLVE_HOURS, tokenKey, type ChainKey, type TokenSnapshot } from "@frontrun/core";
+import { ApiClient, ApiError, tokenKey, type ChainKey, type TokenSnapshot } from "@frontrun/core";
 import {
   DEX_BACKGROUND_PER_MINUTE,
   DexBusyError,
@@ -42,7 +42,7 @@ import {
   pollActiveTrades,
   publish,
   redis,
-  resolveDueTheses,
+  resolveClosedTheses,
   runMigrations,
   schema,
   statsChanged,
@@ -277,7 +277,7 @@ describe("orders", () => {
 });
 
 describe("closing a position", () => {
-  it("closes its thesis at the sale price, and counts toward accuracy", async () => {
+  it("closes its thesis on the sale, and counts toward accuracy", async () => {
     const { client } = await loginFunded("closer");
     await buy(client, TOKEN_A, "100");
     const thesis = await client.createThesis({ chain: "arc", address: TOKEN_A, body: "Closing this one out soon." });
@@ -853,50 +853,102 @@ describe("theses", () => {
 });
 
 describe("thesis outcomes and leaderboard", () => {
-  async function postAndAge(client: ApiClient, n: number) {
-    for (let i = 0; i < n; i++) await client.createThesis({ chain: "arc", address: TOKEN_A, body: `call ${i}` });
-    await db()
-      .update(schema.theses)
-      .set({ ts: new Date(Date.now() - (THESIS_RESOLVE_HOURS + 1) * 3_600_000) })
-      .where(eq(schema.theses.outcome, "pending"));
+  /** One closed thesis: bought at the current price, posted, then sold out at this one. */
+  async function closeOne(client: ApiClient, buyAt: string, sellAt: string) {
+    await setPrice("arc", TOKEN_A, buyAt);
+    await buy(client, TOKEN_A, "100");
+    const thesis = await client.createThesis({ chain: "arc", address: TOKEN_A, body: `call at ${buyAt}` });
+    await setPrice("arc", TOKEN_A, sellAt);
+    await sell(client, TOKEN_A, 100);
+    return client.thesis(thesis.id);
   }
 
-  it("resolves at the deadline and ranks by accuracy, needing 5 resolved", async () => {
+  it("ranks on realized profit, needing 5 closed theses", async () => {
     const good = await loginFunded("goodcaller");
     const few = await loginFunded("fewcalls");
-    await buy(good.client, TOKEN_A, "100");
-    await buy(few.client, TOKEN_A, "100");
-    await postAndAge(good.client, 5);
-    await postAndAge(few.client, 2);
-
-    await setPrice("arc", TOKEN_A, "3");
-    expect(await resolveDueTheses()).toBe(7);
+    for (let i = 0; i < 5; i++) await closeOne(good.client, "2", "3");
+    for (let i = 0; i < 2; i++) await closeOne(few.client, "2", "3");
 
     const list = await good.client.theses({ username: "goodcaller" });
+    expect(list.items).toHaveLength(5);
     expect(list.items.every((t) => t.outcome === "right")).toBe(true);
-    expect(list.items[0]!.returnPct).toBe(50);
 
     const board = await new ApiClient({ baseUrl }).leaderboard();
     expect(board.minResolved).toBe(5);
     expect(board.items.map((r) => r.user.username)).toEqual(["goodcaller"]);
     expect(board.items[0]!.accuracy).toBe(100);
+    expect(Number(board.items[0]!.realizedPnlUsd)).toBeGreaterThan(0);
 
     const profile = await new ApiClient({ baseUrl }).profile("goodcaller");
     expect(profile.stats.accuracy).toBe(100);
     expect(profile.stats.right).toBe(5);
-
-    // The judged return stays fixed even when the price moves later.
-    await setPrice("arc", TOKEN_A, "1");
-    expect((await good.client.theses({ username: "goodcaller" })).items[0]!.returnPct).toBe(50);
   });
 
-  it("marks a falling token wrong", async () => {
-    const { client } = await loginFunded("wrongcaller");
+  it("judges on the money made, not the price since posting", async () => {
+    const { client } = await loginFunded("realcaller");
+    await setPrice("arc", TOKEN_A, "2");
     await buy(client, TOKEN_A, "100");
-    await postAndAge(client, 1);
+    // Posted high: the price then falls from here, but the sale is still above what they paid.
+    await setPrice("arc", TOKEN_A, "4");
+    const thesis = await client.createThesis({ chain: "arc", address: TOKEN_A, body: "Still going up." });
+    await setPrice("arc", TOKEN_A, "3");
+    const { trade } = await sell(client, TOKEN_A, 100);
+    const after = await client.thesis(thesis.id);
+    expect(after.outcome).toBe("right");
+    const pnl = Number(trade.pnlUsd);
+    expect(pnl).toBeGreaterThan(0);
+    expect(after.returnPct).toBeCloseTo((pnl / (Number(trade.usdOut) - pnl)) * 100, 4);
+
+    // What it was judged on stays fixed when the price moves later.
     await setPrice("arc", TOKEN_A, "1");
-    await resolveDueTheses();
-    expect((await client.theses({ username: "wrongcaller" })).items[0]!.outcome).toBe("wrong");
+    expect((await client.thesis(thesis.id)).returnPct).toBe(after.returnPct);
+  });
+
+  it("marks a sale at a loss wrong, even if the price rose after posting", async () => {
+    const { client } = await loginFunded("wrongcaller");
+    await setPrice("arc", TOKEN_A, "4");
+    await buy(client, TOKEN_A, "100");
+    await setPrice("arc", TOKEN_A, "1");
+    const thesis = await client.createThesis({ chain: "arc", address: TOKEN_A, body: "Bottom is in." });
+    await setPrice("arc", TOKEN_A, "2");
+    await sell(client, TOKEN_A, 100);
+    expect((await client.thesis(thesis.id)).outcome).toBe("wrong");
+  });
+
+  it("never closes a thesis on a timer while the position is open", async () => {
+    const { client } = await loginFunded("holdforever");
+    await buy(client, TOKEN_A, "100");
+    const thesis = await client.createThesis({ chain: "arc", address: TOKEN_A, body: "Holding this." });
+    await db().update(schema.theses).set({ ts: new Date(Date.now() - 30 * 86_400_000) }).where(eq(schema.theses.id, thesis.id));
+    await setPrice("arc", TOKEN_A, "5");
+    await resolveClosedTheses();
+    expect((await client.thesis(thesis.id)).outcome).toBe("pending");
+    expect((await client.profile((await client.me()).username)).stats.resolved).toBe(0);
+  });
+
+  it("leaves a thesis open when the position left with no sale, since nothing was realized", async () => {
+    const { client } = await loginFunded("movedout");
+    await buy(client, TOKEN_A, "100");
+    const thesis = await client.createThesis({ chain: "arc", address: TOKEN_A, body: "Moving these elsewhere." });
+    await db().update(schema.positions).set({ qty: "0", closedAt: new Date(Date.now() + 1000) }).where(eq(schema.positions.tokenAddr, TOKEN_A));
+    await resolveClosedTheses();
+    expect((await client.thesis(thesis.id)).outcome).toBe("pending");
+  });
+
+  it("doesn't count a thesis from someone who never held", async () => {
+    const { client } = await login("tourist2");
+    const thesis = await client.createThesis({ chain: "arc", address: TOKEN_A, body: "Looks fun." });
+    await resolveClosedTheses();
+    expect((await client.thesis(thesis.id)).outcome).toBe("pending");
+  });
+
+  it("scores a thesis on its own position, not a later one in the same token", async () => {
+    const { client } = await loginFunded("twotimes");
+    const loser = await closeOne(client, "4", "2");
+    expect(loser.outcome).toBe("wrong");
+    const winner = await closeOne(client, "2", "4");
+    expect(winner.outcome).toBe("right");
+    expect((await client.thesis(loser.id)).outcome).toBe("wrong");
   });
 });
 

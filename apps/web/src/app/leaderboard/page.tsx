@@ -10,9 +10,9 @@ export default function LeaderboardPage() {
   const query = useQuery({ queryKey: ["leaderboard"], queryFn: () => api.leaderboard(), refetchInterval: 60_000 });
   return (
     <div>
-      <PageTitle>Accuracy leaderboard</PageTitle>
+      <PageTitle>Reputation Score Leaderboard</PageTitle>
       <p className="px-4 pb-3 text-sm text-muted">
-        Ranked by how often a verified thesis called it, at the author's sale price or 24 hours later, not by who has the most money. Takes {query.data?.minResolved ?? 5} resolved theses to qualify.
+        Ranked by how often a verified thesis ended in a realized profit, not by who has the most money. A thesis only counts once its author has sold out. Takes {query.data?.minResolved ?? 5} closed theses to qualify.
       </p>
       {query.isLoading ? (
         <RowSkeletons />
@@ -26,7 +26,7 @@ export default function LeaderboardPage() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold">{row.user.username}</p>
                   <p className="num text-xs text-muted">
-                    {row.right} of {row.resolved} right · avg <Pct value={row.avgReturnPct} />
+                    {row.right} of {row.resolved} in profit · avg <Pct value={row.avgReturnPct} />
                   </p>
                 </div>
                 <div className="text-right">
@@ -38,7 +38,7 @@ export default function LeaderboardPage() {
           ))}
         </ol>
       ) : (
-        <EmptyState title="No one has qualified yet" body="A thesis closes when its author sells out, or 24 hours after posting, so the board fills up as they do." />
+        <EmptyState title="No one has qualified yet" body="A thesis closes when its author sells out, so the board fills up as they do." />
       )}
     </div>
   );

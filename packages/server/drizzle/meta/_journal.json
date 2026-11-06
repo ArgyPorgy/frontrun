@@ -50,6 +50,13 @@
       "when": 1793929756184,
       "tag": "0006_curvy_sleeper",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793956000000,
+      "tag": "0007_theses_on_realized_pnl",
+      "breakpoints": true
     }
   ]
 }

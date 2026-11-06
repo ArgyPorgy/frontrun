@@ -5,7 +5,6 @@ import {
   LEADERBOARD_MIN_RESOLVED,
   NEW_ACCOUNT_HOURS,
   REPLY_MAX_LENGTH,
-  THESIS_RESOLVE_HOURS,
   VERIFIED_MIN_USD,
   averageEntry,
   checkBody,
@@ -21,7 +20,7 @@ import {
   type ThesisView,
   type TokenRef,
 } from "@frontrun/core";
-import { and, asc, desc, eq, gte, inArray, isNull, lt, notInArray, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { db, schema } from "./db/client";
 import { AppError, badRequest, forbidden, notFound, unprocessable } from "./errors";
 import { logger } from "./logger";
@@ -391,7 +390,7 @@ export async function report(
   }
 }
 
-/** Accuracy is the headline, not PnL: being right matters more here than being big. */
+/** How often a thesis ended in a realized profit is the headline, not the size of it: being right matters more here than being big. */
 export async function leaderboard(limit = 50): Promise<LeaderboardRow[]> {
   const realized = db()
     .select({
@@ -436,73 +435,54 @@ export async function leaderboard(limit = 50): Promise<LeaderboardRow[]> {
   }));
 }
 
-/** Worker: judges theses that have reached their resolve time. */
-export async function resolveDueTheses(limit = 100): Promise<number> {
-  const cutoff = new Date(Date.now() - THESIS_RESOLVE_HOURS * 3_600_000);
-  const due = await db()
-    .select()
-    .from(schema.theses)
-    .where(and(eq(schema.theses.outcome, "pending"), isNull(schema.theses.deletedAt), lt(schema.theses.ts, cutoff)))
-    .orderBy(asc(schema.theses.ts))
-    .limit(limit);
-  for (const thesis of due) {
-    const snap = await getSnapshot(thesis.tokenChain as ChainKey, thesis.tokenAddr).catch(() => null);
-    if (!snap?.priceUsd) continue;
-    await db()
-      .update(schema.theses)
-      .set({
-        outcome: resolveOutcome(thesis.priceAtPost, snap.priceUsd),
-        priceAtResolve: snap.priceUsd,
-        returnPct: returnSincePost(thesis.priceAtPost, snap.priceUsd),
-        resolvedAt: new Date(),
-      })
-      .where(eq(schema.theses.id, thesis.id));
-  }
-  return due.length;
-}
-
 /**
- * A thesis also ends when its author sells out, at the price they got. It's what they actually did with
- * the call, and it means a closed trade never leaves a thesis showing as open. This finds them from the
- * positions, so it also catches a position that closed outside the app.
+ * A thesis ends when the position it was posted on is sold out, and it's judged on the profit its author
+ * realized on that position. Until then it stays open: there's no timer, and a price move alone never
+ * counts. A position that left the wallet with no sale has realized nothing, so its thesis stays open too.
  */
 export async function resolveClosedTheses(opts: { userId?: string; limit?: number } = {}): Promise<number> {
   const open = await db()
-    .select()
+    .select({ id: schema.theses.id, userId: schema.theses.userId, chain: schema.theses.tokenChain, address: schema.theses.tokenAddr, openedAt: schema.positions.openedAt, closedAt: schema.positions.closedAt })
     .from(schema.theses)
-    .where(
+    .innerJoin(
+      schema.positions,
       and(
-        eq(schema.theses.outcome, "pending"),
-        eq(schema.theses.verified, true),
-        isNull(schema.theses.deletedAt),
-        opts.userId ? eq(schema.theses.userId, opts.userId) : undefined,
-        sql`not exists (
-          select 1 from positions p
-          where p.user_id = ${schema.theses.userId} and p.token_chain = ${schema.theses.tokenChain}
-            and p.token_addr = ${schema.theses.tokenAddr} and p.closed_at is null
-        )`,
+        eq(schema.positions.userId, schema.theses.userId),
+        eq(schema.positions.tokenChain, schema.theses.tokenChain),
+        eq(schema.positions.tokenAddr, schema.theses.tokenAddr),
+        lte(schema.positions.openedAt, schema.theses.ts),
+        gt(schema.positions.closedAt, schema.theses.ts),
       ),
     )
+    .where(and(eq(schema.theses.outcome, "pending"), eq(schema.theses.verified, true), isNull(schema.theses.deletedAt), opts.userId ? eq(schema.theses.userId, opts.userId) : undefined))
     .limit(opts.limit ?? 100);
   for (const thesis of open) {
-    const sale = await db().query.trades.findFirst({
-      where: and(
-        eq(schema.trades.userId, thesis.userId),
-        eq(schema.trades.tokenChain, thesis.tokenChain),
-        eq(schema.trades.tokenAddr, thesis.tokenAddr),
-        eq(schema.trades.side, "sell"),
-        eq(schema.trades.status, "filled"),
-      ),
-      orderBy: desc(schema.trades.filledAt),
-    });
-    const price = sale?.priceUsd ?? (await getSnapshot(thesis.tokenChain as ChainKey, thesis.tokenAddr).catch(() => null))?.priceUsd;
-    if (!price) continue;
+    const [sold] = await db()
+      .select({
+        pnl: sql<string | null>`sum(${schema.trades.pnlUsd})`,
+        usdOut: sql<string | null>`sum(${schema.trades.usdOut})`,
+        qty: sql<string | null>`sum(${schema.trades.qty})`,
+      })
+      .from(schema.trades)
+      .where(
+        and(
+          eq(schema.trades.userId, thesis.userId),
+          eq(schema.trades.tokenChain, thesis.chain),
+          eq(schema.trades.tokenAddr, thesis.address),
+          eq(schema.trades.side, "sell"),
+          eq(schema.trades.status, "filled"),
+          gte(schema.trades.createdAt, thesis.openedAt),
+          lte(schema.trades.filledAt, thesis.closedAt!),
+        ),
+      );
+    if (!sold?.pnl || !sold.usdOut || !sold.qty) continue;
+    const cost = D(sold.usdOut).sub(sold.pnl);
     await db()
       .update(schema.theses)
       .set({
-        outcome: resolveOutcome(thesis.priceAtPost, price),
-        priceAtResolve: price,
-        returnPct: returnSincePost(thesis.priceAtPost, price),
+        outcome: resolveOutcome(sold.pnl),
+        priceAtResolve: D(sold.usdOut).div(sold.qty).toFixed(),
+        returnPct: cost.gt(0) ? D(sold.pnl).div(cost).mul(100).toNumber() : 0,
         resolvedAt: new Date(),
       })
       .where(eq(schema.theses.id, thesis.id));

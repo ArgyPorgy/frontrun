@@ -40,7 +40,6 @@ import {
   refreshMarketList,
   refreshRankScores,
   resolveClosedTheses,
-  resolveDueTheses,
   runMigrations,
   schema,
   snapshotToTick,
@@ -212,10 +211,7 @@ async function main() {
   every("orders-watch", 3_000, () => checkWatchedOrders(), { leaseMs: 2 * 60_000 });
   every("orders-flash", 15_000, () => pollFlashOrders(), { leaseMs: 2 * 60_000 });
   every("reconcile", 5 * 60_000, () => reconcilePositions(), { leaseMs: 10 * 60_000 });
-  every("thesis-resolve", 60_000, async () => {
-    await resolveDueTheses();
-    await resolveClosedTheses();
-  });
+  every("thesis-resolve", 60_000, () => resolveClosedTheses());
   every("thesis-rank", 5 * 60_000, refreshRankScores);
   every("moderation", 60_000, moderate);
   // A long lease, since a batch waits on several receipts. Theses share the relayer's nonce.

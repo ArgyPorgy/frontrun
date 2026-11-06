@@ -5,9 +5,7 @@ export const REPLY_MAX_LENGTH = 280;
 export const POSITION_TIERS = [50, 100, 500, 1000] as const;
 export type PositionTier = (typeof POSITION_TIERS)[number];
 
-/** A thesis resolves this long after posting; accuracy is measured at that point. */
-export const THESIS_RESOLVE_HOURS = 24;
-/** Authors need this many resolved theses before they rank on the accuracy leaderboard. */
+/** Authors need this many closed theses before they rank on the reputation leaderboard. */
 export const LEADERBOARD_MIN_RESOLVED = 5;
 /** Smallest position that earns the verified-holder badge. */
 export const VERIFIED_MIN_USD = 1;
@@ -100,9 +98,9 @@ export function returnSincePost(priceAtPost: Numeric, price: Numeric): number {
   return D(price).sub(entry).div(entry).mul(100).toNumber();
 }
 
-/** A thesis is right if the token trades above the post price at the resolve time. */
-export function resolveOutcome(priceAtPost: Numeric, priceAtResolve: Numeric): Exclude<ThesisOutcome, "pending"> {
-  return D(priceAtResolve).gt(priceAtPost) ? "right" : "wrong";
+/** A thesis is right if its author actually made money when they sold out. Nothing else counts. */
+export function resolveOutcome(realizedPnlUsd: Numeric): Exclude<ThesisOutcome, "pending"> {
+  return D(realizedPnlUsd).gt(0) ? "right" : "wrong";
 }
 
 export function accuracyPct(right: number, resolved: number): number | null {

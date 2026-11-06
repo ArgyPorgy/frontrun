@@ -69,7 +69,7 @@ export function ThesisFeed({ tab, chain, showLeaderboard = true }: { tab: "top" 
     <div>
       {tab === "top" && showLeaderboard && (
         <Link href="/leaderboard" className="mx-4 mt-3 flex items-center justify-between rounded-xl bg-raised px-3 py-2.5 text-sm">
-          <span className="font-medium">Accuracy leaderboard</span>
+          <span className="font-medium">Reputation Score Leaderboard</span>
           <span className="text-muted">Who&apos;s actually right →</span>
         </Link>
       )}

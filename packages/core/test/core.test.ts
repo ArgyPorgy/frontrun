@@ -168,10 +168,10 @@ describe("thesis scoring", () => {
     expect(positionTier(499.99)).toBe(100);
     expect(positionTier(5000)).toBe(1000);
   });
-  it("resolves right only when above the post price", () => {
-    expect(resolveOutcome(1, 1.01)).toBe("right");
-    expect(resolveOutcome(1, 1)).toBe("wrong");
-    expect(resolveOutcome(1, 0.5)).toBe("wrong");
+  it("resolves right only on a realized profit", () => {
+    expect(resolveOutcome("0.01")).toBe("right");
+    expect(resolveOutcome(0)).toBe("wrong");
+    expect(resolveOutcome("-3")).toBe("wrong");
   });
   it("computes returns and accuracy", () => {
     expect(returnSincePost(2, 3)).toBe(50);
