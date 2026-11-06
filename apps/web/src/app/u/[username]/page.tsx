@@ -81,7 +81,7 @@ export default function ProfilePage() {
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-xl font-semibold tracking-tight">{p.username}</h1>
             <p className="num text-sm text-muted">
-              {p.followers} followers · {p.following} following
+              {p.stats.trades} trades · {p.followers} followers · {p.following} following
             </p>
           </div>
           {p.isMe ? (

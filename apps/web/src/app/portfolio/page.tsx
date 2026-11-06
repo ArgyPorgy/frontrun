@@ -139,7 +139,7 @@ export default function PortfolioPage() {
             ))}
           </div>
         ) : (
-          <EmptyState title="No open positions" body="Find a token you believe in and buy it in one tap." action={<LinkButton href="/">Browse trending</LinkButton>} />
+          <EmptyState title="No open positions" body="Find a token you believe in and buy it in one tap." action={<LinkButton href="/discovery">Browse trending</LinkButton>} />
         )
       ) : query.data.closed.length ? (
         <div className="divide-y divide-line/60">

@@ -37,7 +37,9 @@ export function ThesisFeed({ tab, chain, showLeaderboard = true }: { tab: "top" 
   useEffect(
     () =>
       onThesis((t) => {
-        if (tab !== "following" && t.verified && (chain === "all" || t.token.chain === chain)) {
+        // Every new thesis surfaces live on the non-following feeds, verified or not, so a freshly
+        // published one is visible at once (matching what the feed query now returns).
+        if (tab !== "following" && (chain === "all" || t.token.chain === chain)) {
           setExtra((list) => (list.some((x) => x.id === t.id) ? list : [t, ...list].slice(0, 20)));
         }
       }),

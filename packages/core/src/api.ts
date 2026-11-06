@@ -26,6 +26,7 @@ import type {
   Timeframe,
   TokenDetail,
   TokenListItem,
+  TraderResult,
   TradeView,
 } from "./types";
 
@@ -95,6 +96,7 @@ export class ApiClient {
     this.request<{ items: TokenListItem[]; attribution: string }>("GET", "/v1/market/tokens", { query });
   search = (q: string, chain?: ChainKey) =>
     this.request<{ items: TokenListItem[] }>("GET", "/v1/market/search", { query: { q, chain } });
+  searchUsers = (q: string) => this.request<{ items: TraderResult[] }>("GET", "/v1/users/search", { query: { q } });
   token = (chain: ChainKey, address: string) => this.request<TokenDetail>("GET", `/v1/tokens/${chain}/${address}`);
   candles = (chain: ChainKey, address: string, tf: Timeframe) =>
     this.request<{ candles: Candle[]; attribution: string }>("GET", `/v1/tokens/${chain}/${address}/candles`, { query: { tf } });

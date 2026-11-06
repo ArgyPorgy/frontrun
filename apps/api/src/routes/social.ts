@@ -10,6 +10,7 @@ import {
   notFound,
   notify,
   publicPositions,
+  searchUsers,
   unblock,
   unfollow,
 } from "@frontrun/server";
@@ -20,6 +21,12 @@ import { optionalUser, requireUser } from "../auth";
 const usernameParam = z.object({ username: z.string().min(1).max(32) });
 
 export async function registerSocialRoutes(app: FastifyInstance) {
+  // Static route first, so it's never swallowed by the "/:username" parametric route below.
+  app.get("/v1/users/search", { config: { rateLimit: { max: 120, timeWindow: "1 minute" } } }, async (req) => {
+    const { q } = z.object({ q: z.string().min(1).max(32) }).parse(req.query);
+    return { items: await searchUsers(q) };
+  });
+
   app.get("/v1/users/:username", async (req) => {
     const viewer = await optionalUser(req);
     const { username } = usernameParam.parse(req.params);

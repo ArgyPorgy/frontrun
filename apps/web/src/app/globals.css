@@ -16,6 +16,7 @@
 
   --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: var(--font-space-grotesk), var(--font-geist), ui-sans-serif, system-ui, sans-serif;
 
   --radius-card: 16px;
 
@@ -25,6 +26,8 @@
   --animate-toast: toast-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
   --animate-tape: tape 60s linear infinite;
   --animate-shimmer: shimmer 1.4s ease-in-out infinite;
+  --animate-float: float 8s ease-in-out infinite;
+  --animate-rise: rise 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 
   @keyframes flash-up {
     0% { color: var(--color-up); }
@@ -50,6 +53,30 @@
     0%, 100% { opacity: 0.5; }
     50% { opacity: 1; }
   }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-14px); }
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+/* Cosmic backdrop for the marketing landing: a drifting starfield painted with layered
+   radial gradients, so it needs no image asset and stays within the img/font CSP. */
+.starfield {
+  background-image:
+    radial-gradient(1.5px 1.5px at 18% 32%, rgba(241, 244, 239, 0.9), transparent),
+    radial-gradient(1.5px 1.5px at 72% 18%, rgba(241, 244, 239, 0.7), transparent),
+    radial-gradient(1px 1px at 44% 64%, rgba(241, 244, 239, 0.8), transparent),
+    radial-gradient(1px 1px at 88% 52%, rgba(200, 241, 53, 0.7), transparent),
+    radial-gradient(1.5px 1.5px at 28% 82%, rgba(241, 244, 239, 0.6), transparent),
+    radial-gradient(1px 1px at 62% 88%, rgba(155, 176, 255, 0.7), transparent),
+    radial-gradient(1px 1px at 8% 60%, rgba(241, 244, 239, 0.6), transparent),
+    radial-gradient(1.5px 1.5px at 94% 78%, rgba(241, 244, 239, 0.5), transparent);
+  background-repeat: repeat;
+  background-size: 420px 420px;
 }
 
 html {

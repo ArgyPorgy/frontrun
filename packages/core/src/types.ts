@@ -213,6 +213,7 @@ export interface ProfileView extends UserSummary {
     allTimePnlUsd: string;
     realizedUsd: string;
     winRate: number | null;
+    trades: number;
     theses: number;
     resolved: number;
     right: number;
@@ -227,6 +228,15 @@ export interface LeaderboardRow {
   resolved: number;
   right: number;
   avgReturnPct: number;
+  realizedPnlUsd: string;
+}
+
+/** A trader profile preview for search results: the headline activity, straight from the DB. */
+export interface TraderResult extends UserSummary {
+  trades: number;
+  theses: number;
+  followers: number;
+  accuracy: number | null;
   realizedPnlUsd: string;
 }
 

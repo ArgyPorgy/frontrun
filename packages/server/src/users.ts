@@ -16,10 +16,11 @@ import {
   type PortfolioView,
   type PositionView,
   type ProfileView,
+  type TraderResult,
   type UserSummary,
   type WalletView,
 } from "@frontrun/core";
-import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db, schema } from "./db/client";
 import { env } from "./env";
 import { conflict, notFound } from "./errors";
@@ -133,6 +134,81 @@ export async function findByUsername(username: string): Promise<UserRow | undefi
   return db().query.users.findFirst({ where: sql`lower(${schema.users.username}) = ${username.toLowerCase()}` });
 }
 
+/**
+ * Finds trader profiles by username for the search bar, each with the headline activity that makes it
+ * a real preview — filled trades, theses, followers, thesis accuracy and realized PnL. Case-insensitive
+ * substring match over real (username-set), non-banned accounts; exact and prefix matches rank first.
+ * Stats come from a handful of grouped aggregates over the matched ids, so there's no per-row fan-out.
+ */
+export async function searchUsers(query: string, limit = 8): Promise<TraderResult[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  // Escape LIKE wildcards in the user's text so "%" or "_" can't widen the match.
+  const term = q.replace(/[\\%_]/g, "\\$&");
+  const matched = await db()
+    .select({ id: schema.users.id, username: schema.users.username, avatarUrl: schema.users.avatarUrl })
+    .from(schema.users)
+    .where(
+      and(
+        eq(schema.users.isBanned, false),
+        eq(schema.users.usernameSet, true),
+        sql`lower(${schema.users.username}) like lower(${`%${term}%`})`,
+      ),
+    )
+    .orderBy(
+      sql`case when lower(${schema.users.username}) = lower(${q}) then 0 when lower(${schema.users.username}) like lower(${`${term}%`}) then 1 else 2 end`,
+      sql`length(${schema.users.username})`,
+    )
+    .limit(limit);
+  if (!matched.length) return [];
+
+  const ids = matched.map((u) => u.id);
+  const [tradeRows, thesisRows, followerRows, pnlRows] = await Promise.all([
+    db()
+      .select({ userId: schema.trades.userId, n: sql<number>`count(*) filter (where ${schema.trades.status} = 'filled')::int` })
+      .from(schema.trades)
+      .where(inArray(schema.trades.userId, ids))
+      .groupBy(schema.trades.userId),
+    db()
+      .select({
+        userId: schema.theses.userId,
+        n: sql<number>`count(*)::int`,
+        right: sql<number>`count(*) filter (where ${schema.theses.outcome} = 'right')::int`,
+        resolved: sql<number>`count(*) filter (where ${schema.theses.outcome} <> 'pending')::int`,
+      })
+      .from(schema.theses)
+      .where(and(inArray(schema.theses.userId, ids), isNull(schema.theses.deletedAt)))
+      .groupBy(schema.theses.userId),
+    db()
+      .select({ followeeId: schema.follows.followeeId, n: sql<number>`count(*)::int` })
+      .from(schema.follows)
+      .where(inArray(schema.follows.followeeId, ids))
+      .groupBy(schema.follows.followeeId),
+    db()
+      .select({ userId: schema.positions.userId, pnl: sql<string>`coalesce(sum(${schema.positions.realizedPnlUsd}), 0)` })
+      .from(schema.positions)
+      .where(inArray(schema.positions.userId, ids))
+      .groupBy(schema.positions.userId),
+  ]);
+
+  const trades = new Map(tradeRows.map((r) => [r.userId, r.n]));
+  const theses = new Map(thesisRows.map((r) => [r.userId, r]));
+  const followers = new Map(followerRows.map((r) => [r.followeeId, r.n]));
+  const pnl = new Map(pnlRows.map((r) => [r.userId, r.pnl]));
+
+  return matched.map((u) => {
+    const t = theses.get(u.id);
+    return {
+      ...toSummary(u),
+      trades: trades.get(u.id) ?? 0,
+      theses: t?.n ?? 0,
+      followers: followers.get(u.id) ?? 0,
+      accuracy: accuracyPct(t?.right ?? 0, t?.resolved ?? 0),
+      realizedPnlUsd: D(pnl.get(u.id) ?? "0").toFixed(),
+    };
+  });
+}
+
 async function positionToView(row: typeof schema.positions.$inferSelect, price: string | null): Promise<PositionView> {
   const token = await tokenRefFor(row.tokenChain, row.tokenAddr);
   const state = { qty: row.qty, costBasisUsd: row.costBasisUsd, realizedPnlUsd: row.realizedPnlUsd };
@@ -233,6 +309,10 @@ export async function buildProfile(username: string, viewerId: string | null): P
     })
     .from(schema.theses)
     .where(and(eq(schema.theses.userId, user.id), isNull(schema.theses.deletedAt)));
+  const [trades] = await db()
+    .select({ n: sql<number>`count(*) filter (where ${schema.trades.status} = 'filled')::int` })
+    .from(schema.trades)
+    .where(eq(schema.trades.userId, user.id));
   const counts = await followCounts(user.id);
   let isFollowing = false;
   let isBlocked = false;
@@ -251,6 +331,7 @@ export async function buildProfile(username: string, viewerId: string | null): P
       allTimePnlUsd: totals.allTimeUsd,
       realizedUsd: totals.realizedUsd,
       winRate: winRate(closedRows.map((r) => r.realizedPnlUsd)),
+      trades: trades?.n ?? 0,
       theses: stats?.theses ?? 0,
       resolved: stats?.resolved ?? 0,
       right: stats?.right ?? 0,

@@ -15,7 +15,7 @@ import {
 } from "@frontrun/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, APP_URL, errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useMe } from "@/lib/hooks";
@@ -71,6 +71,13 @@ export function ThesisCard({
   const [likes, setLikes] = useState(thesis.likeCount);
   const [menu, setMenu] = useState(false);
 
+  // Re-sync to the server's values whenever the feed refetches this thesis, so the count stays
+  // correct (and keeps a like made elsewhere, or by someone else) instead of freezing at mount.
+  useEffect(() => {
+    setLiked(thesis.likedByMe);
+    setLikes(thesis.likeCount);
+  }, [thesis.id, thesis.likedByMe, thesis.likeCount]);
+
   const toggleLike = useMutation({
     mutationFn: () => (liked ? api.unlikeThesis(thesis.id) : api.likeThesis(thesis.id)),
     onMutate: () => {
@@ -81,6 +88,12 @@ export function ThesisCard({
       setLiked(liked);
       setLikes(likes);
       toast(errorMessage(err), { tone: "bad" });
+    },
+    onSettled: () => {
+      // Pull the authoritative count/flag back from the server once the write lands, so the
+      // optimistic value can't drift and navigating back (or a refresh) shows the same number.
+      // This prefix covers the feed, the single-thesis view and profiles alike.
+      void queryClient.invalidateQueries({ queryKey: ["theses"] });
     },
   });
 
@@ -268,7 +281,7 @@ export function ThesisComposer({
       />
       <div className="mt-1 flex items-center justify-between text-xs">
         <span className={held ? "text-signal" : "text-muted"}>
-          {held ? `Verified holder: ${formatCompactUsd(held.valueUsd)} position` : "You don't hold this, so it won't show in the default feed"}
+          {held ? `Verified holder: ${formatCompactUsd(held.valueUsd)} position` : "You don't hold this, so it posts without the verified badge"}
         </span>
         <span className={`num ${body.length > THESIS_MAX_LENGTH ? "text-down" : "text-faint"}`}>
           {body.length}/{THESIS_MAX_LENGTH}

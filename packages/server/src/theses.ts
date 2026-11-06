@@ -201,8 +201,9 @@ export async function listTheses(input: ListThesesInput, viewerId: string | null
   if (hiddenAuthors.length) conditions.push(notInArray(schema.theses.userId, hiddenAuthors));
   if (input.username) conditions.push(sql`lower(${schema.users.username}) = ${input.username.toLowerCase()}`);
 
-  // Feeds default to verified holders. Profiles and an explicit opt-in show everything.
-  if (!input.includeUnverified && !input.username) conditions.push(eq(schema.theses.verified, true));
+  // Every published thesis is visible in the feed. The verified badge and rank weighting still mark
+  // out holders, and deleted/hidden/banned content is already filtered above, so unverified posts
+  // show up (ranked lower) rather than vanishing.
 
   if (input.tab === "following") {
     if (!viewerId) return { items: [], nextCursor: null };

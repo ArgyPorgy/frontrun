@@ -63,7 +63,7 @@ function Icon({ name, active }: { name: IconName; active?: boolean }) {
 }
 
 const TABS: Array<{ href: string; label: string; icon: IconName; match: (p: string) => boolean }> = [
-  { href: "/", label: "Trending", icon: "trending", match: (p) => p === "/" || p.startsWith("/token") || p.startsWith("/thesis") || p.startsWith("/leaderboard") },
+  { href: "/discovery", label: "Trending", icon: "trending", match: (p) => p === "/discovery" || p.startsWith("/token") || p.startsWith("/thesis") || p.startsWith("/leaderboard") },
   { href: "/search", label: "Search", icon: "search", match: (p) => p.startsWith("/search") },
   { href: "/portfolio", label: "Portfolio", icon: "portfolio", match: (p) => p.startsWith("/portfolio") || p.startsWith("/deposit") },
   { href: "/analytics", label: "Analytics", icon: "analytics", match: (p) => p.startsWith("/analytics") },
@@ -99,7 +99,7 @@ function TabBar() {
 }
 
 const WIDE_NAV: Array<{ href: string; label: string; match: (p: string) => boolean }> = [
-  { href: "/", label: "Discover", match: (p) => p === "/" || p.startsWith("/token") || p.startsWith("/thesis") },
+  { href: "/discovery", label: "Discover", match: (p) => p === "/discovery" || p.startsWith("/token") || p.startsWith("/thesis") },
   { href: "/portfolio", label: "Portfolio", match: (p) => p.startsWith("/portfolio") },
   { href: "/leaderboard", label: "Leaderboard", match: (p) => p.startsWith("/leaderboard") },
   { href: "/analytics", label: "Analytics", match: (p) => p.startsWith("/analytics") },
@@ -107,7 +107,7 @@ const WIDE_NAV: Array<{ href: string; label: string; match: (p: string) => boole
 
 function Logo() {
   return (
-    <Link href="/" className="hidden shrink-0 items-center gap-2 md:flex" aria-label={APP_NAME}>
+    <Link href="/discovery" className="hidden shrink-0 items-center gap-2 md:flex" aria-label={APP_NAME}>
       <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden className="text-signal">
         <path fill="currentColor" d="M13.5 2 4 13.5h6.2L9 22l10-12.5h-6.4L13.5 2Z" />
       </svg>
@@ -166,7 +166,7 @@ function TopBar() {
         </nav>
         <Link href="/search" className="flex h-9 flex-1 items-center gap-2 rounded-xl bg-surface px-3 text-sm text-faint md:h-10">
           <Icon name="search" />
-          <span className="truncate">Search any token</span>
+          <span className="truncate">Search tokens, CA, traders</span>
         </Link>
         <WalletPills />
         {status === "in" ? (
@@ -280,8 +280,11 @@ function ArcStudioBadge() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  // The front page runs edge to edge on a wide screen, with its own columns.
-  const wideHome = pathname === "/";
+  // The marketing landing owns the whole screen with its own header and footer, so the app
+  // chrome steps aside there. Everything else gets the standard shell.
+  if (pathname === "/") return <>{children}</>;
+  // The discovery page runs edge to edge on a wide screen, with its own columns.
+  const wideHome = pathname === "/discovery";
   return (
     <div className="min-h-dvh">
       <TabBar />

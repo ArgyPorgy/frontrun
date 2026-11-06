@@ -663,13 +663,15 @@ describe("theses", () => {
     expect(thesis.outcome).toBe("pending");
   });
 
-  it("keeps non-holders out of the default feed but on the chart and profile", async () => {
+  it("shows a non-holder's thesis in the feed, without the verified badge", async () => {
     const { client } = await login("tourist");
     const thesis = await client.createThesis({ chain: "arc", address: TOKEN_A, body: "Looks fun." });
     expect(thesis.verified).toBe(false);
     const anon = new ApiClient({ baseUrl });
-    expect((await anon.theses({ tab: "recent" })).items).toHaveLength(0);
-    expect((await anon.theses({ tab: "recent", includeUnverified: true })).items).toHaveLength(1);
+    // Every published thesis appears in the feed now; being a non-holder only costs the verified badge.
+    const feed = await anon.theses({ tab: "recent" });
+    expect(feed.items).toHaveLength(1);
+    expect(feed.items[0]!.verified).toBe(false);
     expect((await anon.theses({ username: "tourist" })).items).toHaveLength(1);
   });
 

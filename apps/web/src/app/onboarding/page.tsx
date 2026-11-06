@@ -110,7 +110,7 @@ function OneTapStep() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["me"] });
-      router.replace("/");
+      router.replace("/discovery");
     },
     onError: (err) => setError(errorMessage(err)),
   });
@@ -152,7 +152,7 @@ function OneTapStep() {
       <Button onClick={() => enable.mutate()} disabled={enable.isPending || unavailable} className="mt-4 w-full">
         {enable.isPending ? "Setting up…" : "Enable one-tap trading"}
       </Button>
-      <Link href="/" className="mt-3 block text-center text-sm text-muted">
+      <Link href="/discovery" className="mt-3 block text-center text-sm text-muted">
         Not now
       </Link>
     </div>
@@ -166,11 +166,11 @@ export default function OnboardingPage() {
   const [skippedDeposit, setSkippedDeposit] = useState(false);
 
   useEffect(() => {
-    if (me.data?.onboarding === "done") router.replace("/");
+    if (me.data?.onboarding === "done") router.replace("/discovery");
   }, [me.data?.onboarding, router]);
 
   useEffect(() => {
-    if (skippedDeposit) router.replace("/");
+    if (skippedDeposit) router.replace("/discovery");
   }, [skippedDeposit, router]);
 
   if (status === "out") return <EmptyState title="Sign in to get started" action={<Button onClick={login}>Sign in</Button>} />;
