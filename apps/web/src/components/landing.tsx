@@ -297,7 +297,6 @@ function ReputationArt() {
 }
 
 function PortfolioArt() {
-  const basket = useBasket();
   const legend = [
     { label: "stocks 47%", color: "bg-signal", width: 47 },
     { label: "crypto 36%", color: "bg-cyan", width: 36 },
@@ -336,7 +335,7 @@ function PortfolioArt() {
       <div className="mt-3 divide-y divide-line/60">
         {rows.map((r) => (
           <div key={r.symbol} className="flex items-center gap-3 py-2">
-            <TokenIcon symbol={r.symbol} imageUrl={basket.find((t) => t.symbol === r.symbol)?.imageUrl ?? null} size={32} />
+            <TokenIcon symbol={r.symbol} imageUrl={`/brand/tokens/${r.symbol.toLowerCase()}.png`} size={32} />
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-semibold">{r.symbol}</span>
               <span className={`num block text-[10px] uppercase ${r.tint}`}>{r.kind}</span>
