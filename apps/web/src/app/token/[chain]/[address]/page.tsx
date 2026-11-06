@@ -23,6 +23,7 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { PriceChart } from "@/components/chart";
+import { SocialPanel } from "@/components/home-desktop";
 import { ThesisCard, ThesisComposer } from "@/components/thesis-card";
 import { OpenOrders } from "@/components/orders-list";
 import { TradeBar } from "@/components/trade-bar";
@@ -317,8 +318,11 @@ function TokenScreen({ chain, address }: { chain: ChainKey; address: string }) {
   const change = tick?.priceChange24h ?? t.priceChangePct.h24;
 
   return (
-    <div className="pb-64 md:grid md:grid-cols-[1fr_360px] md:gap-4 md:p-4 md:pb-4">
-      <div className="min-w-0">
+    <div className="pb-64 md:grid md:grid-cols-[minmax(0,1fr)_360px] md:gap-4 md:p-4 md:pb-4 lg:h-[calc(100dvh-57px-44px)] lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)_minmax(340px,380px)] lg:grid-rows-[minmax(0,1fr)] lg:gap-3 lg:overflow-hidden lg:p-3 lg:pb-3">
+      <div className="hidden min-h-0 lg:flex lg:flex-col lg:overflow-hidden">
+        <SocialPanel />
+      </div>
+      <div className="min-w-0 lg:relative lg:min-h-0 lg:overflow-y-auto lg:rounded-2xl lg:border lg:border-line lg:bg-surface/40">
         <header className="flex items-start gap-2 px-3 pt-3">
           <button onClick={() => router.back()} aria-label="Back" className="flex h-9 w-7 items-center text-muted">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -358,7 +362,10 @@ function TokenScreen({ chain, address }: { chain: ChainKey; address: string }) {
         <div className="mx-4 my-2 overflow-hidden rounded-2xl bg-surface empty:hidden">
           <OpenOrders chain={t.chain} address={t.address} />
         </div>
-        <StatsPanel token={t} />
+        {/* On a wide screen the stats sit under the trade panel instead, like the reference layout. */}
+        <div className="lg:hidden">
+          <StatsPanel token={t} />
+        </div>
 
         <div className="flex items-center justify-between border-t border-line/70 px-3 pt-2">
           <Segmented
@@ -391,8 +398,12 @@ function TokenScreen({ chain, address }: { chain: ChainKey; address: string }) {
         {tab === "holders" && <HoldersPanel token={t} />}
       </div>
 
-      <aside className="md:sticky md:top-20 md:self-start">
+      <aside className="md:sticky md:top-20 md:self-start lg:relative lg:top-auto lg:min-h-0 lg:self-auto lg:overflow-y-auto">
         <TradeBar token={t} position={position.data?.position ?? null} copyThesis={copyThesis} onClearCopy={() => setCopyThesis(null)} />
+        <div className="mt-3 hidden overflow-hidden rounded-2xl border border-line bg-surface lg:block">
+          <p className="px-4 pt-3 text-sm font-semibold">About {t.symbol}</p>
+          <StatsPanel token={t} />
+        </div>
       </aside>
 
       <ThesisComposer open={composer} onClose={() => setComposer(false)} chain={chain} address={address} symbol={t.symbol} />

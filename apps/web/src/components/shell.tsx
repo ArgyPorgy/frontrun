@@ -10,6 +10,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useBalance, useConfig, useMe } from "@/lib/hooks";
 import { Avatar } from "./ui";
+import { Footer } from "./footer";
 
 type IconName = "trending" | "search" | "portfolio" | "profile" | "bell" | "analytics";
 
@@ -123,17 +124,17 @@ function WalletPills() {
   const allTime = portfolio.data ? D(portfolio.data.totals.allTimeUsd) : null;
   return (
     <div className="hidden shrink-0 items-stretch gap-2 md:flex">
-      <div className="flex h-10 flex-col justify-center rounded-xl bg-surface px-3 leading-tight">
+      <div className="flex h-10 flex-col items-end justify-center rounded-xl bg-surface px-3 leading-tight">
         <span className="num text-sm font-medium">
-          {formatUsd(balance.data?.usdc)} <span className="font-normal text-muted">cash</span>
+          {formatUsd(balance.data?.usdc)}
         </span>
         <Link href="/deposit" className="text-xs font-medium text-signal">
           Deposit
         </Link>
       </div>
-      <Link href="/portfolio" className="flex h-10 flex-col justify-center rounded-xl bg-surface px-3 leading-tight">
+      <Link href="/portfolio" className="flex h-10 flex-col items-end justify-center rounded-xl bg-surface px-3 leading-tight">
         <span className="num text-sm font-medium">{formatUsd(portfolio.data?.totals.valueUsd)}</span>
-        <span className={`num text-xs ${allTime === null ? "text-faint" : allTime.gte(0) ? "text-up" : "text-down"}`}>{allTime === null ? "—" : `${formatUsd(allTime.toFixed(), { sign: true })} all time`}</span>
+        <span className={`num text-xs ${allTime === null ? "text-faint" : allTime.gte(0) ? "text-up" : "text-down"}`}>{allTime === null ? "—" : `${formatUsd(allTime.toFixed(), { sign: true })}`}</span>
       </Link>
     </div>
   );
@@ -263,7 +264,7 @@ export function ArcStudioBadge() {
       href="https://studio.arc.io/"
       target="_blank"
       rel="noopener noreferrer"
-      className={`${display} mx-auto mb-4 mt-8 w-fit items-center gap-1.5 rounded-[20px] border border-white/40 bg-[rgba(172,198,233,0.85)] px-3.5 py-2 font-sans text-xs font-semibold text-[#1B3158] no-underline shadow-[0_4px_20px_rgba(27,49,88,0.15),inset_0_1px_0_rgba(255,255,255,0.5)] backdrop-blur-md backdrop-saturate-[1.8] md:fixed md:bottom-4 md:right-4 md:z-40 md:m-0`}
+      className={`${display} mx-auto mb-4 mt-8 w-fit items-center gap-1.5 rounded-[20px] border border-white/40 bg-[rgba(172,198,233,0.85)] px-3.5 py-2 font-sans text-xs font-semibold text-[#1B3158] no-underline shadow-[0_4px_20px_rgba(27,49,88,0.15),inset_0_1px_0_rgba(255,255,255,0.5)] backdrop-blur-md backdrop-saturate-[1.8] md:fixed md:bottom-14 md:right-4 md:z-40 md:m-0`}
     >
       <svg width="14" height="16" viewBox="0 0 20 22" fill="none" aria-hidden="true">
         <path
@@ -281,18 +282,19 @@ export function AppShell({ children }: { children: ReactNode }) {
   // The marketing landing owns the whole screen with its own header and footer, so the app
   // chrome steps aside there. Everything else gets the standard shell.
   if (pathname === "/") return <>{children}</>;
-  // The discovery page runs edge to edge on a wide screen, with its own columns.
-  const wideHome = pathname === "/discovery";
+  // The discovery and token pages run edge to edge on a wide screen, with their own column layouts.
+  const wideHome = pathname === "/discovery" || pathname.startsWith("/token/");
   return (
     <div className="min-h-dvh">
       <TabBar />
       <TopBar />
       <PaperBanner />
       <InstallHint />
-      <main className={`mx-auto max-w-5xl pb-[calc(env(safe-area-inset-bottom)+72px)] md:pb-10 ${wideHome ? "lg:max-w-none lg:pb-0" : ""}`}>
+      <main className={`mx-auto max-w-5xl pb-[calc(env(safe-area-inset-bottom)+72px)] md:pb-12 ${wideHome ? "lg:max-w-none lg:pb-0" : ""}`}>
         {children}
         <ArcStudioBadge />
       </main>
+      <Footer />
     </div>
   );
 }

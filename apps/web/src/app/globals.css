@@ -118,6 +118,25 @@ a {
   touch-action: manipulation;
 }
 
+/* Clickable things show the hand cursor. Tailwind v4 drops the old default on <button>, so without
+   this every button (and role-based control) shows the plain arrow. */
+button:not(:disabled),
+[role="button"],
+[role="tab"],
+[role="switch"],
+[role="radio"],
+summary,
+label:has(input),
+select,
+a[href] {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 :focus-visible {
   outline: 2px solid var(--color-signal);
   outline-offset: 2px;

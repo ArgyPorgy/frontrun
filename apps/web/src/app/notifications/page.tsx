@@ -18,10 +18,34 @@ function hrefFor(n: NotificationView): string {
   return "/";
 }
 
+/** Icon for notifications that have no author or token — e.g. a USDC deposit landing. */
+function NotificationGlyph({ type }: { type: NotificationView["type"] }) {
+  const svg = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  if (type === "deposit") {
+    return (
+      <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-up/15 text-up">
+        <svg {...svg} aria-hidden>
+          <path d="M12 3v12" />
+          <path d="m7 10 5 5 5-5" />
+          <path d="M5 21h14" />
+        </svg>
+      </span>
+    );
+  }
+  return (
+    <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-raised text-muted">
+      <svg {...svg} aria-hidden>
+        <path d="M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9" />
+        <path d="M10 20a2 2 0 0 0 4 0" />
+      </svg>
+    </span>
+  );
+}
+
 function NotificationBody({ n }: { n: NotificationView }) {
   return (
     <>
-      {n.actor ? <Avatar user={n.actor} size={34} /> : n.token ? <TokenIcon symbol={n.token.symbol} imageUrl={n.token.imageUrl} size={34} /> : <span className="h-[34px] w-[34px] rounded-full bg-raised" />}
+      {n.actor ? <Avatar user={n.actor} size={34} /> : n.token ? <TokenIcon symbol={n.token.symbol} imageUrl={n.token.imageUrl} size={34} /> : <NotificationGlyph type={n.type} />}
       <p className="min-w-0 flex-1 text-sm">{n.message}</p>
       <span className="num text-xs text-faint">{timeAgo(n.createdAt)}</span>
     </>

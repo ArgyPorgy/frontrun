@@ -32,7 +32,9 @@ function TokenWithChain({ symbol, imageUrl, chain, size = 34 }: { symbol: string
 
 function Panel({ title, right, children, className = "" }: { title?: string; right?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
-    <section className={`flex min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface ${className}`}>
+    // `relative` makes the panel the containing block, so absolutely positioned bits inside
+    // (sr-only labels, badges) are clipped here instead of stretching the whole page.
+    <section className={`relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface ${className}`}>
       {title && (
         <header className="flex shrink-0 items-center justify-between gap-2 px-4 pt-3 pb-2">
           <h2 className="font-semibold tracking-tight">{title}</h2>
@@ -44,7 +46,9 @@ function Panel({ title, right, children, className = "" }: { title?: string; rig
   );
 }
 
-function SocialPanel() {
+/** The left-rail feed from the Discover page: X tracker, TG tracker and the thesis feed. Reused on
+ *  the token page so the trackers and feed stay in view while looking at a token. */
+export function SocialPanel() {
   const [feed, setFeed] = useState<"thesis" | "x" | "telegram">("thesis");
   const [tab, setTab] = useState<"top" | "recent" | "following">("top");
   return (
@@ -80,7 +84,7 @@ function SocialPanel() {
           ]}
         />
       )}
-      <div className="min-h-0 flex-1 overflow-y-auto border-t border-line/60">{feed === "thesis" ? <ThesisFeed tab={tab} chain="all" /> : <TrackerFeed source={feed} />}</div>
+      <div className="relative min-h-0 flex-1 overflow-y-auto border-t border-line/60">{feed === "thesis" ? <ThesisFeed tab={tab} chain="all" /> : <TrackerFeed source={feed} />}</div>
     </Panel>
   );
 }
@@ -230,7 +234,7 @@ function TokensPanel({ items, isLoading, isError, attribution, tab, setTab, chai
         <span className="text-right">24h volume</span>
         <span />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="relative min-h-0 flex-1 overflow-y-auto">
         {isLoading ? (
           <RowSkeletons />
         ) : items.length === 0 ? (
@@ -307,7 +311,7 @@ function PositionsPanel() {
               <span className={allTime.gte(0) ? "text-up" : "text-down"}>{formatUsd(allTime.toFixed(), { sign: true })}</span>
             </div>
           )}
-          <div className="min-h-0 flex-1 divide-y divide-line/40 overflow-y-auto">
+          <div className="relative min-h-0 flex-1 divide-y divide-line/40 overflow-y-auto">
             {view === "orders" ? <OpenOrders showToken empty={<EmptyState title="No open orders" body="Set a limit, stop or take-profit from any token page." />} /> : rows?.length ? rows.map((p) => <PositionRow key={p.id} p={p} />) : <EmptyState title={view === "open" ? "Nothing open yet" : "Nothing closed yet"} body={view === "open" ? "Quick buy a token to get started." : undefined} />}
           </div>
         </>
@@ -334,7 +338,7 @@ export function HomeDesktop() {
   });
   const items = market.data?.items ?? [];
   return (
-    <div className="grid h-[calc(100dvh-57px)] grid-cols-[minmax(280px,340px)_minmax(0,1fr)_minmax(260px,320px)] gap-3 p-3">
+    <div className="grid h-[calc(100dvh-57px-44px)] grid-cols-[minmax(280px,340px)_minmax(0,1fr)_minmax(260px,320px)] grid-rows-[minmax(0,1fr)] gap-3 overflow-hidden p-3">
       <SocialPanel />
       <div className="flex min-h-0 min-w-0 flex-col gap-3">
         <SpotlightStrip items={spotlight.data?.items ?? []} />
