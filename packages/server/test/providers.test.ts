@@ -10,7 +10,7 @@ vi.hoisted(() => {
 import { BaseError, ContractFunctionRevertedError, HttpRequestError } from "viem";
 import { THESIS_REGISTRY_ABI, anchorArgs, canonicalThesis, isThesisSpecificFailure, thesisHash } from "../src/anchoring";
 import { assertSafeForProduction, resetEnvForTests, type Env } from "../src/env";
-import { extractTokens, isRelevant, parseTelegramPage, parseXResponse } from "../src/trackers";
+import { buildXQuery, extractTokens, isRelevant, newestXId, parseTelegramPage, parseXResponse } from "../src/trackers";
 import { pickWinner } from "../src/routing/engine";
 import type { ProviderQuote } from "../src/providers/types";
 import { gaslessEnabled, sponsorshipConfigured } from "../src/trading/sponsor";
@@ -580,19 +580,60 @@ describe("trackers", () => {
     expect(extractTokens("Costs $100 today")).toEqual([]);
   });
 
-  it("reads X's response, and labels quotes", () => {
-    const posts = parseXResponse({
-      data: [
-        { id: "1", text: "hello", author_id: "a", created_at: "2026-11-06T00:00:00Z" },
-        { id: "2", text: "quoted", author_id: "a", created_at: "2026-11-06T00:00:00Z", referenced_tweets: [{ type: "quoted" }] },
-        { id: "3", text: "no author", author_id: "missing", created_at: "2026-11-06T00:00:00Z" },
-      ],
-      includes: { users: [{ id: "a", name: "Ann", username: "ann" }] },
+  describe("X", () => {
+    const createdAt = "Tue Dec 10 07:00:30 +0000 2024";
+    const author = { userName: "ann", name: "Ann", profilePicture: "https://pbs.twimg.com/ann.jpg" };
+
+    it("reads the response, labels each kind and builds its own link", () => {
+      const posts = parseXResponse({
+        tweets: [
+          { id: "1", text: "Tom &amp; Jerry", createdAt, author },
+          { id: "2", text: "quoted", createdAt, author, quoted_tweet: { id: "9" } },
+          { id: "3", text: "a reply", createdAt, author, isReply: true },
+          { id: "4", text: "a repost", createdAt, author, retweeted_tweet: { id: "9" }, quoted_tweet: null },
+        ],
+      });
+      expect(posts.map((p) => [p.id, p.kind, p.url])).toEqual([
+        ["x:1", "post", "https://x.com/ann/status/1"],
+        ["x:2", "quote", "https://x.com/ann/status/2"],
+        ["x:3", "reply", "https://x.com/ann/status/3"],
+        ["x:4", "repost", "https://x.com/ann/status/4"],
+      ]);
+      expect(posts[0]).toMatchObject({ body: "Tom & Jerry", authorAvatar: author.profilePicture });
+      expect(posts[0]!.postedAt.toISOString()).toBe("2024-12-10T07:00:30.000Z");
     });
-    expect(posts.map((p) => [p.id, p.kind, p.url])).toEqual([
-      ["x:1", "post", "https://x.com/ann/status/1"],
-      ["x:2", "quote", "https://x.com/ann/status/2"],
-    ]);
+
+    it("skips anything that couldn't make a safe link or a real date", () => {
+      const posts = parseXResponse({
+        tweets: [
+          { id: "1", text: "no author", createdAt },
+          { id: "2", text: "bad handle", createdAt, author: { ...author, userName: "../evil" } },
+          { id: "../3", text: "bad id", createdAt, author },
+          { id: "4", text: "bad date", createdAt: "soon", author },
+        ],
+      });
+      expect(posts).toEqual([]);
+    });
+
+    it("drops an avatar that isn't https", () => {
+      const [post] = parseXResponse({ tweets: [{ id: "1", text: "hello", createdAt, author: { ...author, profilePicture: "http://example.com/a.jpg" } }] });
+      expect(post!.authorAvatar).toBeNull();
+    });
+
+    it("copes with an empty response", () => {
+      expect(parseXResponse({})).toEqual([]);
+      expect(newestXId({})).toBeNull();
+    });
+
+    it("finds the newest id, even past what a plain number can hold", () => {
+      const tweet = (id: string) => ({ id, text: "x", createdAt, author });
+      expect(newestXId({ tweets: [tweet("1867000000000000001"), tweet("1867000000000000009"), tweet("1867000000000000005"), tweet("bad")] })).toBe("1867000000000000009");
+    });
+
+    it("asks only for new posts once it has seen some", () => {
+      expect(buildXQuery(["a", "b"], null)).toBe("(from:a OR from:b) -filter:replies -filter:retweets");
+      expect(buildXQuery(["a"], "42")).toBe("(from:a) -filter:replies -filter:retweets since_id:42");
+    });
   });
 
   it("reads Telegram's preview page as plain text, with no markup left", () => {

@@ -24,9 +24,10 @@ export const TELEGRAM_CHANNELS = [
   "binance_announcements", "bwenews", "unfolded", "CoinMarketCapAnnouncements", "pumpfun",
 ];
 
-/** X allows 512 characters in a query on this plan, which fits about this many accounts at a time. */
+/** X's search caps how long a query can be, and this many accounts fit comfortably. */
 const X_QUERY_CHUNK = 18;
-const X_API = "https://api.x.com/2/tweets/search/recent";
+/** TwitterAPI.io, a third party that reads X for far less than X's own API. It isn't affiliated with X. */
+const X_API = "https://api.twitterapi.io/twitter/tweet/advanced_search";
 const KEEP_DAYS = 7;
 
 const CRYPTO_WORDS =
@@ -62,32 +63,53 @@ interface ParsedPost {
 }
 
 interface XResponse {
-  data?: Array<{ id: string; text: string; author_id: string; created_at: string; referenced_tweets?: Array<{ type: string }> }>;
-  includes?: { users?: Array<{ id: string; name: string; username: string; profile_image_url?: string }> };
-  meta?: { newest_id?: string };
+  tweets?: Array<{
+    id: string;
+    text: string;
+    createdAt: string;
+    isReply?: boolean;
+    quoted_tweet?: unknown;
+    retweeted_tweet?: unknown;
+    author?: { userName: string; name: string; profilePicture?: string | null };
+  }>;
 }
 
+const X_TWEET_ID = /^\d{1,25}$/;
+const X_HANDLE = /^\w{1,15}$/;
+
+/** This comes from a third party, so anything that would end up in a link or a date gets checked first. */
 export function parseXResponse(res: XResponse): ParsedPost[] {
-  const users = new Map((res.includes?.users ?? []).map((u) => [u.id, u]));
-  return (res.data ?? []).flatMap((t) => {
-    const author = users.get(t.author_id);
-    if (!author) return [];
-    const refs = t.referenced_tweets?.map((r) => r.type) ?? [];
-    const kind = refs.includes("quoted") ? "quote" : refs.includes("replied_to") ? "reply" : refs.includes("retweeted") ? "repost" : "post";
+  return (res.tweets ?? []).flatMap((t) => {
+    const author = t.author;
+    const postedAt = new Date(t.createdAt);
+    if (!author || !X_TWEET_ID.test(t.id) || !X_HANDLE.test(author.userName) || Number.isNaN(postedAt.getTime())) return [];
+    const kind = t.retweeted_tweet ? "repost" : t.quoted_tweet ? "quote" : t.isReply ? "reply" : "post";
     return [
       {
         id: `x:${t.id}`,
         source: "x" as const,
-        authorHandle: author.username,
+        authorHandle: author.userName,
         authorName: author.name,
-        authorAvatar: author.profile_image_url ?? null,
+        authorAvatar: author.profilePicture?.startsWith("https://") ? author.profilePicture : null,
         kind,
-        body: t.text,
-        url: `https://x.com/${author.username}/status/${t.id}`,
-        postedAt: new Date(t.created_at),
+        body: decodeEntities(t.text),
+        url: `https://x.com/${author.userName}/status/${t.id}`,
+        postedAt,
       } satisfies ParsedPost,
     ];
   });
+}
+
+/** The response doesn't name its newest post, so work it out. Ids are too long for a plain number. */
+export function newestXId(res: XResponse): string | null {
+  const ids = (res.tweets ?? []).map((t) => t.id).filter((id) => X_TWEET_ID.test(id));
+  return ids.length ? ids.reduce((a, b) => (BigInt(b) > BigInt(a) ? b : a)) : null;
+}
+
+export function buildXQuery(accounts: string[], sinceId: string | null): string {
+  // Replies and plain reposts are most of the noise, and each one would cost a read.
+  const query = `(${accounts.map((a) => `from:${a}`).join(" OR ")}) -filter:replies -filter:retweets`;
+  return sinceId ? `${query} since_id:${sinceId}` : query;
 }
 
 function decodeEntities(text: string): string {
@@ -152,31 +174,25 @@ async function savePosts(posts: ParsedPost[]): Promise<number> {
 }
 
 export function xTrackerConfigured(): boolean {
-  return !!env().X_BEARER_TOKEN;
+  return !!env().TWITTERAPI_IO_KEY;
 }
 
-/** Worker: reads one group of X accounts per run. X bills per post read, so sinceId keeps it to new ones. */
+/** Worker: reads one group of X accounts per run. Reads are billed per post, so sinceId keeps it to new ones. */
 export async function pollXTracker(): Promise<number> {
-  const token = env().X_BEARER_TOKEN;
-  if (!token) return 0;
+  const key = env().TWITTERAPI_IO_KEY;
+  if (!key) return 0;
   const r = redis();
   const groups = Math.ceil(X_ACCOUNTS.length / X_QUERY_CHUNK);
   const group = Number(await r.incr("tracker:x:cursor")) % groups;
   const accounts = X_ACCOUNTS.slice(group * X_QUERY_CHUNK, (group + 1) * X_QUERY_CHUNK);
   const sinceKey = `tracker:x:since:${group}`;
   const sinceId = await r.get(sinceKey);
-  const params = new URLSearchParams({
-    // Replies and plain reposts are most of the noise, and each one would cost a read.
-    query: `(${accounts.map((a) => `from:${a}`).join(" OR ")}) -is:reply -is:retweet`,
-    max_results: "50",
-    "tweet.fields": "created_at,referenced_tweets,author_id",
-    expansions: "author_id",
-    "user.fields": "name,username,profile_image_url",
-  });
-  if (sinceId) params.set("since_id", sinceId);
+  // One page per run, up to 20 posts: enough for a couple of minutes of these accounts, and it caps the cost.
+  const params = new URLSearchParams({ query: buildXQuery(accounts, sinceId), queryType: "Latest" });
   try {
-    const res = await fetchJson<XResponse>(`${X_API}?${params}`, { headers: { authorization: `Bearer ${token}` }, timeoutMs: 10_000 });
-    if (res.meta?.newest_id) await r.set(sinceKey, res.meta.newest_id, "EX", 7 * 86_400);
+    const res = await fetchJson<XResponse>(`${X_API}?${params}`, { headers: { "x-api-key": key }, timeoutMs: 10_000 });
+    const newest = newestXId(res);
+    if (newest) await r.set(sinceKey, newest, "EX", 7 * 86_400);
     return await savePosts(parseXResponse(res));
   } catch (err) {
     logger.warn({ status: err instanceof HttpError ? err.status : undefined }, "X tracker read failed");

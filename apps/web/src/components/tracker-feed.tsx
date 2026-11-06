@@ -65,7 +65,7 @@ export function TrackerFeed({ source }: { source: TrackerSource }) {
   if (query.isLoading) return <RowSkeletons count={5} />;
   if (!query.data?.items.length) {
     return query.data?.configured === false ? (
-      <EmptyState title="X tracker isn't connected yet" body="It starts as soon as an X API token is added to the server." />
+      <EmptyState title="X tracker isn't connected yet" body="It starts as soon as its key is added to the server." />
     ) : (
       <EmptyState title="Nothing yet" body="New posts from tracked channels land here within a few minutes." />
     );
