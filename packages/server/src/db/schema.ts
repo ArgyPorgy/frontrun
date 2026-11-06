@@ -103,6 +103,8 @@ export const trades = pgTable("trades", {
   createdAt: ts("created_at").notNull().defaultNow(),
   updatedAt: ts("updated_at").notNull().defaultNow(),
   filledAt: ts("filled_at"),
+  /** Set once followers have been told about this buy. */
+  followersNotifiedAt: ts("followers_notified_at"),
 }, (t) => [
   uniqueIndex("trades_idempotency").on(t.userId, t.idempotencyKey),
   index("trades_user_created").on(t.userId, t.createdAt),

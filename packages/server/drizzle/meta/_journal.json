@@ -57,6 +57,13 @@
       "when": 1793956000000,
       "tag": "0007_theses_on_realized_pnl",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793983150991,
+      "tag": "0008_followers_notified",
+      "breakpoints": true
     }
   ]
 }

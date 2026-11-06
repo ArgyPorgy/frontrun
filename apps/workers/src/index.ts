@@ -40,6 +40,7 @@ import {
   refreshMarketList,
   refreshRankScores,
   resolveClosedTheses,
+  sendBuyAlerts,
   runMigrations,
   schema,
   snapshotToTick,
@@ -210,6 +211,7 @@ async function main() {
   every("tracker-prune", 3_600_000, () => pruneTrackerPosts());
   every("orders-watch", 3_000, () => checkWatchedOrders(), { leaseMs: 2 * 60_000 });
   every("orders-flash", 15_000, () => pollFlashOrders(), { leaseMs: 2 * 60_000 });
+  every("buy-alerts", 5_000, () => sendBuyAlerts());
   every("reconcile", 5 * 60_000, () => reconcilePositions(), { leaseMs: 10 * 60_000 });
   every("thesis-resolve", 60_000, () => resolveClosedTheses());
   every("thesis-rank", 5 * 60_000, refreshRankScores);

@@ -43,6 +43,7 @@ import {
   publish,
   redis,
   resolveClosedTheses,
+  sendBuyAlerts,
   runMigrations,
   schema,
   statsChanged,
@@ -858,20 +859,36 @@ describe("theses", () => {
     const stranger = await login("buystranger");
     await follower.client.follow("buyleader");
     await buy(leader.client, TOKEN_A, "100");
-    await vi.waitFor(async () => {
-      const inbox = await follower.client.notifications();
-      const alert = inbox.items.find((n) => n.type === "followed_buy");
-      expect(alert?.message).toBe("buyleader bought AAA at $1.00M market cap");
-      expect(alert?.token?.address).toBe(TOKEN_A);
-      expect(alert?.actor?.username).toBe("buyleader");
-      // It belongs to the buyer's trade, so a follower must not be sent to open it.
-      expect(alert?.tradeId).toBeNull();
-    });
+    expect(await sendBuyAlerts()).toBe(1);
+    const inbox = await follower.client.notifications();
+    const alert = inbox.items.find((n) => n.type === "followed_buy");
+    expect(alert?.message).toBe("buyleader bought AAA at $1.00M market cap");
+    expect(alert?.token?.address).toBe(TOKEN_A);
+    expect(alert?.actor?.username).toBe("buyleader");
+    // It belongs to the buyer's trade, so a follower must not be sent to open it.
+    expect(alert?.tradeId).toBeNull();
     expect((await stranger.client.notifications()).items.map((n) => n.type)).not.toContain("followed_buy");
-    // Selling isn't announced, and neither is the buyer's own fill.
+
+    // Selling isn't announced, the buyer isn't told about their own buy, and nothing goes out twice.
     await sell(leader.client, TOKEN_A, 100);
+    expect(await sendBuyAlerts()).toBe(0);
     expect((await leader.client.notifications()).items.map((n) => n.type)).not.toContain("followed_buy");
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect((await follower.client.notifications()).items.filter((n) => n.type === "followed_buy")).toHaveLength(1);
+  });
+
+  it("announces a buy whichever process recorded it, and never one from long ago", async () => {
+    const leader = await loginFunded("swept");
+    const follower = await login("sweptfollower");
+    await follower.client.follow("swept");
+    const { trade } = await buy(leader.client, TOKEN_A, "100");
+
+    // Too old to be news: it's skipped, not sent late.
+    await db().update(schema.trades).set({ filledAt: new Date(Date.now() - 2 * 3_600_000) }).where(eq(schema.trades.id, trade.id));
+    expect(await sendBuyAlerts()).toBe(0);
+
+    await db().update(schema.trades).set({ filledAt: new Date() }).where(eq(schema.trades.id, trade.id));
+    const results = await Promise.all([sendBuyAlerts(), sendBuyAlerts()]);
+    expect(results[0]! + results[1]!).toBe(1);
     expect((await follower.client.notifications()).items.filter((n) => n.type === "followed_buy")).toHaveLength(1);
   });
 

@@ -841,13 +841,38 @@ export async function applyStatus(tradeId: string, update: StatusUpdate): Promis
       .insert(schema.providerEvents)
       .values({ provider: outcome.trade.provider, kind: outcome.status === "filled" ? "fill" : "fail" });
     await notifyTradeResult(outcome.trade, outcome.status);
-    if (outcome.status === "filled" && outcome.trade.side === "buy") {
-      notifyFollowersOfBuy(outcome.trade).catch((err: unknown) => logger.warn({ tradeId, err: err instanceof Error ? err.message : err }, "follower fan-out failed"));
-    }
   }
 }
 
-/** Tells followers what someone just bought, and how big the token was at that moment. */
+const BUY_ALERT_WINDOW_MS = 3_600_000;
+
+/**
+ * Worker: announces filled buys that haven't been yet. It reads the trades table rather than hanging off
+ * the fill, so an alert goes out whichever process recorded the fill, or if that process died straight after.
+ */
+export async function sendBuyAlerts(limit = 50): Promise<number> {
+  const due = await db()
+    .select()
+    .from(schema.trades)
+    .where(and(eq(schema.trades.side, "buy"), eq(schema.trades.status, "filled"), isNull(schema.trades.followersNotifiedAt), gt(schema.trades.filledAt, new Date(Date.now() - BUY_ALERT_WINDOW_MS))))
+    .orderBy(schema.trades.filledAt)
+    .limit(limit);
+  let sent = 0;
+  for (const trade of due) {
+    // Claiming first means two workers can't announce the same buy twice.
+    const claimed = await db().update(schema.trades).set({ followersNotifiedAt: new Date() }).where(and(eq(schema.trades.id, trade.id), isNull(schema.trades.followersNotifiedAt))).returning({ id: schema.trades.id });
+    if (!claimed.length) continue;
+    try {
+      await notifyFollowersOfBuy(trade);
+      sent += 1;
+    } catch (err) {
+      logger.warn({ tradeId: trade.id, err: err instanceof Error ? err.message : err }, "follower fan-out failed");
+    }
+  }
+  return sent;
+}
+
+/** Tells followers what someone just bought, and how big the token is around that moment. */
 async function notifyFollowersOfBuy(trade: typeof schema.trades.$inferSelect) {
   const [buyer, token, snapshot] = await Promise.all([
     db().query.users.findFirst({ where: eq(schema.users.id, trade.userId) }),
