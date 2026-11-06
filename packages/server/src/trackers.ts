@@ -350,7 +350,7 @@ export async function listTrackerPosts(source: TrackerSource, opts: { before?: s
 }
 
 /** Who the landing page quotes. Their words only ever come from their real posts in the tracker. */
-export const LANDING_HANDLES = ["theunipcs", "frankdegods"];
+export const LANDING_HANDLES = ["theunipcs", "frankdegods", "iruletrenches"];
 
 const LANDING_POST_MAX_AGE_DAYS = 7;
 

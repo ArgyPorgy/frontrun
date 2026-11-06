@@ -64,6 +64,7 @@ export const X_ACCOUNTS: Array<{ handle: string; name: string }> = [
   { handle: "CL207", name: "CL" },
   { handle: "frankdegods", name: "Frank" },
   { handle: "theunipcs", name: "Unipcs" },
+  { handle: "iruletrenches", name: "Miyamoto" },
   { handle: "machibigbrother", name: "Machi Big Brother" },
   { handle: "loomdart", name: "loomdart" },
   { handle: "osf_rekt", name: "OSF" },

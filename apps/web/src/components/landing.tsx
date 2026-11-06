@@ -161,7 +161,7 @@ function FeatureCard(props: { eyebrow: string; tone: "mint" | "blue"; title: Rea
 
 function AlphaFeedArt() {
   const voices = useVoices();
-  const posts = [voices?.named.frankdegods, voices?.named.theunipcs, ...(voices?.recent ?? [])].filter((p): p is TrackerPostView => !!p).slice(0, 2);
+  const posts = [voices?.named.frankdegods, voices?.named.iruletrenches, voices?.named.theunipcs, ...(voices?.recent ?? [])].filter((p): p is TrackerPostView => !!p).slice(0, 2);
   return (
     <div className="space-y-2.5">
       {posts.map((post) => (
