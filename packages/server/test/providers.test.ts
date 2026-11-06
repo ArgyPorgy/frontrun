@@ -1,4 +1,5 @@
-import { ARC_USDC, FLASH_ALLOWANCE_ARC, TWO_STEP_CONNECTORS, UNISWAP_ARC } from "@frontrun/core";
+import { ARC_USDC, FLASH_ALLOWANCE_ARC, TWO_STEP_CONNECTORS, UNISWAP_ARC, type BasketToken } from "@frontrun/core";
+import { mixBasket } from "../src/market/basket";
 import { encodeFunctionData, erc20Abi, encodeAbiParameters, keccak256, toHex } from "viem";
 import { describe, expect, it, vi } from "vitest";
 
@@ -547,6 +548,15 @@ describe("gas sponsorship", () => {
       expect(sponsorshipConfigured("hyperevm")).toBe(false);
       expect(sponsorshipConfigured("solana")).toBe(false);
     });
+  });
+});
+
+describe("the landing page's basket", () => {
+  const token = (symbol: string, group: BasketToken["group"]) => ({ group, chain: "base", address: symbol, symbol, imageUrl: "x", change24h: 1 }) as BasketToken;
+
+  it("keeps trending mixed in among the curated tokens", () => {
+    const mixed = mixBasket([token("NVDA", "stock"), token("BTC", "crypto"), token("PEPE", "meme"), token("TSLA", "stock")], [token("A", "trending"), token("B", "trending"), token("C", "trending")]);
+    expect(mixed.map((t) => t.symbol)).toEqual(["NVDA", "BTC", "A", "PEPE", "TSLA", "B", "C"]);
   });
 });
 

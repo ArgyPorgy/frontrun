@@ -331,6 +331,16 @@ export interface TradeCardView {
   returnPct: number;
 }
 
+/** One token in the landing page's ticker: real logo, real 24h move. */
+export interface BasketToken {
+  group: "stock" | "crypto" | "meme" | "trending" | "currency";
+  chain: ChainKey;
+  address: string;
+  symbol: string;
+  imageUrl: string;
+  change24h: number;
+}
+
 export type TrackerSource = "x" | "telegram";
 
 export type TrackerPostKind = "post" | "quote" | "reply" | "repost" | "follow";
@@ -347,6 +357,12 @@ export interface TrackerPostView {
   /** Tickers like $WIF and contract addresses found in the text. */
   tokens: string[];
   postedAt: string;
+}
+
+/** Real posts for the landing page, always shown with who wrote them and a link to the original. */
+export interface LandingVoices {
+  named: Record<string, TrackerPostView>;
+  recent: TrackerPostView[];
 }
 
 export interface StatsTotals {

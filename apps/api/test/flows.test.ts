@@ -976,6 +976,37 @@ describe("thesis outcomes and leaderboard", () => {
   });
 });
 
+describe("the landing page's real posts", () => {
+  const post = (id: string, handle: string, body: string, tokens: string[], minutesAgo: number, kind = "post") => ({
+    id,
+    source: "x" as const,
+    authorHandle: handle,
+    authorName: handle,
+    authorAvatar: "https://pbs.twimg.com/a.jpg",
+    kind,
+    body,
+    url: `https://x.com/${handle}/status/${id}`,
+    tokens,
+    postedAt: new Date(Date.now() - minutesAgo * 60_000),
+  });
+
+  it("only shows what someone actually posted, with the links out and a token post first", async () => {
+    await db().delete(schema.trackerPosts);
+    await db().insert(schema.trackerPosts).values([
+      post("1", "theunipcs", "gm to everyone out there today", [], 1),
+      post("2", "theunipcs", "$BONK looks strong here https://t.co/abc", ["BONK"], 5),
+      post("3", "theunipcs", "a reply that mentions $WIF right here", ["WIF"], 0, "reply"),
+      post("4", "frankdegods", "too old to show anymore on $PEPE", ["PEPE"], 60 * 24 * 8),
+      post("5", "someoneelse", "$WIF volume is picking up fast", ["WIF"], 2),
+    ]);
+    const voices = await new ApiClient({ baseUrl }).landingVoices();
+    expect(voices.named.theunipcs?.body).toBe("$BONK looks strong here");
+    expect(voices.named.theunipcs?.url).toBe("https://x.com/theunipcs/status/2");
+    expect(voices.named.frankdegods).toBeUndefined();
+    expect(voices.recent.map((p) => p.authorHandle)).toEqual(["someoneelse"]);
+  });
+});
+
 describe("profiles", () => {
   it("reports followers, PnL and follow state", async () => {
     const a = await loginFunded("profiled");

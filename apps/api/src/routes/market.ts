@@ -9,7 +9,9 @@ import {
   getTape,
   getTokenDetail,
   markActive,
+  landingVoices,
   marketList,
+  tokenBasket,
   notFound,
   positionForToken,
   searchTokens,
@@ -27,6 +29,10 @@ function parseToken(params: unknown): { chain: ChainKey; address: string } {
 }
 
 export async function registerMarketRoutes(app: FastifyInstance) {
+  app.get("/v1/market/basket", async () => tokenBasket());
+
+  app.get("/v1/landing/voices", async () => landingVoices());
+
   app.get("/v1/market/tokens", async (req) => {
     const query = z.object({ tab: z.enum(["trending", "new"]).default("trending"), chain: chainKeySchema.optional() }).parse(req.query);
     return { items: await marketList(query.tab, query.chain), attribution: GECKO_ATTRIBUTION };

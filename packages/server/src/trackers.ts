@@ -1,10 +1,10 @@
-import type { TrackerPostKind, TrackerPostView, TrackerSource } from "@frontrun/core";
-import { and, desc, eq, lt, sql } from "drizzle-orm";
+import type { LandingVoices, TrackerPostKind, TrackerPostView, TrackerSource } from "@frontrun/core";
+import { and, desc, eq, gt, lt, sql } from "drizzle-orm";
 import { db, schema } from "./db/client";
 import { env } from "./env";
 import { fetchJson, HttpError } from "./http";
 import { logger } from "./logger";
-import { redis } from "./redis";
+import { cachedJson, redis } from "./redis";
 import { X_ACCOUNTS } from "./x-accounts";
 
 export { X_ACCOUNTS };
@@ -315,6 +315,21 @@ export async function pruneTrackerPosts(): Promise<void> {
   await db().delete(schema.trackerPosts).where(lt(schema.trackerPosts.postedAt, new Date(Date.now() - KEEP_DAYS * 86_400_000)));
 }
 
+function toTrackerView(r: typeof schema.trackerPosts.$inferSelect): TrackerPostView {
+  return {
+    id: r.id,
+    source: r.source as TrackerSource,
+    authorHandle: r.authorHandle,
+    authorName: r.authorName,
+    authorAvatar: r.authorAvatar,
+    kind: r.kind as TrackerPostKind,
+    body: r.body,
+    url: r.url,
+    tokens: r.tokens,
+    postedAt: r.postedAt.toISOString(),
+  };
+}
+
 export async function listTrackerPosts(source: TrackerSource, opts: { before?: string; kind?: TrackerPostKind; limit?: number } = {}): Promise<{ items: TrackerPostView[]; configured: boolean }> {
   const rows = await db()
     .select()
@@ -330,17 +345,53 @@ export async function listTrackerPosts(source: TrackerSource, opts: { before?: s
     .limit(opts.limit ?? 40);
   return {
     configured: source === "telegram" || xTrackerConfigured(),
-    items: rows.map((r) => ({
-      id: r.id,
-      source: r.source as TrackerSource,
-      authorHandle: r.authorHandle,
-      authorName: r.authorName,
-      authorAvatar: r.authorAvatar,
-      kind: r.kind as TrackerPostKind,
-      body: r.body,
-      url: r.url,
-      tokens: r.tokens,
-      postedAt: r.postedAt.toISOString(),
-    })),
+    items: rows.map(toTrackerView),
   };
+}
+
+/** Who the landing page quotes. Their words only ever come from their real posts in the tracker. */
+export const LANDING_HANDLES = ["theunipcs", "frankdegods"];
+
+const LANDING_POST_MAX_AGE_DAYS = 7;
+
+/** A post with its links taken out, or null if nothing's left to read. */
+function landingText(body: string): string | null {
+  const text = body.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim();
+  return text.length >= 12 ? text : null;
+}
+
+/** Original posts only, and ones naming a token come first, since that's what the page is about. */
+function pickLandingPost(posts: TrackerPostView[]): TrackerPostView | undefined {
+  const usable = posts.map((p) => ({ ...p, body: landingText(p.body) ?? "" })).filter((p) => p.body);
+  return usable.find((p) => p.tokens.length > 0) ?? usable[0];
+}
+
+export async function landingVoices(): Promise<LandingVoices> {
+  return cachedJson("landing:voices", 60, async () => {
+    const since = new Date(Date.now() - LANDING_POST_MAX_AGE_DAYS * 86_400_000);
+    const rows = await db()
+      .select()
+      .from(schema.trackerPosts)
+      .where(and(eq(schema.trackerPosts.source, "x"), eq(schema.trackerPosts.kind, "post"), gt(schema.trackerPosts.postedAt, since)))
+      .orderBy(desc(schema.trackerPosts.postedAt))
+      .limit(300);
+    const posts = rows.map(toTrackerView);
+    const named: Record<string, TrackerPostView> = {};
+    for (const handle of LANDING_HANDLES) {
+      const post = pickLandingPost(posts.filter((p) => p.authorHandle.toLowerCase() === handle));
+      if (post) named[handle] = post;
+    }
+    const seen = new Set(LANDING_HANDLES);
+    const recent: TrackerPostView[] = [];
+    for (const post of posts) {
+      const handle = post.authorHandle.toLowerCase();
+      if (seen.has(handle) || !post.authorAvatar || post.tokens.length === 0) continue;
+      const text = landingText(post.body);
+      if (!text) continue;
+      seen.add(handle);
+      recent.push({ ...post, body: text });
+      if (recent.length === 3) break;
+    }
+    return { named, recent };
+  });
 }

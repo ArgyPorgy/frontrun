@@ -1,11 +1,12 @@
 "use client";
 
-import { formatPct, type TokenListItem } from "@frontrun/core";
+import { formatPct, type BasketToken, type TrackerPostView } from "@frontrun/core";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { LogoMark, Wordmark } from "@/components/brand";
 import { ArcStudioBadge } from "@/components/shell";
+import { TokenIcon } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -25,38 +26,62 @@ function Header() {
   );
 }
 
+function useVoices() {
+  return useQuery({ queryKey: ["landing", "voices"], queryFn: () => api.landingVoices(), refetchInterval: 120_000, staleTime: 60_000 }).data;
+}
+
+function useBasket(): BasketToken[] {
+  return useQuery({ queryKey: ["market", "basket"], queryFn: () => api.marketBasket(), refetchInterval: 60_000, staleTime: 30_000 }).data?.items ?? [];
+}
+
+function short(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max).trimEnd()}…` : text;
+}
+
+function PostAvatar({ post, size }: { post: TrackerPostView; size: number }) {
+  if (!post.authorAvatar) return <span className="flex shrink-0 items-center justify-center rounded-full bg-raised text-xs font-bold" style={{ width: size, height: size }}>{post.authorName.slice(0, 1)}</span>;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={post.authorAvatar} alt="" width={size} height={size} className="shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />;
+}
+
 function HeroArt() {
+  const voices = useVoices();
+  const post = voices?.named.theunipcs ?? voices?.named.frankdegods ?? voices?.recent[0];
   return (
-    <div aria-hidden className="relative mx-auto aspect-[10/9] w-full max-w-[560px]">
-      <div className="absolute top-[8%] left-[6%] h-[70%] w-[62%] rounded-full bg-up/25 blur-[70px]" />
-      <div className="absolute top-[24%] right-0 h-[66%] w-[50%] rounded-full bg-cyan/25 blur-[70px]" />
-      {[32, 46, 60].map((top, i) => (
-        <div key={top} className="absolute left-[2%] h-[3px] rounded-full bg-gradient-to-r from-transparent to-signal/70" style={{ top: `${top}%`, width: i === 1 ? "28%" : "22%", marginLeft: i === 1 ? "6%" : 0 }} />
-      ))}
-      <div className="animate-float absolute top-[20%] left-[28%] w-[64%] drop-shadow-[0_0_34px_rgba(109,234,178,0.55)]">
-        <LogoMark width={1000} className="h-auto w-full" />
+    <div className="relative mx-auto aspect-[10/9] w-full max-w-[560px]">
+      <div aria-hidden className="absolute inset-0">
+        <div className="absolute top-[8%] left-[6%] h-[70%] w-[62%] rounded-full bg-up/25 blur-[70px]" />
+        <div className="absolute top-[24%] right-0 h-[66%] w-[50%] rounded-full bg-cyan/25 blur-[70px]" />
+        {[32, 46, 60].map((top, i) => (
+          <div key={top} className="absolute left-[2%] h-[3px] rounded-full bg-gradient-to-r from-transparent to-signal/70" style={{ top: `${top}%`, width: i === 1 ? "28%" : "22%", marginLeft: i === 1 ? "6%" : 0 }} />
+        ))}
+        <div className="animate-float absolute top-[20%] left-[28%] w-[64%] drop-shadow-[0_0_34px_rgba(109,234,178,0.55)]">
+          <LogoMark width={1000} className="h-auto w-full" />
+        </div>
+        <svg viewBox="0 0 520 170" className="absolute right-0 bottom-[4%] w-full" fill="none">
+          <defs>
+            <linearGradient id="hero-area" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="#5ac4f1" stopOpacity="0.28" />
+              <stop offset="1" stopColor="#5ac4f1" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path d="M0 150 52 138 104 148 156 118 208 126 260 92 312 100 364 62 416 34 520 10V170H0Z" fill="url(#hero-area)" />
+          <path d="M0 150 52 138 104 148 156 118 208 126 260 92 312 100 364 62 416 34 520 10" stroke="#5ac4f1" strokeWidth="3" strokeLinejoin="round" />
+        </svg>
+        <div className="absolute right-[2%] bottom-[24%] rounded-2xl border border-line bg-surface/95 px-3 py-2">
+          <span className="num block text-[10px] text-muted">example: copied it early</span>
+          <span className="font-display text-brand block text-xl font-bold">+424%</span>
+        </div>
       </div>
-      <svg viewBox="0 0 520 170" className="absolute right-0 bottom-[4%] w-full" fill="none">
-        <defs>
-          <linearGradient id="hero-area" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#5ac4f1" stopOpacity="0.28" />
-            <stop offset="1" stopColor="#5ac4f1" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <path d="M0 150 52 138 104 148 156 118 208 126 260 92 312 100 364 62 416 34 520 10V170H0Z" fill="url(#hero-area)" />
-        <path d="M0 150 52 138 104 148 156 118 208 126 260 92 312 100 364 62 416 34 520 10" stroke="#5ac4f1" strokeWidth="3" strokeLinejoin="round" />
-      </svg>
-      <div className="absolute top-[2%] left-[2%] flex items-center gap-2.5 rounded-2xl border border-cyan/40 bg-surface/90 px-3 py-2">
-        <span className="font-display flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-signal to-cyan text-xs font-bold text-signal-ink">C</span>
-        <span>
-          <span className="num block text-[10px] text-muted">@caller_one posted</span>
-          <span className="block text-xs font-semibold">&ldquo;this is going to zillions!&rdquo;</span>
-        </span>
-      </div>
-      <div className="absolute right-[2%] bottom-[24%] rounded-2xl border border-line bg-surface/95 px-3 py-2">
-        <span className="num block text-[10px] text-muted">you copied it early</span>
-        <span className="font-display text-brand block text-xl font-bold">+424%</span>
-      </div>
+      {post && (
+        <a href={post.url} target="_blank" rel="noreferrer noopener" className="absolute top-[2%] left-[2%] flex max-w-[86%] items-center gap-2.5 rounded-2xl border border-cyan/40 bg-surface/90 px-3 py-2 transition-colors hover:border-cyan">
+          <PostAvatar post={post} size={32} />
+          <span className="min-w-0">
+            <span className="num block truncate text-[10px] text-muted">@{post.authorHandle} posted this</span>
+            <span className="block truncate text-xs font-semibold">&ldquo;{short(post.body, 70)}&rdquo;</span>
+          </span>
+        </a>
+      )}
     </div>
   );
 }
@@ -84,25 +109,19 @@ function Hero() {
   );
 }
 
-/** Real prices from the market feed, so the numbers on the page are never made up. */
+/** A real mix of stocks, big coins, memes and whatever's trending, with their actual logos and moves. */
 function LiveTape() {
-  const market = useQuery({
-    queryKey: ["market", "trending", "all"],
-    queryFn: () => api.marketList({ tab: "trending" }),
-    refetchInterval: 30_000,
-    staleTime: 15_000,
-  });
-  const items: TokenListItem[] = market.data?.items ?? [];
-  if (items.length < 6) return null;
-  const row = items.slice(0, 16);
+  const row = useBasket().filter((t) => t.group !== "currency");
+  if (row.length < 6) return null;
   return (
     <div className="relative overflow-hidden border-y border-line/50 py-3">
       <div className="animate-tape flex w-max gap-2.5 pl-4">
         {[...row, ...row].map((t, i) => (
-          <span key={`${t.chain}:${t.address}:${i}`} className="num flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1 text-xs whitespace-nowrap">
+          <Link key={`${t.chain}:${t.address}:${i}`} href={`/token/${t.chain}/${t.address}`} className="num flex items-center gap-2 rounded-full border border-line bg-surface py-1 pr-3 pl-1.5 text-xs whitespace-nowrap transition-colors hover:border-faint">
+            <TokenIcon symbol={t.symbol} imageUrl={t.imageUrl} size={22} />
             <span className="font-semibold">{t.symbol}</span>
-            <span className={t.priceChangePct.h24 >= 0 ? "text-up" : "text-down"}>{formatPct(t.priceChangePct.h24)}</span>
-          </span>
+            <span className={t.change24h >= 0 ? "text-up" : "text-down"}>{formatPct(t.change24h)}</span>
+          </Link>
         ))}
       </div>
       <div aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-bg to-transparent" />
@@ -119,7 +138,7 @@ const GLOWS = {
   "bottom-left": "-bottom-24 -left-20 bg-cyan/20",
 } as const;
 
-function FeatureCard(props: { eyebrow: string; tone: "mint" | "blue"; title: ReactNode; body: string; art: ReactNode; artFirst?: boolean; glow: keyof typeof GLOWS; badge?: string }) {
+function FeatureCard(props: { eyebrow: string; tone: "mint" | "blue"; title: ReactNode; body: string; art: ReactNode; artFirst?: boolean; glow: keyof typeof GLOWS; badge?: string; live?: boolean }) {
   return (
     <section className="rounded-[28px] bg-gradient-to-br from-up/50 via-line/60 to-cyan/50 p-px">
       <div className="relative grid items-center gap-8 overflow-hidden rounded-[27px] bg-[#09090c] p-6 md:grid-cols-2 md:gap-10 md:p-10">
@@ -132,7 +151,7 @@ function FeatureCard(props: { eyebrow: string; tone: "mint" | "blue"; title: Rea
           <h2 className="font-display mt-3 text-[34px] leading-[1.05] font-bold tracking-tight md:text-[42px]">{props.title}</h2>
           <p className="font-display mt-3 max-w-md text-muted">{props.body}</p>
         </div>
-        <div aria-hidden className={`relative min-w-0 ${props.artFirst ? "md:order-1" : ""}`}>
+        <div aria-hidden={props.live ? undefined : true} className={`relative min-w-0 ${props.artFirst ? "md:order-1" : ""}`}>
           {props.art}
         </div>
       </div>
@@ -141,23 +160,28 @@ function FeatureCard(props: { eyebrow: string; tone: "mint" | "blue"; title: Rea
 }
 
 function AlphaFeedArt() {
-  const rows = [
-    { initial: "C", tint: "bg-gradient-to-br from-signal to-cyan text-signal-ink", handle: "@caller_one", tag: "thesis", tagClass: "bg-signal text-signal-ink", body: "NVDA breaks out after earnings. sized in, stop at 180." },
-    { initial: "𝕏", tint: "bg-ink text-bg", handle: "@ct_whale", tag: "𝕏 alpha", tagClass: "bg-raised text-ink border border-line", body: "wallets are loading $WIF again. volume 6x in an hour." },
-    { initial: "T", tint: "bg-cyan text-signal-ink", handle: "alpha group", tag: "telegram", tagClass: "bg-cyan/20 text-cyan", body: "early call: new meme on Base, liquidity locked." },
-  ];
+  const voices = useVoices();
+  const posts = [voices?.named.frankdegods, voices?.named.theunipcs, ...(voices?.recent ?? [])].filter((p): p is TrackerPostView => !!p).slice(0, 2);
   return (
     <div className="space-y-2.5">
-      {rows.map((r) => (
-        <div key={r.handle} className="rounded-2xl bg-raised p-3.5">
+      {posts.map((post) => (
+        <a key={post.id} href={post.url} target="_blank" rel="noreferrer noopener" className="block rounded-2xl bg-raised p-3.5 transition-colors hover:bg-line/60">
           <div className="flex items-center gap-2.5">
-            <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${r.tint}`}>{r.initial}</span>
-            <span className="text-sm font-semibold">{r.handle}</span>
-            <span className={`num ml-auto rounded-full px-2 py-0.5 text-[10px] uppercase ${r.tagClass}`}>{r.tag}</span>
+            <PostAvatar post={post} size={28} />
+            <span className="truncate text-sm font-semibold">@{post.authorHandle}</span>
+            <span className="num ml-auto shrink-0 rounded-full border border-line bg-raised px-2 py-0.5 text-[10px] uppercase">𝕏 live</span>
           </div>
-          <p className="mt-2 text-sm">{r.body}</p>
-        </div>
+          <p className="mt-2 text-sm">{short(post.body, 110)}</p>
+        </a>
       ))}
+      <div className="rounded-2xl bg-raised p-3.5">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-cyan text-xs font-bold text-signal-ink">A</span>
+          <span className="text-sm font-semibold">Arc Alpha Group</span>
+          <span className="num ml-auto rounded-full bg-cyan/20 px-2 py-0.5 text-[10px] text-cyan uppercase">telegram</span>
+        </div>
+        <p className="mt-2 text-sm">early call: new meme on Base, liquidity locked.</p>
+      </div>
     </div>
   );
 }
@@ -210,8 +234,8 @@ function Toggle({ on }: { on: boolean }) {
 function AutoCopyArt() {
   const rows = [
     { initial: "AI", tile: "bg-gradient-to-br from-signal to-cyan text-signal-ink", name: "momentum bot", detail: "AI bot · $50 per trade", gain: "+31%", on: true },
-    { initial: "C", tile: "bg-up/20 text-signal", name: "@caller_one", detail: "KOL · $100 per trade", gain: "+424%", on: true },
-    { initial: "R", tile: "bg-line text-muted", name: "@caller_two", detail: "KOL · paused", gain: "+12%", on: false },
+    { initial: "SM", tile: "bg-up/20 text-signal", name: "smart money bot", detail: "AI bot · $100 per trade", gain: "+64%", on: true },
+    { initial: "ST", tile: "bg-line text-muted", name: "stocks bot", detail: "AI bot · paused", gain: "+12%", on: false },
   ];
   return (
     <div className="space-y-2.5">
@@ -232,9 +256,9 @@ function AutoCopyArt() {
 
 function ReputationArt() {
   const others = [
-    { rank: "02", name: "@caller_two", score: 84, tone: "from-signal to-cyan" },
-    { rank: "03", name: "@caller_three", score: 79, tone: "from-signal to-cyan" },
-    { rank: "—", name: "@loud_kol", score: 22, tone: "from-down to-down" },
+    { rank: "02", name: "runner-up", score: 84, tone: "from-signal to-cyan" },
+    { rank: "03", name: "third place", score: 79, tone: "from-signal to-cyan" },
+    { rank: "—", name: "the loudest account", score: 22, tone: "from-down to-down" },
   ];
   return (
     <div className="space-y-2.5">
@@ -253,7 +277,7 @@ function ReputationArt() {
           <span className="font-display absolute inset-x-0 bottom-0 text-center text-2xl font-semibold">92</span>
         </div>
         <div className="min-w-0">
-          <p className="font-semibold">@caller_one</p>
+          <p className="font-semibold">top of the board</p>
           <p className="text-xs text-muted">reputation score</p>
           <p className="num mt-1 text-[11px] text-signal">TOP 1% · 41 RIGHT CALLS</p>
         </div>
@@ -273,6 +297,7 @@ function ReputationArt() {
 }
 
 function PortfolioArt() {
+  const basket = useBasket();
   const legend = [
     { label: "stocks 47%", color: "bg-signal", width: 47 },
     { label: "crypto 36%", color: "bg-cyan", width: 36 },
@@ -311,7 +336,7 @@ function PortfolioArt() {
       <div className="mt-3 divide-y divide-line/60">
         {rows.map((r) => (
           <div key={r.symbol} className="flex items-center gap-3 py-2">
-            <span className={`flex h-8 w-8 items-center justify-center rounded-full bg-line/70 text-[10px] font-bold ${r.tint}`}>{r.symbol.slice(0, 2)}</span>
+            <TokenIcon symbol={r.symbol} imageUrl={basket.find((t) => t.symbol === r.symbol)?.imageUrl ?? null} size={32} />
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-semibold">{r.symbol}</span>
               <span className={`num block text-[10px] uppercase ${r.tint}`}>{r.kind}</span>
@@ -343,6 +368,7 @@ function Features() {
         }
         body="theses from your favourite traders, plus live alpha from X and Telegram."
         art={<AlphaFeedArt />}
+        live
       />
       <FeatureCard
         eyebrow="protect yourself"
@@ -451,7 +477,7 @@ function Footer() {
           </Link>
         </nav>
       </div>
-      <p className="mx-auto max-w-6xl px-5 text-xs text-faint">Trading involves risk, including the loss of principal. Nothing here is financial advice. Names and figures in the examples above are illustrative.</p>
+      <p className="mx-auto max-w-6xl px-5 text-xs text-faint">Trading involves risk, including the loss of principal. Nothing here is financial advice. Posts marked live are real posts, shortened with links removed, and don't mean their authors use or endorse this app. All other names and figures are illustrative.</p>
       <ArcStudioBadge />
     </footer>
   );

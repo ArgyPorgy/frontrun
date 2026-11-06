@@ -4,6 +4,8 @@ import type {
   ApiErrorBody,
   BalanceView,
   Candle,
+  BasketToken,
+  LandingVoices,
   LeaderboardRow,
   MeView,
   NotificationView,
@@ -117,6 +119,10 @@ export class ApiClient {
   portfolio = () => this.request<PortfolioView>("GET", "/v1/portfolio");
 
   stats = () => this.request<StatsView>("GET", "/v1/stats");
+
+  marketBasket = () => this.request<{ items: BasketToken[] }>("GET", "/v1/market/basket");
+
+  landingVoices = () => this.request<LandingVoices>("GET", "/v1/landing/voices");
 
   tracker = (source: TrackerSource, opts: { before?: string; kind?: TrackerPostKind } = {}) =>
     this.request<{ items: TrackerPostView[]; configured: boolean }>("GET", `/v1/trackers/${source}`, { query: opts });
