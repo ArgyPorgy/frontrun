@@ -21,6 +21,7 @@ export * from "./trading/service";
 export * from "./trading/signer";
 export * from "./trading/sponsor";
 export * from "./trading/orders";
+export * from "./trading/copy";
 export * from "./market/service";
 export * from "./market/basket";
 export { DEX_BACKGROUND_PER_MINUTE, DEX_BATCH_SIZE, DexBusyError, fetchTokens } from "./market/dexscreener";

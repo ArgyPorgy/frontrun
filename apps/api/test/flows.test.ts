@@ -43,6 +43,7 @@ import {
   publish,
   redis,
   resolveClosedTheses,
+  runCopyTrades,
   sendBuyAlerts,
   runMigrations,
   schema,
@@ -1071,6 +1072,211 @@ describe("the landing page's real posts", () => {
     expect(voices.named.theunipcs?.url).toBe("https://x.com/theunipcs/status/2");
     expect(voices.named.frankdegods).toBeUndefined();
     expect(voices.recent.map((p) => p.authorHandle)).toEqual(["someoneelse"]);
+  });
+});
+
+describe("copy trading", () => {
+  const SETTING = { amountUsd: "25", dailyLimitUsd: "250", copySells: true, enabled: true };
+
+  /** Two beta accounts, the follower funded with one-tap on and copying the leader. */
+  async function pair(setting = SETTING) {
+    const leader = await loginFunded("sayan");
+    const follower = await loginFunded("argyporgy");
+    await enableOneTap(follower.client);
+    await follower.client.saveCopySetting("sayan", setting);
+    return { leader, follower };
+  }
+
+  const tradesOf = async (client: ApiClient) => (await client.trades()).items;
+  const inbox = async (client: ApiClient) => (await client.notifications()).items.filter((n) => n.type === "copy_trade").map((n) => n.message);
+
+  it("copies a buy with the follower's own amount, and says so", async () => {
+    const { leader, follower } = await pair();
+    await buy(leader.client, TOKEN_A, "100");
+    expect(await runCopyTrades()).toBe(1);
+    await settle();
+    const [copy] = await tradesOf(follower.client);
+    expect(copy).toMatchObject({ side: "buy", status: "filled" });
+    expect(Number(copy!.usdIn)).toBe(25);
+    expect((await follower.client.myPosition("arc", TOKEN_A)).position).not.toBeNull();
+    expect(await inbox(follower.client)).toEqual(["Copying sayan: buying AAA with $25."]);
+    const [row] = await db().select().from(schema.trades).where(eq(schema.trades.id, copy!.id));
+    expect(row!.copiedFromTradeId).not.toBeNull();
+  });
+
+  it("can be saved from the browser", async () => {
+    const res = await fetch(`${baseUrl}/v1/copy/sayan`, { method: "OPTIONS", headers: { origin: "http://localhost:3000", "access-control-request-method": "PUT", "access-control-request-headers": "authorization,content-type" } });
+    expect(res.headers.get("access-control-allow-methods")).toContain("PUT");
+  });
+
+  it("is only open to the beta accounts for now", async () => {
+    await loginFunded("sayan");
+    const outsider = await loginFunded("outsider");
+    await enableOneTap(outsider.client);
+    expect((await outsider.client.copySettings()).available).toBe(false);
+    await expectApiError(outsider.client.saveCopySetting("sayan", SETTING), "copy_not_available");
+  });
+
+  it("needs one-tap on, sane amounts, and a real other person", async () => {
+    await loginFunded("sayan");
+    const follower = await loginFunded("argyporgy");
+    await expectApiError(follower.client.saveCopySetting("sayan", SETTING), "needs_one_tap");
+    await enableOneTap(follower.client);
+    await expectApiError(follower.client.saveCopySetting("sayan", { ...SETTING, amountUsd: "101", dailyLimitUsd: "250" }), "copy_amount");
+    await expectApiError(follower.client.saveCopySetting("sayan", { ...SETTING, amountUsd: "0.5" }), "copy_amount");
+    await expectApiError(follower.client.saveCopySetting("sayan", { ...SETTING, dailyLimitUsd: "10" }), "copy_daily");
+    await expectApiError(follower.client.saveCopySetting("sayan", { ...SETTING, dailyLimitUsd: "1001" }), "copy_daily");
+    await expectApiError(follower.client.saveCopySetting("argyporgy", SETTING), "self_follow");
+    await follower.client.saveCopySetting("sayan", SETTING);
+    expect((await follower.client.profile("sayan")).isFollowing).toBe(true);
+  });
+
+  it("doesn't loop when two people copy each other", async () => {
+    const { leader, follower } = await pair();
+    await enableOneTap(leader.client);
+    await leader.client.saveCopySetting("argyporgy", SETTING);
+    await buy(leader.client, TOKEN_A, "100");
+    await runCopyTrades();
+    await settle();
+    expect(await runCopyTrades()).toBe(0);
+    await settle();
+    expect(await tradesOf(leader.client)).toHaveLength(1);
+    expect(await tradesOf(follower.client)).toHaveLength(1);
+  });
+
+  it("places one copy however many workers run at once", async () => {
+    const { leader, follower } = await pair();
+    await buy(leader.client, TOKEN_A, "100");
+    await Promise.all([runCopyTrades(), runCopyTrades(), runCopyTrades()]);
+    await settle();
+    expect(await tradesOf(follower.client)).toHaveLength(1);
+  });
+
+  it("stops at the daily limit, spending only what's left of it", async () => {
+    const { leader, follower } = await pair({ ...SETTING, amountUsd: "25", dailyLimitUsd: "30" });
+    await buy(leader.client, TOKEN_A, "50");
+    await runCopyTrades();
+    await settle();
+    await buy(leader.client, TOKEN_B, "50");
+    await runCopyTrades();
+    await settle();
+    await buy(leader.client, TOKEN_A, "50");
+    await runCopyTrades();
+    await settle();
+    const amounts = (await tradesOf(follower.client)).map((t) => Number(t.usdIn)).sort();
+    expect(amounts).toEqual([25, 5]);
+    expect((await inbox(follower.client))[0]).toMatch(/daily copy limit/);
+  });
+
+  it("skips a buy that would need someone to accept a warning, and says why", async () => {
+    const { leader, follower } = await pair({ ...SETTING, amountUsd: "100", dailyLimitUsd: "250" });
+    await buy(leader.client, THIN, "100");
+    await runCopyTrades();
+    await settle();
+    expect(await tradesOf(follower.client)).toHaveLength(0);
+    expect((await inbox(follower.client))[0]).toMatch(/Didn't copy sayan's THIN buy: .*liquidity/);
+  });
+
+  it("never copies a risk-flagged token", async () => {
+    const { leader, follower } = await pair();
+    await setPrice("arc", TOKEN_B, "10", "1000000", "BBB");
+    await buy(leader.client, TOKEN_B, "50");
+    const key = tokenKey("arc", TOKEN_B);
+    await redis().set(KEYS.tokenInfo(key), JSON.stringify({ gecko: null, flash: { riskFlagged: true, decimals: 18, holders: 1, imageUrl: null, tradable: true } }), "EX", 60);
+    await runCopyTrades();
+    expect(await tradesOf(follower.client)).toHaveLength(0);
+    expect((await inbox(follower.client))[0]).toMatch(/flagged/);
+  });
+
+  it("mirrors the share sold, and leaves the follower's own tokens alone", async () => {
+    const { leader, follower } = await pair();
+    await buy(follower.client, TOKEN_A, "75");
+    await buy(leader.client, TOKEN_A, "100");
+    await runCopyTrades();
+    await settle();
+    const qtyBefore = Number((await follower.client.myPosition("arc", TOKEN_A)).position!.qty);
+    const copied = Number((await tradesOf(follower.client)).find((t) => Number(t.usdIn) === 25)!.qty);
+
+    await sell(leader.client, TOKEN_A, 50);
+    await runCopyTrades();
+    await settle();
+    const afterHalf = Number((await follower.client.myPosition("arc", TOKEN_A)).position!.qty);
+    expect(afterHalf).toBeCloseTo(qtyBefore - copied / 2, 6);
+
+    // The trader sells out: the rest of the copied tokens go, and the follower's own stay.
+    await sell(leader.client, TOKEN_A, 100);
+    await runCopyTrades();
+    await settle();
+    expect(Number((await follower.client.myPosition("arc", TOKEN_A)).position!.qty)).toBeCloseTo(qtyBefore - copied, 6);
+  });
+
+  it("doesn't touch tokens the follower bought themselves", async () => {
+    const { leader, follower } = await pair();
+    await buy(follower.client, TOKEN_A, "75");
+    await buy(leader.client, TOKEN_B, "10");
+    await settingOff(follower);
+    await buy(leader.client, TOKEN_A, "50");
+    await runCopyTrades();
+    await settle();
+    await follower.client.saveCopySetting("sayan", SETTING);
+    await sell(leader.client, TOKEN_A, 100);
+    await runCopyTrades();
+    await settle();
+    expect((await tradesOf(follower.client)).some((t) => t.side === "sell")).toBe(false);
+  });
+
+  async function settingOff(follower: { client: ApiClient }) {
+    await runCopyTrades();
+    await settle();
+    await follower.client.saveCopySetting("sayan", { ...SETTING, enabled: false });
+  }
+
+  it("leaves sells alone when asked to", async () => {
+    const { leader, follower } = await pair({ ...SETTING, copySells: false });
+    await buy(leader.client, TOKEN_A, "100");
+    await runCopyTrades();
+    await settle();
+    await sell(leader.client, TOKEN_A, 100);
+    await runCopyTrades();
+    await settle();
+    expect((await tradesOf(follower.client)).some((t) => t.side === "sell")).toBe(false);
+  });
+
+  it("pauses and says so when one-tap is off", async () => {
+    const { leader, follower } = await pair();
+    await db().update(schema.signerGrants).set({ revokedAt: new Date() });
+    await buy(leader.client, TOKEN_A, "100");
+    await runCopyTrades();
+    expect(await tradesOf(follower.client)).toHaveLength(0);
+    expect((await inbox(follower.client))[0]).toMatch(/one-tap trading is off/);
+  });
+
+  it("won't chase a fill that's already old", async () => {
+    const { leader, follower } = await pair();
+    const { trade } = await buy(leader.client, TOKEN_A, "100");
+    await db().update(schema.trades).set({ filledAt: new Date(Date.now() - 3 * 60_000) }).where(eq(schema.trades.id, trade.id));
+    expect(await runCopyTrades()).toBe(0);
+    expect(await tradesOf(follower.client)).toHaveLength(0);
+  });
+
+  it("stops when paused, stopped, unfollowed or blocked", async () => {
+    const { leader, follower } = await pair();
+    await follower.client.saveCopySetting("sayan", { ...SETTING, enabled: false });
+    await buy(leader.client, TOKEN_A, "10");
+    expect(await runCopyTrades()).toBe(0);
+
+    await follower.client.saveCopySetting("sayan", SETTING);
+    await follower.client.deleteCopySetting("sayan");
+    expect((await follower.client.copySettings()).items).toHaveLength(0);
+
+    await follower.client.saveCopySetting("sayan", SETTING);
+    await follower.client.unfollow("sayan");
+    expect((await follower.client.copySettings()).items).toHaveLength(0);
+
+    await follower.client.saveCopySetting("sayan", SETTING);
+    await leader.client.block("argyporgy");
+    expect((await follower.client.copySettings()).items).toHaveLength(0);
+    await expectApiError(follower.client.saveCopySetting("sayan", SETTING), "blocked");
   });
 });
 

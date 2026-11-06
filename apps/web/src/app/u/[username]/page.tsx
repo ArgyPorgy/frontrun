@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
+import { CopySheet, useCopySettings } from "@/components/copy-trade";
 import { ThesisCard } from "@/components/thesis-card";
 import { Avatar, Button, ChainBadge, EmptyState, LinkButton, Pct, RowSkeletons, Segmented, Sheet, Stat, TokenIcon } from "@/components/ui";
 import { api, errorMessage } from "@/lib/api";
@@ -39,6 +40,8 @@ export default function ProfilePage() {
   const { toast } = useToast();
   const [tab, setTab] = useState<"theses" | "positions">("theses");
   const [menu, setMenu] = useState(false);
+  const [copyOpen, setCopyOpen] = useState(false);
+  const copy = useCopySettings();
 
   const profile = useQuery({ queryKey: ["profile", username, status], queryFn: () => api.profile(username) });
   const theses = useQuery({ queryKey: ["theses", "user", username], queryFn: () => api.theses({ username, limit: 50 }) });
@@ -72,9 +75,11 @@ export default function ProfilePage() {
   if (!profile.data) return <EmptyState title="User not found" />;
   const p = profile.data;
   const pnl = D(p.stats.allTimePnlUsd);
+  const copying = copy.data?.items.find((item) => item.leader.id === p.id) ?? null;
 
   return (
     <div>
+      <CopySheet leader={p} current={copying} open={copyOpen} onClose={() => setCopyOpen(false)} />
       <section className="px-4 pt-4 pb-3">
         <div className="flex items-center gap-3">
           <Avatar user={p} size={60} />
@@ -98,6 +103,11 @@ export default function ProfilePage() {
               >
                 {p.isFollowing ? "Following" : "Follow"}
               </Button>
+              {copy.data?.available && !p.isBlocked && (
+                <Button variant={copying?.enabled ? "secondary" : "primary"} className="px-4 py-1.5 text-sm" onClick={() => setCopyOpen(true)}>
+                  {copying?.enabled ? "Copying" : "Copy"}
+                </Button>
+              )}
               <button onClick={() => setMenu(true)} aria-label="More" className="px-2 text-muted">
                 ···
               </button>

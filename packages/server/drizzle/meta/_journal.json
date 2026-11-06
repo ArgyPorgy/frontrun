@@ -64,6 +64,13 @@
       "when": 1793983150991,
       "tag": "0008_followers_notified",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793983815853,
+      "tag": "0009_copy_trading",
+      "breakpoints": true
     }
   ]
 }

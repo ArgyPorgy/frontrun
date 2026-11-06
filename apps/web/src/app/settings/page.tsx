@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
+import { CopySection } from "@/components/copy-trade";
 import { Avatar, Button, CopyButton, EmptyState, LinkButton, PageTitle, Sheet } from "@/components/ui";
 import { api, errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -343,6 +344,7 @@ export default function SettingsPage() {
       </div>
 
       <OneTapSection />
+      <CopySection />
 
       <Section title="Funds">
         <Row label="Add USDC" action={<LinkButton href="/deposit" variant="secondary" className="px-3 py-1.5 text-sm">Add</LinkButton>} />

@@ -38,7 +38,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(helmet, { contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: "cross-origin" } });
   await app.register(cors, {
     origin: e.APP_ORIGIN.split(",").map((o) => o.trim()),
-    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["authorization", "content-type"],
   });
   await app.register(rateLimit, {

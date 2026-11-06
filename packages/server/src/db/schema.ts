@@ -97,6 +97,10 @@ export const trades = pgTable("trades", {
   isPaper: boolean("is_paper").notNull().default(false),
   idempotencyKey: text("idempotency_key").notNull(),
   copiedThesisId: uuid("copied_thesis_id"),
+  /** Set when copy trading placed this. A copy is never copied in turn. */
+  copiedFromTradeId: uuid("copied_from_trade_id"),
+  /** Set once followers' copies of this fill have been placed. */
+  copyProcessedAt: ts("copy_processed_at"),
   /** Quote payload and signing progress. Holds no secrets. */
   execState: jsonb("exec_state"),
   applied: boolean("applied").notNull().default(false),
@@ -243,6 +247,22 @@ export const reports = pgTable("reports", {
 }, (t) => [
   uniqueIndex("reports_one_per_thesis").on(t.reporterId, t.thesisId),
   index("reports_thesis").on(t.thesisId),
+]);
+
+/** Who copies whose trades, and with how much of their own money. */
+export const copySettings = pgTable("copy_settings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  followerId: uuid("follower_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  leaderId: uuid("leader_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  amountUsd: usd("amount_usd").notNull(),
+  dailyLimitUsd: usd("daily_limit_usd").notNull(),
+  copySells: boolean("copy_sells").notNull().default(true),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: ts("created_at").notNull().defaultNow(),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("copy_settings_pair").on(t.followerId, t.leaderId),
+  index("copy_settings_leader").on(t.leaderId),
 ]);
 
 export const notifications = pgTable("notifications", {

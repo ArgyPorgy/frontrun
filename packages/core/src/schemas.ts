@@ -50,6 +50,14 @@ export const createOrderSchema = z
   });
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
+export const copySettingSchema = z.object({
+  amountUsd: positiveDecimal,
+  dailyLimitUsd: positiveDecimal,
+  copySells: z.boolean(),
+  enabled: z.boolean(),
+});
+export type CopySettingInput = z.infer<typeof copySettingSchema>;
+
 export const executeTradeSchema = z.object({
   quoteId: z.string().min(8).max(64),
   /** Client-generated per tap, so a double tap or retry can't place two orders. */

@@ -1,7 +1,11 @@
-import { chainKeySchema, createOrderSchema, executeTradeSchema, isValidAddress, quoteRequestSchema, submitStepsSchema, type Page, type TradeView } from "@frontrun/core";
+import { chainKeySchema, copySettingSchema, createOrderSchema, executeTradeSchema, isValidAddress, quoteRequestSchema, submitStepsSchema, type Page, type TradeView } from "@frontrun/core";
 import {
   AppError,
   cancelOrder,
+  deleteCopySetting,
+  findByUsername,
+  listCopySettings,
+  saveCopySetting,
   createQuote,
   db,
   executeTrade,
@@ -54,6 +58,22 @@ export async function registerTradingRoutes(app: FastifyInstance) {
     const user = await requireUser(req);
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     return cancelOrder(user.id, id);
+  });
+
+  app.get("/v1/copy", async (req) => listCopySettings(await requireUser(req)));
+
+  app.put("/v1/copy/:username", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req) => {
+    const user = await requireUser(req);
+    const { username } = z.object({ username: z.string().min(1).max(64) }).parse(req.params);
+    return saveCopySetting(user, username, copySettingSchema.parse(req.body));
+  });
+
+  app.delete("/v1/copy/:username", async (req) => {
+    const user = await requireUser(req);
+    const { username } = z.object({ username: z.string().min(1).max(64) }).parse(req.params);
+    const leader = await findByUsername(username);
+    if (!leader) throw notFound("User");
+    return deleteCopySetting(user, leader.id);
   });
 
   // Public on purpose: a shared result card has to load for anyone who opens the link.

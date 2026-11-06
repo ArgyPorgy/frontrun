@@ -242,7 +242,7 @@ export interface TraderResult extends UserSummary {
 
 export interface NotificationView {
   id: string;
-  type: "thesis_posted" | "followed_buy" | "thesis_liked" | "thesis_replied" | "followed" | "trade_update" | "deposit" | "copy_buy";
+  type: "thesis_posted" | "followed_buy" | "copy_trade" | "thesis_liked" | "thesis_replied" | "followed" | "trade_update" | "deposit" | "copy_buy";
   actor: UserSummary | null;
   thesisId: string | null;
   tradeId: string | null;
@@ -357,6 +357,21 @@ export interface TrackerPostView {
   /** Tickers like $WIF and contract addresses found in the text. */
   tokens: string[];
   postedAt: string;
+}
+
+export interface CopySettingView {
+  leader: UserSummary;
+  amountUsd: string;
+  dailyLimitUsd: string;
+  copySells: boolean;
+  enabled: boolean;
+}
+
+export interface CopySettingsView {
+  /** Whether this account can turn copying on yet. */
+  available: boolean;
+  spentTodayUsd: string;
+  items: CopySettingView[];
 }
 
 /** Posts on X that mention a token's contract address. */

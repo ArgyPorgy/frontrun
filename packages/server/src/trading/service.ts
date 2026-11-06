@@ -449,7 +449,7 @@ export function friendlyFailure(err: unknown): string {
 
 export async function executeTrade(
   userId: string,
-  input: { quoteId: string; idempotencyKey: string; confirmed?: boolean },
+  input: { quoteId: string; idempotencyKey: string; confirmed?: boolean; copiedFromTradeId?: string },
 ): Promise<TradeView> {
   const existing = await db().query.trades.findFirst({
     where: and(eq(schema.trades.userId, userId), eq(schema.trades.idempotencyKey, input.idempotencyKey)),
@@ -523,6 +523,7 @@ export async function executeTrade(
       isPaper: paper,
       idempotencyKey: input.idempotencyKey,
       copiedThesisId: record.copy?.thesisId ?? null,
+      copiedFromTradeId: input.copiedFromTradeId ?? null,
       execState: state,
     })
     .returning();

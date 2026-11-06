@@ -20,7 +20,7 @@ import {
   type UserSummary,
   type WalletView,
 } from "@frontrun/core";
-import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, sql, or } from "drizzle-orm";
 import { db, schema } from "./db/client";
 import { env } from "./env";
 import { conflict, notFound } from "./errors";
@@ -354,6 +354,8 @@ export async function unfollow(followerId: string, username: string) {
   const target = await findByUsername(username);
   if (!target) throw notFound("User");
   await db().delete(schema.follows).where(and(eq(schema.follows.followerId, followerId), eq(schema.follows.followeeId, target.id)));
+  // Copying someone depends on following them.
+  await db().delete(schema.copySettings).where(and(eq(schema.copySettings.followerId, followerId), eq(schema.copySettings.leaderId, target.id)));
 }
 
 export async function block(blockerId: string, username: string) {
@@ -364,6 +366,7 @@ export async function block(blockerId: string, username: string) {
   // A block ends the follow in both directions.
   await db().delete(schema.follows).where(and(eq(schema.follows.followerId, blockerId), eq(schema.follows.followeeId, target.id)));
   await db().delete(schema.follows).where(and(eq(schema.follows.followerId, target.id), eq(schema.follows.followeeId, blockerId)));
+  await db().delete(schema.copySettings).where(or(and(eq(schema.copySettings.followerId, blockerId), eq(schema.copySettings.leaderId, target.id)), and(eq(schema.copySettings.followerId, target.id), eq(schema.copySettings.leaderId, blockerId))));
 }
 
 export async function unblock(blockerId: string, username: string) {

@@ -1,10 +1,12 @@
 import type { ChainKey } from "./chains";
 import type { OrderType } from "./routing";
+import type { CopySettingInput } from "./schemas";
 import type {
   ApiErrorBody,
   BalanceView,
   Candle,
   BasketToken,
+  CopySettingsView,
   LandingVoices,
   LeaderboardRow,
   TokenTweets,
@@ -161,6 +163,12 @@ export class ApiClient {
 
   profile = (username: string) => this.request<ProfileView>("GET", `/v1/users/${username}`);
   userPositions = (username: string) => this.request<{ open: PortfolioView["open"]; closed: PortfolioView["closed"] }>("GET", `/v1/users/${username}/positions`);
+  copySettings = () => this.request<CopySettingsView>("GET", "/v1/copy");
+
+  saveCopySetting = (username: string, body: CopySettingInput) => this.request<CopySettingsView>("PUT", `/v1/copy/${username}`, { body });
+
+  deleteCopySetting = (username: string) => this.request<CopySettingsView>("DELETE", `/v1/copy/${username}`);
+
   follow = (username: string) => this.request<void>("POST", `/v1/users/${username}/follow`, { body: {} });
   unfollow = (username: string) => this.request<void>("DELETE", `/v1/users/${username}/follow`);
   block = (username: string) => this.request<void>("POST", `/v1/users/${username}/block`, { body: {} });
