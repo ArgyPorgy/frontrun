@@ -1,7 +1,7 @@
 import { CHAINS, D, fromBaseUnits, type ChainKey, type ExecStep, type StepResult } from "@frontrun/core";
 import { PrivyClient } from "@privy-io/node";
 import { getBase58Decoder } from "@solana/kit";
-import { eq } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 import { createWalletClient, http, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { db, schema } from "../db/client";
@@ -9,7 +9,7 @@ import { env } from "../env";
 import { AppError } from "../errors";
 import { logger } from "../logger";
 import { fetchTokens } from "../market/dexscreener";
-import { evmClient, solanaLamports, viemChain, waitForSolanaTx } from "../onchain";
+import { evmClient, sendSolanaLamports, solanaKeyAddress, solanaLamports, viemChain, waitForSolanaTx } from "../onchain";
 import { sendSponsored, sponsorshipConfigured } from "./sponsor";
 
 let client: PrivyClient | undefined;
@@ -103,13 +103,14 @@ const NATIVE_PRICE_REF: Record<string, { chain: ChainKey; address: string }> = {
   ETH: { chain: "base", address: "0x4200000000000000000000000000000000000006" },
   BNB: { chain: "bsc", address: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c" },
   HYPE: { chain: "hyperevm", address: "0x5555555555555555555555555555555555555555" },
+  SOL: { chain: "solana", address: "So11111111111111111111111111111111111111112" },
 };
 
 async function nativePriceUsd(chain: ChainKey): Promise<string> {
   const ref = NATIVE_PRICE_REF[CHAINS[chain].nativeSymbol];
   if (!ref) return "0";
   const snaps = await fetchTokens(ref.chain, [ref.address]);
-  return snaps.get(ref.address.toLowerCase())?.priceUsd ?? "0";
+  return (snaps.get(ref.address.toLowerCase()) ?? snaps.get(ref.address))?.priceUsd ?? "0";
 }
 
 /**
@@ -137,6 +138,53 @@ export async function ensureGasForSetup(args: { chain: ChainKey; address: string
   await db()
     .insert(schema.auditLog)
     .values({ userId, action: "gas_topup", detail: { chain, amountWei: topup, costUsd, txHash: hash, tradeId } });
+  return true;
+}
+
+/**
+ * What the Solana gas vault keeps a selling wallet at. Solana won't let a wallet that pays fees sit below
+ * about 0.0009 SOL, and a new token account takes about 0.002 more, so this covers both plus the fees.
+ */
+const SOL_GAS_TARGET_LAMPORTS = 3_500_000;
+const SOL_GAS_MIN_LAMPORTS = 3_000_000;
+/** The SOL stays in the person's wallet, so this keeps anyone from repeatedly emptying the vault. */
+const SOL_TOPUPS_PER_DAY = 3;
+const VAULT_LOW_LAMPORTS = 50_000_000;
+const SOLANA_FEE_ROOM_LAMPORTS = 20_000;
+
+export function solTopUpAmount(balanceLamports: number): number {
+  return balanceLamports >= SOL_GAS_MIN_LAMPORTS ? 0 : SOL_GAS_TARGET_LAMPORTS - balanceLamports;
+}
+
+/** The Solana side of the gas top-up: the vault sends the wallet enough SOL for a first sell's setup. */
+export async function ensureSolGasForSetup(args: { address: string; userId: string; tradeId: string }): Promise<boolean> {
+  const { address, userId, tradeId } = args;
+  const key = env().GAS_TOPUP_SOLANA_PRIVATE_KEY;
+  if (!key) return false;
+  const lamports = solTopUpAmount(await solanaLamports(address));
+  if (lamports === 0) return false;
+
+  const since = new Date(Date.now() - 86_400_000);
+  const recent = await db().select({ id: schema.gasTopups.id }).from(schema.gasTopups).where(and(eq(schema.gasTopups.userId, userId), eq(schema.gasTopups.chain, "solana"), gt(schema.gasTopups.createdAt, since)));
+  if (recent.length >= SOL_TOPUPS_PER_DAY) {
+    logger.warn({ userId, tradeId }, "Solana gas top-ups hit the daily limit");
+    throw new AppError(429, "gas_limit", "This wallet has used up its free Solana gas for today. Try again tomorrow. Your tokens are safe.");
+  }
+
+  const vault = await solanaKeyAddress(key);
+  const vaultBalance = await solanaLamports(vault);
+  if (vaultBalance < lamports + SOLANA_FEE_ROOM_LAMPORTS) throw new Error(`The Solana gas vault ${vault} is out of SOL.`);
+  if (vaultBalance < VAULT_LOW_LAMPORTS) logger.warn({ vault, lamports: vaultBalance }, "The Solana gas vault is running low");
+
+  const signature = await sendSolanaLamports(key, address, lamports);
+  await waitForSolanaTx(signature);
+
+  const price = await nativePriceUsd("solana").catch(() => "0");
+  const costUsd = D(fromBaseUnits(BigInt(lamports), 9)).mul(price).toFixed();
+  await db().insert(schema.gasTopups).values({ userId, chain: "solana", amountWei: String(lamports), costUsd, txHash: signature, tradeId });
+  await db()
+    .insert(schema.auditLog)
+    .values({ userId, action: "gas_topup", detail: { chain: "solana", lamports, costUsd, txHash: signature, tradeId } });
   return true;
 }
 
@@ -229,6 +277,16 @@ export async function performServerStep(wallets: SigningWallets, step: ExecStep,
           await waitForSolanaTx(hash);
           return { id: step.id, txHash: hash };
         };
+        if (step.sponsor && env().GAS_TOPUP_SOLANA_PRIVATE_KEY) {
+          try {
+            await ensureSolGasForSetup({ address: wallets.solanaAddress!, userId: ctx.userId, tradeId: ctx.tradeId });
+          } catch (err) {
+            if (err instanceof AppError) throw err;
+            logger.error({ err: err instanceof Error ? err.message.slice(0, 200) : err }, "ALERT: the Solana gas vault can't cover a first sell");
+            throw new AppError(503, "gas_unavailable", "The first sell of a Solana token needs a little gas, and the app can't cover it right now. Your tokens are safe.");
+          }
+          return await land(false);
+        }
         try {
           return await land(!!step.sponsor);
         } catch (err) {

@@ -39,7 +39,7 @@ In the Privy dashboard, turn on Google, email and wallet login, and add `http://
 
 Already handled: `.env` has VAPID keys for push, so only put a real contact in `VAPID_SUBJECT` before launch.
 
-Optional: `GAS_TOPUP_PRIVATE_KEY`, a funded wallet for first sells on BSC, Ethereum, Arbitrum and HyperEVM, which Privy can't sponsor. `ARC_RPC_URL`, an Alchemy or QuickNode endpoint for production load.
+Optional: `GAS_TOPUP_PRIVATE_KEY`, a funded wallet for first sells on BSC, Ethereum, Arbitrum and HyperEVM, which Privy can't sponsor. `GAS_TOPUP_SOLANA_PRIVATE_KEY`, the same thing for Solana: the vault tops a selling wallet up to 0.0035 SOL, at most 3 times a day per person, and the cost comes out of that sell through the integrator fee. `ARC_RPC_URL`, an Alchemy or QuickNode endpoint for production load.
 
 ## 2. Check the signer works, still with no funds at risk
 
@@ -131,7 +131,7 @@ The deck asks for this, and it's the biggest open risk. Signing, policies and th
 
 ## 5. Known risks to watch in that test
 
-- **Solana sells.** A token's first sell needs a setup transaction, and nobody pays its network fee until Solana gas sponsorship is on in the Privy dashboard. Without it, the app uses the wallet's own SOL, and asks for about 0.001 SOL if there's none, which conflicts with the "users only hold USDC" rule. Flash's docs say sponsored delegation is "off for new accounts", and token account rent (about 0.002 SOL each) is never sponsored. No Solana sell had filled when this was written.
+- **Solana sells.** A token's first sell needs a setup transaction. The Solana gas vault pays for it when `GAS_TOPUP_SOLANA_PRIVATE_KEY` is set and funded. Without the vault, the app uses the wallet's own SOL, and asks for about 0.001 SOL if there's none. Flash's docs say sponsored delegation is "off for new accounts", and token account rent (about 0.002 SOL each) is never sponsored. No Solana sell had filled when this was written.
 - **Slippage.** So one-tap orders execute instead of reverting, the app allows 20% on cross-chain and 5% on Arc, set in `GUARDRAILS` in `packages/core/src/routing.ts`. Flash suggests 15% on cross-chain, and FOMO reportedly defaults to 40%. A wide limit can cost more: a $100 cross-chain buy could fill up to $20 under its quote.
 - **Orders expiring.** One real $2.50 Arc to Base order closed with `REASON_ORDER_EXPIRED` after 37 seconds, with no funds moved, while the next one filled in 39 seconds. It's order `30494f56-85eb-44e4-8559-fbc750c097be`, and it's worth asking Definitive why. Wider limits may help, but that isn't proven.
 - **Two-step trades.** Flash can't bridge Robinhood's stock tokens like NVDA directly, so these run as two Flash orders through USDG on Robinhood Chain. This costs more than a direct route, about 4% on a $3.70 NVDA sell, and takes longer. If the second order fails six times, or one-tap is turned off in between, the trade closes at USDG, which shows up in the portfolio to sell normally. Look for `ALERT: a two-step trade stopped` in the worker logs. The orders are proven against Privy's rules and Flash from an empty wallet (`signer:test`), but no funded two-step trade has run yet.

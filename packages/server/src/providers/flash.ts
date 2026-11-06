@@ -334,6 +334,26 @@ export const flashProvider: RouteProvider = {
   },
 };
 
+/**
+ * If the setup needed a gas top-up, re-quotes with the cost added to the integrator fee, so it comes out
+ * of this sell's proceeds instead of a separate transfer from the user.
+ */
+async function recoverTopup(ctx: ExecContext, raw: FlashQuoteRaw): Promise<FlashQuoteRaw> {
+  if (raw.topupRecovered) return raw;
+  let next: FlashQuoteRaw = { ...raw, topupRecovered: true };
+  const extraBps = await unsettledTopupBps(ctx);
+  if (extraBps > 0) {
+    const feeBps = Math.min(env().FLASH_INTEGRATOR_FEE_BPS + extraBps, MAX_INTEGRATOR_FEE_BPS);
+    const fresh = await requestQuote(ctx.request, feeBps);
+    next = { ...fresh, feeBps, topupRecovered: true };
+    ctx.quote.netOutputUsd = fresh.to.notional;
+    ctx.quote.expectedOut = fresh.to.amount;
+    await db().update(schema.gasTopups).set({ settledAt: new Date() }).where(and(eq(schema.gasTopups.tradeId, ctx.tradeId), isNull(schema.gasTopups.settledAt)));
+  }
+  ctx.quote.raw = next;
+  return next;
+}
+
 async function advanceOrder(ctx: ExecContext): Promise<AdvanceResult> {
   const { request: req } = ctx;
   let raw = ctx.quote.raw as FlashQuoteRaw;
@@ -349,6 +369,7 @@ async function advanceOrder(ctx: ExecContext): Promise<AdvanceResult> {
         return { steps };
       }
     }
+    if ((raw.setupTxs ?? []).length) raw = await recoverTopup(ctx, raw);
     if (raw.svm?.sponsoredDelegateTx && !completedStep(ctx, "delegate")) {
       steps.push({ id: "delegate", kind: "svm_tx", chain: "solana", label: "Authorize selling", transactionBase64: raw.svm.sponsoredDelegateTx, broadcast: false });
     }
@@ -372,23 +393,7 @@ async function advanceOrder(ctx: ExecContext): Promise<AdvanceResult> {
       });
       return { steps };
     }
-    if (completedStep(ctx, "approve") && !raw.topupRecovered) {
-      // If the approval needed a gas top-up, re-quote with the cost added to the integrator fee,
-      // so it comes out of this sell's proceeds instead of a separate transfer from the user.
-      const extraBps = await unsettledTopupBps(ctx);
-      if (extraBps > 0) {
-        const feeBps = Math.min(env().FLASH_INTEGRATOR_FEE_BPS + extraBps, MAX_INTEGRATOR_FEE_BPS);
-        const fresh = await requestQuote(req, feeBps);
-        raw = { ...fresh, feeBps, topupRecovered: true };
-        ctx.quote.raw = raw;
-        ctx.quote.netOutputUsd = fresh.to.notional;
-        ctx.quote.expectedOut = fresh.to.amount;
-        await db().update(schema.gasTopups).set({ settledAt: new Date() }).where(and(eq(schema.gasTopups.tradeId, ctx.tradeId), isNull(schema.gasTopups.settledAt)));
-      } else {
-        raw = { ...raw, topupRecovered: true };
-        ctx.quote.raw = raw;
-      }
-    }
+    if (completedStep(ctx, "approve")) raw = await recoverTopup(ctx, raw);
     if (raw.evm?.permitTypedData && !completedStep(ctx, "permit")) {
       steps.push({ id: "permit", kind: "evm_typed_data", chain: source, label: "Approve Permit2", typedData: raw.evm.permitTypedData });
     }

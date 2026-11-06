@@ -24,6 +24,20 @@ import {
 import { arbitrum, arc, base, bsc, hyperEvm, mainnet, robinhood } from "viem/chains";
 import { env } from "./env";
 import { fetchJson } from "./http";
+import {
+  AccountRole,
+  address,
+  appendTransactionMessageInstruction,
+  createKeyPairSignerFromBytes,
+  createTransactionMessage,
+  getBase58Encoder,
+  getBase64EncodedWireTransaction,
+  pipe,
+  setTransactionMessageFeePayerSigner,
+  setTransactionMessageLifetimeUsingBlockhash,
+  signTransactionMessageWithSigners,
+  type Blockhash,
+} from "@solana/kit";
 
 const VIEM_CHAINS: Record<Exclude<ChainKey, "solana">, Chain> = {
   arc,
@@ -117,6 +131,54 @@ interface SolanaTokenAccounts {
   result?: {
     value: Array<{ account: { data: { parsed: { info: { tokenAmount: { uiAmountString: string; decimals: number } } } } } }>;
   };
+}
+
+async function solanaRpc<T>(method: string, params: unknown[]): Promise<T> {
+  const data = await fetchJson<{ result?: T; error?: { message?: string } }>(rpcFor("solana"), { method: "POST", body: { jsonrpc: "2.0", id: 1, method, params }, timeoutMs: 8_000 });
+  if (data.error || data.result === undefined) throw new Error(`Solana ${method}: ${data.error?.message ?? "no result"}`);
+  return data.result;
+}
+
+/** Accepts the two forms Solana keys come in. The key itself never goes into an error message. */
+export function parseSolanaSecretKey(key: string): Uint8Array {
+  const text = key.trim();
+  const bytes = text.startsWith("[") ? Uint8Array.from(JSON.parse(text) as number[]) : new Uint8Array(getBase58Encoder().encode(text));
+  if (bytes.length !== 64) throw new Error("A Solana private key must be 64 bytes.");
+  return bytes;
+}
+
+export async function solanaKeyAddress(key: string): Promise<string> {
+  return (await createKeyPairSignerFromBytes(parseSolanaSecretKey(key))).address;
+}
+
+/** Sends SOL from the wallet behind this key, and returns the transaction's signature. */
+export async function sendSolanaLamports(key: string, to: string, lamports: number): Promise<string> {
+  const signer = await createKeyPairSignerFromBytes(parseSolanaSecretKey(key));
+  const { value: blockhash } = await solanaRpc<{ value: { blockhash: string; lastValidBlockHeight: number } }>("getLatestBlockhash", [{ commitment: "confirmed" }]);
+  // The System Program's transfer: instruction 2, then the amount, both little-endian.
+  const data = new Uint8Array(12);
+  const view = new DataView(data.buffer);
+  view.setUint32(0, 2, true);
+  view.setBigUint64(4, BigInt(lamports), true);
+  const message = pipe(
+    createTransactionMessage({ version: 0 }),
+    (m) => setTransactionMessageFeePayerSigner(signer, m),
+    (m) => setTransactionMessageLifetimeUsingBlockhash({ blockhash: blockhash.blockhash as Blockhash, lastValidBlockHeight: BigInt(blockhash.lastValidBlockHeight) }, m),
+    (m) =>
+      appendTransactionMessageInstruction(
+        {
+          programAddress: address("11111111111111111111111111111111"),
+          accounts: [
+            { address: signer.address, role: AccountRole.WRITABLE_SIGNER, signer },
+            { address: address(to), role: AccountRole.WRITABLE },
+          ],
+          data,
+        },
+        m,
+      ),
+  );
+  const signed = await signTransactionMessageWithSigners(message);
+  return solanaRpc<string>("sendTransaction", [getBase64EncodedWireTransaction(signed), { encoding: "base64", preflightCommitment: "confirmed" }]);
 }
 
 /** Waits for a Solana transaction to land, the way an EVM step waits for its receipt. */

@@ -68,6 +68,8 @@ const schema = z.object({
 
   /** Funds small native top-ups when Privy can't sponsor a sell's setup. Leave unset to disable. */
   GAS_TOPUP_PRIVATE_KEY: optional,
+  /** The Solana gas vault: base58, or the JSON byte array that Solana tools export. */
+  GAS_TOPUP_SOLANA_PRIVATE_KEY: optional,
 
   /** Pays gas for users through Pimlico's paymaster. While unset, every step falls back to the old path. */
   PIMLICO_API_KEY: optional,
