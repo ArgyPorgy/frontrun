@@ -207,7 +207,7 @@ async function main() {
   // One Telegram channel every 20 seconds, so each is read every few minutes.
   every("tracker-telegram", 20_000, () => pollTelegramTracker());
   // One group of X accounts a minute. X bills per post read, so this sets the running cost.
-  every("tracker-x", 60_000, () => pollXTracker());
+  every("tracker-x", e.X_TRACKER_INTERVAL_SECONDS * 1000, () => pollXTracker());
   every("tracker-prune", 3_600_000, () => pruneTrackerPosts());
   every("orders-watch", 3_000, () => checkWatchedOrders(), { leaseMs: 2 * 60_000 });
   every("orders-flash", 15_000, () => pollFlashOrders(), { leaseMs: 2 * 60_000 });

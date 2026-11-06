@@ -38,8 +38,10 @@ export async function registerMarketRoutes(app: FastifyInstance) {
 
   app.get("/v1/trackers/:source", async (req) => {
     const { source } = z.object({ source: z.enum(["x", "telegram"]) }).parse(req.params);
-    const { before } = z.object({ before: z.string().datetime().optional() }).parse(req.query);
-    return listTrackerPosts(source, { before });
+    const { before, kind } = z
+      .object({ before: z.string().datetime().optional(), kind: z.enum(["post", "quote", "reply", "repost", "follow"]).optional() })
+      .parse(req.query);
+    return listTrackerPosts(source, { before, kind });
   });
 
   app.get("/v1/tokens/:chain/:address", async (req) => {

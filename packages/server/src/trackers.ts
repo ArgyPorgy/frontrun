@@ -1,33 +1,36 @@
-import type { TrackerPostView, TrackerSource } from "@frontrun/core";
-import { and, desc, eq, lt } from "drizzle-orm";
+import type { TrackerPostKind, TrackerPostView, TrackerSource } from "@frontrun/core";
+import { and, desc, eq, lt, sql } from "drizzle-orm";
 import { db, schema } from "./db/client";
 import { env } from "./env";
 import { fetchJson, HttpError } from "./http";
 import { logger } from "./logger";
 import { redis } from "./redis";
+import { X_ACCOUNTS } from "./x-accounts";
+
+export { X_ACCOUNTS };
 
 /**
- * The X and Telegram trackers: a curated feed of what crypto's loudest accounts are saying, in the style
- * of GMGN's. Nothing here is a full firehose. Only these lists are read, and only relevant posts are kept.
- * Edit these lists to change who's tracked. Everything read is someone else's text, so it's shown as
- * plain text only, and never acted on.
+ * The X and Telegram trackers, in the style of GMGN's. Nothing here is a full firehose: only these lists are
+ * read. X shows everything its accounts do that can be read, since that list is hand-picked. Telegram only
+ * keeps relevant posts. Everything read is someone else's text, so it's shown as plain text only, and never
+ * acted on.
  */
-export const X_ACCOUNTS = [
-  "elonmusk", "cz_binance", "VitalikButerin", "saylor", "brian_armstrong", "jessepollak",
-  "aeyakovenko", "HyperliquidX", "circle", "coinbase", "binance", "base", "solana", "arbitrum",
-  "blknoiz06", "cobie", "HsakaTrades", "MustStopMurad", "Pentosh1", "inversebrah", "DegenSpartan", "gainzy222",
-  "lookonchain", "WatcherGuru", "tier10k", "whale_alert", "WuBlockchain", "unusual_whales",
-];
-
 export const TELEGRAM_CHANNELS = [
   "WatcherGuru", "cointelegraph", "wublockchainenglish", "lookonchainchannel", "whale_alert_io",
   "binance_announcements", "bwenews", "unfolded", "CoinMarketCapAnnouncements", "pumpfun",
 ];
 
-/** A search can be at most 512 characters, and this many accounts fit with room for since_id. */
-export const X_QUERY_CHUNK = 18;
+/** Searches are rejected past this length. */
+const X_QUERY_MAX = 512;
+/** X's search leaves plain reposts out unless it's asked for them. */
+const X_QUERY_SUFFIX = " include:nativeretweets";
+/** Room left in each search for " since_id:" and an id. */
+const X_SINCE_ROOM = 35;
+/** One run in this many checks an account's follows instead of searching for posts. */
+const X_FOLLOW_CHECK_EVERY = 6;
 /** TwitterAPI.io, a third party that reads X for far less than X's own API. It isn't affiliated with X. */
 const X_API = "https://api.twitterapi.io/twitter/tweet/advanced_search";
+const X_FOLLOWINGS_API = "https://api.twitterapi.io/twitter/user/followings";
 const KEEP_DAYS = 7;
 
 const CRYPTO_WORDS =
@@ -56,7 +59,7 @@ interface ParsedPost {
   authorHandle: string;
   authorName: string;
   authorAvatar: string | null;
-  kind: "post" | "quote" | "reply" | "repost";
+  kind: TrackerPostKind;
   body: string;
   url: string;
   postedAt: Date;
@@ -68,14 +71,33 @@ interface XResponse {
     text: string;
     createdAt: string;
     isReply?: boolean;
-    quoted_tweet?: unknown;
-    retweeted_tweet?: unknown;
+    quoted_tweet?: XEmbeddedTweet | null;
+    retweeted_tweet?: XEmbeddedTweet | null;
     author?: { userName: string; name: string; profilePicture?: string | null };
   }>;
 }
 
+interface XEmbeddedTweet {
+  text?: string;
+  author?: { userName?: string };
+}
+
+function embeddedText(t: XEmbeddedTweet): string | null {
+  if (!t.text) return null;
+  const text = decodeEntities(t.text);
+  return t.author?.userName ? `@${t.author.userName}: ${text}` : text;
+}
+
 const X_TWEET_ID = /^\d{1,25}$/;
 const X_HANDLE = /^\w{1,15}$/;
+
+/** A repost's own text is cut short, and a quote means little without what it quotes, so both carry the original. */
+function xPostBody(t: { text: string; quoted_tweet?: XEmbeddedTweet | null; retweeted_tweet?: XEmbeddedTweet | null }): string {
+  const text = decodeEntities(t.text);
+  if (t.retweeted_tweet) return embeddedText(t.retweeted_tweet) ?? text;
+  const quoted = t.quoted_tweet && embeddedText(t.quoted_tweet);
+  return quoted ? `${text}\n\nQuoting ${quoted}` : text;
+}
 
 /** This comes from a third party, so anything that would end up in a link or a date gets checked first. */
 export function parseXResponse(res: XResponse): ParsedPost[] {
@@ -92,7 +114,7 @@ export function parseXResponse(res: XResponse): ParsedPost[] {
         authorName: author.name,
         authorAvatar: author.profilePicture?.startsWith("https://") ? author.profilePicture : null,
         kind,
-        body: decodeEntities(t.text),
+        body: xPostBody(t),
         url: `https://x.com/${author.userName}/status/${t.id}`,
         postedAt,
       } satisfies ParsedPost,
@@ -107,9 +129,52 @@ export function newestXId(res: XResponse): string | null {
 }
 
 export function buildXQuery(accounts: string[], sinceId: string | null): string {
-  // Replies and plain reposts are most of the noise, and each one would cost a read.
-  const query = `(${accounts.map((a) => `from:${a}`).join(" OR ")}) -filter:replies -filter:retweets`;
+  const query = `(${accounts.map((a) => `from:${a}`).join(" OR ")})${X_QUERY_SUFFIX}`;
   return sinceId ? `${query} since_id:${sinceId}` : query;
+}
+
+/** Splits the accounts into as few searches as fit the length limit, so each one is read as often as possible. */
+export function xAccountGroups(handles: string[] = X_ACCOUNTS.map((a) => a.handle)): string[][] {
+  const groups: string[][] = [];
+  for (const handle of handles) {
+    const current = groups.at(-1);
+    if (current && buildXQuery([...current, handle], null).length + X_SINCE_ROOM <= X_QUERY_MAX) current.push(handle);
+    else groups.push([handle]);
+  }
+  return groups;
+}
+
+interface XFollowing {
+  id: string | number;
+  name: string;
+  userName: string;
+  description?: string | null;
+}
+
+/**
+ * X doesn't say when a follow happened, only that the list is newest first, so a new follow is anything above
+ * the first one already known. Anything lower may just have slid up after an unfollow. A page with nothing
+ * known in it means there's no way to tell, so it counts as nothing new.
+ */
+export function newFollows(page: XFollowing[], known: Set<string>): XFollowing[] {
+  const firstKnown = page.findIndex((u) => known.has(String(u.id)));
+  return firstKnown < 0 ? [] : page.slice(0, firstKnown);
+}
+
+export function followPost(account: { handle: string; name: string }, avatar: string | null, target: XFollowing, seenAt: Date): ParsedPost | null {
+  if (!X_HANDLE.test(target.userName)) return null;
+  const bio = target.description?.trim();
+  return {
+    id: `x:follow:${account.handle}:${target.id}`,
+    source: "x",
+    authorHandle: account.handle,
+    authorName: account.name,
+    authorAvatar: avatar,
+    kind: "follow",
+    body: `Followed ${target.name} (@${target.userName})${bio ? `\n\n${bio}` : ""}`,
+    url: `https://x.com/${target.userName}`,
+    postedAt: seenAt,
+  };
 }
 
 function decodeEntities(text: string): string {
@@ -163,11 +228,10 @@ export function parseTelegramPage(html: string, channel: string): ParsedPost[] {
 }
 
 async function savePosts(posts: ParsedPost[]): Promise<number> {
-  const relevant = posts.filter((p) => isRelevant(p.body));
-  if (!relevant.length) return 0;
+  if (!posts.length) return 0;
   const inserted = await db()
     .insert(schema.trackerPosts)
-    .values(relevant.map((p) => ({ ...p, body: p.body.slice(0, 2_000), tokens: extractTokens(p.body) })))
+    .values(posts.map((p) => ({ ...p, body: p.body.slice(0, 2_000), tokens: extractTokens(p.body) })))
     .onConflictDoNothing()
     .returning({ id: schema.trackerPosts.id });
   return inserted.length;
@@ -177,14 +241,20 @@ export function xTrackerConfigured(): boolean {
   return !!env().TWITTERAPI_IO_KEY;
 }
 
-/** Worker: reads one group of X accounts per run. Reads are billed per post, so sinceId keeps it to new ones. */
+/** Worker: one request per run, so runs can't collide with the service's rate limit. */
 export async function pollXTracker(): Promise<number> {
   const key = env().TWITTERAPI_IO_KEY;
   if (!key) return 0;
+  const run = Number(await redis().incr("tracker:x:run"));
+  return run % X_FOLLOW_CHECK_EVERY === 0 ? checkXFollows(key) : readXPosts(key);
+}
+
+/** Reads one group of accounts. Reads are billed per post, so sinceId keeps it to new ones. */
+async function readXPosts(key: string): Promise<number> {
   const r = redis();
-  const groups = Math.ceil(X_ACCOUNTS.length / X_QUERY_CHUNK);
-  const group = Number(await r.incr("tracker:x:cursor")) % groups;
-  const accounts = X_ACCOUNTS.slice(group * X_QUERY_CHUNK, (group + 1) * X_QUERY_CHUNK);
+  const groups = xAccountGroups();
+  const group = Number(await r.incr("tracker:x:cursor")) % groups.length;
+  const accounts = groups[group]!;
   const sinceKey = `tracker:x:since:${group}`;
   const sinceId = await r.get(sinceKey);
   // One page per run, up to 20 posts: enough for a couple of minutes of these accounts, and it caps the cost.
@@ -200,6 +270,33 @@ export async function pollXTracker(): Promise<number> {
   }
 }
 
+/** Compares one account's newest follows with the ones seen before. The first look at an account only takes notes. */
+async function checkXFollows(key: string): Promise<number> {
+  const r = redis();
+  const account = X_ACCOUNTS[Number(await r.incr("tracker:x:follow-cursor")) % X_ACCOUNTS.length]!;
+  const knownKey = `tracker:x:following:${account.handle}`;
+  const params = new URLSearchParams({ userName: account.handle, pageSize: "20" });
+  try {
+    const res = await fetchJson<{ followings?: XFollowing[] }>(`${X_FOLLOWINGS_API}?${params}`, { headers: { "x-api-key": key }, timeoutMs: 10_000 });
+    const page = res.followings ?? [];
+    if (!page.length) return 0;
+    const followed = newFollows(page, new Set(await r.smembers(knownKey)));
+    await r.sadd(knownKey, ...page.map((u) => String(u.id)));
+    if (!followed.length) return 0;
+    const [latest] = await db()
+      .select({ avatar: schema.trackerPosts.authorAvatar })
+      .from(schema.trackerPosts)
+      .where(and(eq(schema.trackerPosts.source, "x"), eq(sql`lower(${schema.trackerPosts.authorHandle})`, account.handle.toLowerCase())))
+      .orderBy(desc(schema.trackerPosts.postedAt))
+      .limit(1);
+    const now = new Date();
+    return await savePosts(followed.flatMap((u) => followPost(account, latest?.avatar ?? null, u, now) ?? []));
+  } catch (err) {
+    logger.warn({ handle: account.handle, status: err instanceof HttpError ? err.status : undefined }, "X follow check failed");
+    return 0;
+  }
+}
+
 /** Worker: reads one Telegram channel per run, spreading them out so the preview pages aren't hammered. */
 export async function pollTelegramTracker(): Promise<number> {
   const position = Number(await redis().incr("tracker:tg:cursor")) % TELEGRAM_CHANNELS.length;
@@ -207,7 +304,7 @@ export async function pollTelegramTracker(): Promise<number> {
   try {
     const res = await fetch(`https://t.me/s/${channel}`, { headers: { "user-agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(10_000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await savePosts(parseTelegramPage(await res.text(), channel));
+    return await savePosts(parseTelegramPage(await res.text(), channel).filter((p) => isRelevant(p.body)));
   } catch (err) {
     logger.warn({ channel, err: err instanceof Error ? err.message : err }, "Telegram tracker read failed");
     return 0;
@@ -218,11 +315,17 @@ export async function pruneTrackerPosts(): Promise<void> {
   await db().delete(schema.trackerPosts).where(lt(schema.trackerPosts.postedAt, new Date(Date.now() - KEEP_DAYS * 86_400_000)));
 }
 
-export async function listTrackerPosts(source: TrackerSource, opts: { before?: string; limit?: number } = {}): Promise<{ items: TrackerPostView[]; configured: boolean }> {
+export async function listTrackerPosts(source: TrackerSource, opts: { before?: string; kind?: TrackerPostKind; limit?: number } = {}): Promise<{ items: TrackerPostView[]; configured: boolean }> {
   const rows = await db()
     .select()
     .from(schema.trackerPosts)
-    .where(and(eq(schema.trackerPosts.source, source), opts.before ? lt(schema.trackerPosts.postedAt, new Date(opts.before)) : undefined))
+    .where(
+      and(
+        eq(schema.trackerPosts.source, source),
+        opts.before ? lt(schema.trackerPosts.postedAt, new Date(opts.before)) : undefined,
+        opts.kind ? eq(schema.trackerPosts.kind, opts.kind) : undefined,
+      ),
+    )
     .orderBy(desc(schema.trackerPosts.postedAt))
     .limit(opts.limit ?? 40);
   return {
@@ -233,7 +336,7 @@ export async function listTrackerPosts(source: TrackerSource, opts: { before?: s
       authorHandle: r.authorHandle,
       authorName: r.authorName,
       authorAvatar: r.authorAvatar,
-      kind: r.kind as TrackerPostView["kind"],
+      kind: r.kind as TrackerPostKind,
       body: r.body,
       url: r.url,
       tokens: r.tokens,

@@ -1,13 +1,24 @@
 "use client";
 
-import { timeAgo, type TrackerPostView, type TrackerSource } from "@frontrun/core";
-import { useQuery } from "@tanstack/react-query";
+import { timeAgo, type TrackerPostKind, type TrackerPostView, type TrackerSource } from "@frontrun/core";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { Avatar, EmptyState, RowSkeletons } from "./ui";
 
-const KIND_LABELS: Record<TrackerPostView["kind"], string | null> = { post: null, quote: "Quote", reply: "Reply", repost: "Repost" };
+const KIND_LABELS: Record<TrackerPostKind, string | null> = { post: null, quote: "Quote", reply: "Reply", repost: "Repost", follow: "Follow" };
+
+const PAGE_SIZE = 40;
+
+const X_FILTERS: Array<{ value: TrackerPostKind | null; label: string }> = [
+  { value: null, label: "All" },
+  { value: "post", label: "Posts" },
+  { value: "reply", label: "Replies" },
+  { value: "repost", label: "Reposts" },
+  { value: "quote", label: "Quotes" },
+  { value: "follow", label: "Follows" },
+];
 
 function shortToken(token: string): string {
   return token.startsWith("$") ? token : `${token.slice(0, 5)}…${token.slice(-4)}`;
@@ -48,33 +59,71 @@ function TrackerCard({ post }: { post: TrackerPostView }) {
           </div>
         )}
         <a href={post.url} target="_blank" rel="noreferrer noopener" className="mt-1.5 inline-block text-xs text-muted underline underline-offset-2">
-          {post.source === "x" ? "View on X" : "View on Telegram"}
+          {post.kind === "follow" ? "View profile" : post.source === "x" ? "View on X" : "View on Telegram"}
         </a>
       </div>
     </article>
   );
 }
 
-/** What crypto's loudest accounts are saying, kept to posts that name a token or are about crypto. */
-export function TrackerFeed({ source }: { source: TrackerSource }) {
-  const query = useQuery({
-    queryKey: ["tracker", source],
-    queryFn: () => api.tracker(source),
+function TrackerPosts({ source, kind }: { source: TrackerSource; kind: TrackerPostKind | null }) {
+  const query = useInfiniteQuery({
+    queryKey: ["tracker", source, kind],
+    queryFn: ({ pageParam }) => api.tracker(source, { before: pageParam, kind: kind ?? undefined }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => (last.items.length < PAGE_SIZE ? undefined : last.items.at(-1)?.postedAt),
     refetchInterval: 20_000,
   });
   if (query.isLoading) return <RowSkeletons count={5} />;
-  if (!query.data?.items.length) {
-    return query.data?.configured === false ? (
-      <EmptyState title="X tracker isn't connected yet" body="It starts as soon as its key is added to the server." />
+  const posts = query.data?.pages.flatMap((p) => p.items) ?? [];
+  if (!posts.length) {
+    if (query.data?.pages[0]?.configured === false) {
+      return <EmptyState title="X tracker isn't connected yet" body="It starts as soon as its key is added to the server." />;
+    }
+    return kind === "follow" ? (
+      <EmptyState title="No new follows yet" body="Each account's follows are checked a few times a day, and the first check only takes notes." />
     ) : (
-      <EmptyState title="Nothing yet" body="New posts from tracked channels land here within a few minutes." />
+      <EmptyState title="Nothing yet" body="New posts from tracked accounts land here within a few minutes." />
     );
   }
   return (
-    <div className="divide-y divide-line/60">
-      {query.data.items.map((p) => (
-        <TrackerCard key={p.id} post={p} />
-      ))}
-    </div>
+    <>
+      <div className="divide-y divide-line/60">
+        {posts.map((p) => (
+          <TrackerCard key={p.id} post={p} />
+        ))}
+      </div>
+      {query.hasNextPage && (
+        <div className="p-3 text-center">
+          <button onClick={() => void query.fetchNextPage()} disabled={query.isFetchingNextPage} className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-muted hover:text-ink disabled:opacity-40">
+            {query.isFetchingNextPage ? "Loading…" : "Load more"}
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** What the tracked accounts are up to. On X that's everything they do that can be read, and it can be narrowed by kind. */
+export function TrackerFeed({ source }: { source: TrackerSource }) {
+  const [kind, setKind] = useState<TrackerPostKind | null>(null);
+  return (
+    <>
+      {source === "x" && (
+        <div className="no-scrollbar flex gap-1.5 overflow-x-auto border-b border-line/60 px-3 py-2" role="group" aria-label="Filter by activity">
+          {X_FILTERS.map((f) => (
+            <button
+              key={f.label}
+              aria-pressed={kind === f.value}
+              onClick={() => setKind(f.value)}
+              className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${kind === f.value ? "bg-signal/15 text-signal" : "bg-raised text-muted hover:text-ink"}`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      )}
+      <TrackerPosts source={source} kind={source === "x" ? kind : null} />
+    </>
   );
 }

@@ -313,13 +313,15 @@ export interface TradeView {
 
 export type TrackerSource = "x" | "telegram";
 
+export type TrackerPostKind = "post" | "quote" | "reply" | "repost" | "follow";
+
 export interface TrackerPostView {
   id: string;
   source: TrackerSource;
   authorHandle: string;
   authorName: string;
   authorAvatar: string | null;
-  kind: "post" | "quote" | "reply" | "repost";
+  kind: TrackerPostKind;
   body: string;
   url: string;
   /** Tickers like $WIF and contract addresses found in the text. */

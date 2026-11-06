@@ -10,7 +10,7 @@ vi.hoisted(() => {
 import { BaseError, ContractFunctionRevertedError, HttpRequestError } from "viem";
 import { THESIS_REGISTRY_ABI, anchorArgs, canonicalThesis, isThesisSpecificFailure, thesisHash } from "../src/anchoring";
 import { assertSafeForProduction, resetEnvForTests, type Env } from "../src/env";
-import { buildXQuery, extractTokens, isRelevant, newestXId, parseTelegramPage, parseXResponse, X_ACCOUNTS, X_QUERY_CHUNK } from "../src/trackers";
+import { buildXQuery, extractTokens, isRelevant, newestXId, parseTelegramPage, parseXResponse, followPost, newFollows, X_ACCOUNTS, xAccountGroups } from "../src/trackers";
 import { pickWinner } from "../src/routing/engine";
 import type { ProviderQuote } from "../src/providers/types";
 import { gaslessEnabled, sponsorshipConfigured } from "../src/trading/sponsor";
@@ -589,9 +589,9 @@ describe("trackers", () => {
       const posts = parseXResponse({
         tweets: [
           { id: "1", text: "Tom &amp; Jerry", createdAt, author },
-          { id: "2", text: "quoted", createdAt, author, quoted_tweet: { id: "9" } },
+          { id: "2", text: "quoted", createdAt, author, quoted_tweet: { text: "the original", author: { userName: "bob" } } },
           { id: "3", text: "a reply", createdAt, author, isReply: true },
-          { id: "4", text: "a repost", createdAt, author, retweeted_tweet: { id: "9" }, quoted_tweet: null },
+          { id: "4", text: "RT @bob: cut sho…", createdAt, author, retweeted_tweet: { text: "cut short here &amp; there", author: { userName: "bob" } }, quoted_tweet: null },
         ],
       });
       expect(posts.map((p) => [p.id, p.kind, p.url])).toEqual([
@@ -601,6 +601,8 @@ describe("trackers", () => {
         ["x:4", "repost", "https://x.com/ann/status/4"],
       ]);
       expect(posts[0]).toMatchObject({ body: "Tom & Jerry", authorAvatar: author.profilePicture });
+      expect(posts[1]!.body).toBe("quoted\n\nQuoting @bob: the original");
+      expect(posts[3]!.body).toBe("@bob: cut short here & there");
       expect(posts[0]!.postedAt.toISOString()).toBe("2024-12-10T07:00:30.000Z");
     });
 
@@ -632,14 +634,46 @@ describe("trackers", () => {
     });
 
     it("asks only for new posts once it has seen some", () => {
-      expect(buildXQuery(["a", "b"], null)).toBe("(from:a OR from:b) -filter:replies -filter:retweets");
-      expect(buildXQuery(["a"], "42")).toBe("(from:a) -filter:replies -filter:retweets since_id:42");
+      expect(buildXQuery(["a", "b"], null)).toBe("(from:a OR from:b) include:nativeretweets");
+      expect(buildXQuery(["a"], "42")).toBe("(from:a) include:nativeretweets since_id:42");
     });
 
-    it("keeps every group of accounts inside the search's length limit", () => {
-      for (let i = 0; i < X_ACCOUNTS.length; i += X_QUERY_CHUNK) {
-        expect(buildXQuery(X_ACCOUNTS.slice(i, i + X_QUERY_CHUNK), "2118494077075537967").length).toBeLessThanOrEqual(512);
-      }
+    it("covers every account once, with every search inside the length limit", () => {
+      const groups = xAccountGroups();
+      for (const group of groups) expect(buildXQuery(group, "2118494077075537967").length).toBeLessThanOrEqual(512);
+      expect(groups.flat()).toEqual(X_ACCOUNTS.map((a) => a.handle));
+    });
+
+    it("tracks only well-formed handles, each one once", () => {
+      const handles = X_ACCOUNTS.map((a) => a.handle.toLowerCase());
+      expect(new Set(handles).size).toBe(handles.length);
+      for (const h of handles) expect(h).toMatch(/^\w{1,15}$/);
+    });
+
+    describe("follows", () => {
+      const user = (id: number) => ({ id, name: `User ${id}`, userName: `user${id}` });
+
+      it("sees only what's above the first known follow", () => {
+        expect(newFollows([user(3), user(2), user(1)], new Set(["1", "2"])).map((u) => u.id)).toEqual([3]);
+        expect(newFollows([user(2), user(1)], new Set(["1", "2"]))).toEqual([]);
+      });
+
+      it("doesn't mistake an older follow sliding up after an unfollow for a new one", () => {
+        expect(newFollows([user(2), user(1), user(0)], new Set(["2", "1"]))).toEqual([]);
+      });
+
+      it("reports nothing on the first look, or when nothing on the page is known", () => {
+        expect(newFollows([user(2), user(1)], new Set())).toEqual([]);
+        expect(newFollows([user(9), user(8)], new Set(["1"]))).toEqual([]);
+      });
+
+      it("writes a follow as a post that links to the profile, and skips a bad handle", () => {
+        const seenAt = new Date("2026-11-06T00:00:00Z");
+        const account = { handle: "ann", name: "Ann" };
+        const post = followPost(account, null, { id: 7, name: "Bob", userName: "bob", description: "builder" }, seenAt);
+        expect(post).toMatchObject({ id: "x:follow:ann:7", kind: "follow", body: "Followed Bob (@bob)\n\nbuilder", url: "https://x.com/bob", postedAt: seenAt });
+        expect(followPost(account, null, { id: 8, name: "Bad", userName: "../evil" }, seenAt)).toBeNull();
+      });
     });
   });
 

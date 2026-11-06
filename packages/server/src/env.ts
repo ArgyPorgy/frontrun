@@ -76,6 +76,8 @@ const schema = z.object({
 
   /** Reads the X tracker's accounts through TwitterAPI.io, billed per post read. While unset, that tab says it isn't connected. */
   TWITTERAPI_IO_KEY: optional,
+  /** Seconds between X tracker requests. Lower is fresher and costs more. Free accounts are limited to one every 5 seconds. */
+  X_TRACKER_INTERVAL_SECONDS: z.coerce.number().min(5).default(20),
 
   /** ThesisRegistry on Arc. While unset, theses simply aren't anchored. */
   THESIS_REGISTRY_ADDRESS: optional,
