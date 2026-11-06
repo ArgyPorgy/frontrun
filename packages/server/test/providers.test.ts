@@ -10,7 +10,7 @@ vi.hoisted(() => {
 import { BaseError, ContractFunctionRevertedError, HttpRequestError } from "viem";
 import { THESIS_REGISTRY_ABI, anchorArgs, canonicalThesis, isThesisSpecificFailure, thesisHash } from "../src/anchoring";
 import { assertSafeForProduction, resetEnvForTests, type Env } from "../src/env";
-import { buildXQuery, extractTokens, isRelevant, newestXId, parseTelegramPage, parseXResponse } from "../src/trackers";
+import { buildXQuery, extractTokens, isRelevant, newestXId, parseTelegramPage, parseXResponse, X_ACCOUNTS, X_QUERY_CHUNK } from "../src/trackers";
 import { pickWinner } from "../src/routing/engine";
 import type { ProviderQuote } from "../src/providers/types";
 import { gaslessEnabled, sponsorshipConfigured } from "../src/trading/sponsor";
@@ -571,6 +571,7 @@ describe("trackers", () => {
     expect(isRelevant("Just bought more $WIF, looks strong")).toBe(true);
     expect(isRelevant("Bitcoin ETF flows are picking up again")).toBe(true);
     expect(isRelevant("Check 0x4200000000000000000000000000000000000006 today")).toBe(true);
+    expect(isRelevant("great to see canadian stablecoins expanding")).toBe(true);
     expect(isRelevant("Had a great dinner with friends tonight")).toBe(false);
     expect(isRelevant("gm")).toBe(false);
   });
@@ -633,6 +634,12 @@ describe("trackers", () => {
     it("asks only for new posts once it has seen some", () => {
       expect(buildXQuery(["a", "b"], null)).toBe("(from:a OR from:b) -filter:replies -filter:retweets");
       expect(buildXQuery(["a"], "42")).toBe("(from:a) -filter:replies -filter:retweets since_id:42");
+    });
+
+    it("keeps every group of accounts inside the search's length limit", () => {
+      for (let i = 0; i < X_ACCOUNTS.length; i += X_QUERY_CHUNK) {
+        expect(buildXQuery(X_ACCOUNTS.slice(i, i + X_QUERY_CHUNK), "2118494077075537967").length).toBeLessThanOrEqual(512);
+      }
     });
   });
 

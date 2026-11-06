@@ -24,14 +24,14 @@ export const TELEGRAM_CHANNELS = [
   "binance_announcements", "bwenews", "unfolded", "CoinMarketCapAnnouncements", "pumpfun",
 ];
 
-/** X's search caps how long a query can be, and this many accounts fit comfortably. */
-const X_QUERY_CHUNK = 18;
+/** A search can be at most 512 characters, and this many accounts fit with room for since_id. */
+export const X_QUERY_CHUNK = 18;
 /** TwitterAPI.io, a third party that reads X for far less than X's own API. It isn't affiliated with X. */
 const X_API = "https://api.twitterapi.io/twitter/tweet/advanced_search";
 const KEEP_DAYS = 7;
 
 const CRYPTO_WORDS =
-  /\b(crypto|bitcoin|btc|ethereum|eth|solana|sol|usdc|usdt|stablecoin|token|memecoin|altcoin|airdrop|defi|dex|on-?chain|wallet|whale|liquidat\w*|etf|binance|coinbase|hyperliquid|listing|delist\w*|staking|mainnet|tokenomics|bull run|bear market)\b/i;
+  /\b(crypto|bitcoin|btc|ethereum|eth|solana|sol|usdc|usdt|stablecoin|token|memecoin|altcoin|airdrop|defi|dex|on-?chain|wallet|whale|liquidat\w*|etf|binance|coinbase|hyperliquid|listing|delist\w*|staking|mainnet|tokenomics|bull run|bear market)s?\b/i;
 const TICKER = /\$([A-Za-z][A-Za-z0-9]{1,9})\b/g;
 const EVM_ADDRESS = /\b0x[a-fA-F0-9]{40}\b/g;
 const SOLANA_ADDRESS = /\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/g;

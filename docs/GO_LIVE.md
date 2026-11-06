@@ -82,7 +82,7 @@ Flash also charges its own fee on limit and stop orders that rest on it, on top 
 
 ### The trackers
 
-The TG tracker reads Telegram's public web preview, and needs no key. The X tracker needs `TWITTERAPI_IO_KEY` from twitterapi.io, which bills $0.15 per 1,000 posts read, with a minimum of $0.00015 a request. At one request a minute that's about $6.50 a month before posts are counted. TwitterAPI.io is a third party that isn't affiliated with X, so it could break, or conflict with X's rules, without notice. If that happens, the X tab stops updating and the rest of the app carries on. The lists of who's tracked are at the top of `packages/server/src/trackers.ts`.
+The TG tracker reads Telegram's public web preview, and needs no key. The X tracker needs `TWITTERAPI_IO_KEY` from twitterapi.io, which bills $0.15 per 1,000 posts read, with a minimum of $0.00015 a request, and free accounts are limited to one request every 5 seconds. At one request a minute that's about $6.50 a month before posts are counted. TwitterAPI.io is a third party that isn't affiliated with X, so it could break, or conflict with X's rules, without notice. If that happens, the X tab stops updating and the rest of the app carries on. The lists of who's tracked are at the top of `packages/server/src/trackers.ts`.
 
 ### The database
 
