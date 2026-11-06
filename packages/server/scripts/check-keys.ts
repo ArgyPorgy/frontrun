@@ -10,7 +10,7 @@ import { CHAINS, type ChainKey } from "@frontrun/core";
 import { PrivyClient } from "@privy-io/node";
 import { privateKeyToAddress } from "viem/accounts";
 import webpush from "web-push";
-import { env } from "../src/env";
+import { appOrigins, env } from "../src/env";
 import { fetchJson, HttpError } from "../src/http";
 import { fetchTokenInfo, GeckoBusyError, geckoPlan, trendingPools } from "../src/market/geckoterminal";
 import { evmClient } from "../src/onchain";
@@ -196,9 +196,11 @@ async function checkPrivy() {
     line("ok", "Privy app", `Connected to "${settings.name}"`);
     if (!settings.google_oauth) line("warn", "  Google login", "Off. Turn it on: Dashboard > Login methods.");
     else line("ok", "  Google login", "On");
-    const host = new URL(e.APP_ORIGIN).host;
-    if (settings.allowed_domains.length && !settings.allowed_domains.some((d) => d.includes(host))) {
-      line("warn", "  allowed domains", `${host} isn't listed, so login from this address will be refused.`);
+    for (const origin of appOrigins(e)) {
+      const host = new URL(origin).host;
+      if (settings.allowed_domains.length && !settings.allowed_domains.some((d) => d.includes(host))) {
+        line("warn", "  allowed domains", `${host} isn't listed, so login from this address will be refused.`);
+      }
     }
   } catch (err) {
     line("fail", "Privy app", `${reason(err)}. Check the app id and secret.`);

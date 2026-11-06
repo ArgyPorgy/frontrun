@@ -11,8 +11,9 @@ envVarGroups:
         value: privy
       - key: TRADING_MODE
         value: live
+      # Every browser origin allowed to call the API (CORS and the websocket), comma-separated.
       - key: APP_ORIGIN
-        value: https://frontrun.onrender.com
+        value: https://tryfrontrun.xyz,https://www.tryfrontrun.xyz,https://frontrun.onrender.com
 
 services:
   - type: web
@@ -28,7 +29,7 @@ services:
       - key: NEXT_PUBLIC_API_URL
         value: https://frontrun-api.onrender.com
       - key: NEXT_PUBLIC_APP_URL
-        value: https://frontrun.onrender.com
+        value: https://tryfrontrun.xyz
 
   - type: web
     name: frontrun-api

@@ -23,6 +23,9 @@ const csp = [
 ].join("; ");
 
 const config: NextConfig = {
+  // Dev server only: let the site open on 127.0.0.1 as well as localhost. Next blocks its dev-only
+  // requests from any other host, which leaves the page blank. Has no effect on production builds.
+  allowedDevOrigins: ["127.0.0.1"],
   transpilePackages: ["@frontrun/core"],
   poweredByHeader: false,
   async headers() {

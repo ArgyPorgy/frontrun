@@ -2,7 +2,7 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import { createHash } from "node:crypto";
-import { AppError, DexBusyError, GeckoBusyError, HttpError, env, logger, redis } from "@frontrun/server";
+import { AppError, DexBusyError, GeckoBusyError, HttpError, appOrigins, env, logger, redis } from "@frontrun/server";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { ZodError } from "zod";
 import { registerMarketRoutes } from "./routes/market";
@@ -37,7 +37,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   await app.register(helmet, { contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: "cross-origin" } });
   await app.register(cors, {
-    origin: e.APP_ORIGIN.split(",").map((o) => o.trim()),
+    origin: appOrigins(e),
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["authorization", "content-type"],
   });

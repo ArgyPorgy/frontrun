@@ -11,7 +11,7 @@ vi.hoisted(() => {
 import { BaseError, ContractFunctionRevertedError, HttpRequestError } from "viem";
 import { THESIS_REGISTRY_ABI, anchorArgs, canonicalThesis, isThesisSpecificFailure, thesisHash } from "../src/anchoring";
 import { closeDb, db } from "../src/db/client";
-import { assertSafeForProduction, resetEnvForTests, type Env } from "../src/env";
+import { appOrigins, assertSafeForProduction, resetEnvForTests, type Env } from "../src/env";
 import { fillBuckets } from "../src/stats";
 import { buildXQuery, extractTokens, isRelevant, newestXId, parseTelegramPage, parseXResponse, followPost, newFollows, X_ACCOUNTS, xAccountGroups } from "../src/trackers";
 import { pickWinner } from "../src/routing/engine";
@@ -380,6 +380,16 @@ describe("production guard", () => {
   });
   it("doesn't apply outside production", () => {
     expect(() => assertSafeForProduction({ ...prod, NODE_ENV: "development", AUTH_MODE: "dev", TRADING_MODE: "paper" })).not.toThrow();
+  });
+  it("accepts several https origins but refuses a list with any http one", () => {
+    const list = "https://tryfrontrun.xyz, https://www.tryfrontrun.xyz/";
+    expect(() => assertSafeForProduction({ ...prod, APP_ORIGIN: list })).not.toThrow();
+    expect(appOrigins({ ...prod, APP_ORIGIN: list })).toEqual(["https://tryfrontrun.xyz", "https://www.tryfrontrun.xyz"]);
+    expect(() => assertSafeForProduction({ ...prod, APP_ORIGIN: "https://tryfrontrun.xyz,http://tryfrontrun.xyz" })).toThrow(/https/);
+  });
+  it("allows both localhost and 127.0.0.1 in development only", () => {
+    expect(appOrigins({ ...prod, NODE_ENV: "development", APP_ORIGIN: "http://localhost:3000" })).toEqual(["http://localhost:3000", "http://127.0.0.1:3000"]);
+    expect(appOrigins({ ...prod, APP_ORIGIN: "https://tryfrontrun.xyz" })).toEqual(["https://tryfrontrun.xyz"]);
   });
 });
 

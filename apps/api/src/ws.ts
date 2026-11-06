@@ -1,5 +1,5 @@
 import { isChainKey, isValidAddress, tokenKey, type ChainKey, type PriceTick, type ServerEvent, type ThesisView } from "@frontrun/core";
-import { CHANNELS, KEYS, db, env, getPrices, logger, markActive, newSubscriber, redis, schema } from "@frontrun/server";
+import { CHANNELS, KEYS, appOrigins, db, getPrices, logger, markActive, newSubscriber, redis, schema } from "@frontrun/server";
 import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { Server, type Socket } from "socket.io";
@@ -17,7 +17,7 @@ function tokenRoom(chain: ChainKey, address: string) {
  */
 export async function attachWebsocket(app: FastifyInstance): Promise<() => Promise<void>> {
   const io = new Server(app.server, {
-    cors: { origin: env().APP_ORIGIN.split(",").map((o) => o.trim()) },
+    cors: { origin: appOrigins() },
     serveClient: false,
     pingInterval: 20_000,
     pingTimeout: 20_000,

@@ -120,6 +120,20 @@ export function resetEnvForTests() {
  * Dev login and paper fills exist so the app runs without third-party keys. Neither may reach
  * production, so the process refuses to boot rather than warn.
  */
+/** The browser origins allowed to call the API, from the comma-separated APP_ORIGIN (e.g. the site's own domain plus www). */
+export function appOrigins(e: Env = env()): string[] {
+  const listed = e.APP_ORIGIN.split(",")
+    .map((o) => o.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
+  if (e.NODE_ENV === "production") return listed;
+  // Locally, localhost and 127.0.0.1 are different origins to the browser but the same machine,
+  // so allow whichever one the site was opened on.
+  const twins = listed.flatMap((o) =>
+    o.includes("//localhost") ? [o.replace("//localhost", "//127.0.0.1")] : o.includes("//127.0.0.1") ? [o.replace("//127.0.0.1", "//localhost")] : [],
+  );
+  return [...new Set([...listed, ...twins])];
+}
+
 export function assertSafeForProduction(e: Env) {
   if (e.NODE_ENV !== "production") return;
   const problems: string[] = [];
@@ -127,7 +141,8 @@ export function assertSafeForProduction(e: Env) {
   if (e.TRADING_MODE === "paper") problems.push("TRADING_MODE=paper is not allowed in production");
   if (!e.PRIVY_APP_ID || !e.PRIVY_APP_SECRET) problems.push("PRIVY_APP_ID and PRIVY_APP_SECRET are required");
   if (!e.FLASH_API_KEY) problems.push("FLASH_API_KEY is required");
-  if (!e.APP_ORIGIN.startsWith("https://")) problems.push("APP_ORIGIN must be https");
+  const origins = appOrigins(e);
+  if (!origins.length || origins.some((o) => !o.startsWith("https://"))) problems.push("APP_ORIGIN must be https");
   if (problems.length) throw new Error(`Refusing to start:\n  ${problems.join("\n  ")}`);
 }
 
