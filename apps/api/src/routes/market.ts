@@ -1,5 +1,6 @@
 import { chainKeySchema, isValidAddress, normalizeAddress, timeframeSchema, type ChainKey } from "@frontrun/core";
 import {
+  getPublicStats,
   listTrackerPosts,
   GECKO_ATTRIBUTION,
   AppError,
@@ -43,6 +44,8 @@ export async function registerMarketRoutes(app: FastifyInstance) {
       .parse(req.query);
     return listTrackerPosts(source, { before, kind });
   });
+
+  app.get("/v1/stats", async () => getPublicStats());
 
   app.get("/v1/tokens/:chain/:address", async (req) => {
     const { chain, address } = parseToken(req.params);

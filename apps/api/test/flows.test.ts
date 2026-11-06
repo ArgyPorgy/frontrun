@@ -45,6 +45,7 @@ import {
   resolveDueTheses,
   runMigrations,
   schema,
+  statsChanged,
 } from "@frontrun/server";
 import { eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
@@ -1004,6 +1005,67 @@ describe("websocket", () => {
     } finally {
       a.close();
       b.close();
+    }
+  });
+});
+
+describe("analytics", () => {
+  const publicStats = () => new ApiClient({ baseUrl }).stats();
+
+  it("starts empty, and is open to anyone", async () => {
+    const stats = await publicStats();
+    expect(stats.allTime).toEqual({ volumeUsd: "0", revenueUsd: "0", trades: 0, traders: 0 });
+    expect(stats.firstTradeAt).toBeNull();
+    expect(stats.recent).toEqual([]);
+    expect(stats.hourly).toHaveLength(24);
+    expect(stats.daily).toHaveLength(30);
+  });
+
+  it("counts a buy by what went in and a sale by what came out, and says nothing about who made them", async () => {
+    const { client } = await loginFunded("statsfan");
+    await setPrice("arc", TOKEN_A, "1", "1000000", "AAA");
+    const { trade: bought } = await buy(client, TOKEN_A, "100");
+    const { trade: sold } = await sell(client, TOKEN_A, 100);
+    const stats = await publicStats();
+    const expected = Number(bought.usdIn) + Number(sold.usdOut);
+    expect(Number(stats.allTime.volumeUsd)).toBeCloseTo(expected);
+    expect(Number(stats.allTime.revenueUsd)).toBeCloseTo(Number(bought.feeUsd) + Number(sold.feeUsd));
+    expect(Number(stats.allTime.revenueUsd)).toBeGreaterThan(0);
+    expect(stats.allTime).toMatchObject({ trades: 2, traders: 1 });
+    expect(stats.last24h).toEqual(stats.allTime);
+    expect(stats.hourly.at(-1)!.trades).toBe(2);
+    expect(stats.daily.at(-1)!.trades).toBe(2);
+    expect(stats.byChain).toMatchObject([{ chain: "arc", trades: 2 }]);
+    expect(stats.recent.map((r) => r.side)).toEqual(["sell", "buy"]);
+    expect(stats.recent[0]!.token.address).toBe(TOKEN_A);
+    const me = await client.me();
+    const text = JSON.stringify(stats);
+    expect(text).not.toContain("statsfan");
+    expect(text).not.toContain(me.id);
+  });
+
+  it("leaves out a trade that didn't complete", async () => {
+    const { client } = await loginFunded("statsfail");
+    await setPrice("arc", TOKEN_A, "1", "1000000", "AAA");
+    const { trade } = await buy(client, TOKEN_A, "100");
+    await db().update(schema.trades).set({ status: "failed" }).where(eq(schema.trades.id, trade.id));
+    await statsChanged();
+    expect((await publicStats()).allTime.trades).toBe(0);
+  });
+
+  it("serves new numbers and tells open dashboards as soon as a trade fills", async () => {
+    const { client } = await loginFunded("statslive");
+    await setPrice("arc", TOKEN_A, "1", "1000000", "AAA");
+    expect((await publicStats()).allTime.trades).toBe(0);
+    const viewer = socketClient(baseUrl, { transports: ["websocket"] });
+    try {
+      await new Promise((r) => viewer.on("connect", () => r(null)));
+      const told = new Promise((r) => viewer.once("stats", () => r(true)));
+      await buy(client, TOKEN_A, "50");
+      expect(await told).toBe(true);
+      expect((await publicStats()).allTime.trades).toBe(1);
+    } finally {
+      viewer.close();
     }
   });
 });

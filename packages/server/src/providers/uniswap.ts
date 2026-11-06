@@ -117,6 +117,8 @@ async function statusFromReceipt(input: StatusInput): Promise<StatusUpdate> {
     priceUsd: D(qty).gt(0) ? D(usd).div(qty).toFixed() : undefined,
     // Arc gas is native USDC at 18 decimals, so it's converted here and only here.
     feeUsd: fromBaseUnits(fill.gasNative, 18),
+    // Only the routed quote carries the app's fee. A direct swap's feeUsd is the pool's own.
+    revenueUsd: input.quote.provider === "uniswap" ? input.quote.feeUsd : "0",
     extraCostUsd: fromBaseUnits(fill.gasNative, 18),
     srcTx: input.srcTx,
     dstTx: input.srcTx,

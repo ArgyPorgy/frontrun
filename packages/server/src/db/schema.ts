@@ -83,6 +83,8 @@ export const trades = pgTable("trades", {
   /** This sale sold the whole position, which is what earns a PnL card. */
   closedPosition: boolean("closed_position").notNull().default(false),
   feeUsd: usd("fee_usd"),
+  /** The app's own fee on this trade. feeUsd can't stand in for it: it's also gas and pool fees on some routes. */
+  revenueUsd: usd("revenue_usd").notNull().default("0"),
   provider: text("provider").notNull(),
   providerOrderId: text("provider_order_id"),
   srcChain: text("src_chain").notNull(),

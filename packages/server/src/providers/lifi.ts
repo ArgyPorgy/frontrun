@@ -132,7 +132,10 @@ export const lifiProvider: RouteProvider = {
     const res = await fetchJson<LifiStatus>(`${BASE}/status?${params}`, { headers: headers(), timeoutMs: 6_000, retries: 1 });
     const update = lifiStatusToUpdate(res, req, input.srcTx);
     // LI.FI's gas is paid separately from the swapped amount, so the estimate goes into PnL.
-    return update.status === "filled" ? { ...update, feeUsd: input.quote.feeUsd, extraCostUsd: input.quote.gasUsd } : update;
+    if (update.status !== "filled") return update;
+    // LIFI_FEE only pays once it's registered with LI.FI. While it's unset, this route earns nothing.
+    const revenueUsd = D(req.notionalUsd).mul(env().LIFI_FEE ?? 0).toFixed();
+    return { ...update, feeUsd: input.quote.feeUsd, extraCostUsd: input.quote.gasUsd, revenueUsd };
   },
 };
 

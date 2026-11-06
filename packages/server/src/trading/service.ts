@@ -48,6 +48,7 @@ import {
   type StatusUpdate,
 } from "../providers";
 import { CHANNELS, KEYS, publish, redis } from "../redis";
+import { statsChanged } from "../stats";
 import { applyGuardrails, raceQuotes, withinTolerance, type RaceAlternative } from "../routing/engine";
 import { FLASH_ALLOWANCE_ARC, ARC_USDC } from "@frontrun/core";
 import { loadSigningWallets, performServerStep, serverSigningConfigured, solanaSigningConfigured, type SigningWallets } from "./signer";
@@ -627,6 +628,7 @@ export async function applyStatus(tradeId: string, update: StatusUpdate): Promis
         fields.qty = update.qty;
         fields.priceUsd = update.priceUsd ?? null;
         fields.feeUsd = update.feeUsd ?? null;
+        fields.revenueUsd = update.revenueUsd ?? "0";
         fields.filledAt = new Date();
         fields.applied = true;
         if (update.usdIn) fields.usdIn = update.usdIn;
@@ -652,6 +654,7 @@ export async function applyStatus(tradeId: string, update: StatusUpdate): Promis
     await resolveClosedTheses({ userId: outcome.trade.userId }).catch((err: unknown) => logger.warn({ tradeId, err: err instanceof Error ? err.message : err }, "thesis resolve failed"));
   }
   await publishTrade(tradeId);
+  if (outcome.status === "filled") await statsChanged();
   if (outcome.terminal) {
     await db()
       .insert(schema.providerEvents)

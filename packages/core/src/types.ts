@@ -329,6 +329,32 @@ export interface TrackerPostView {
   postedAt: string;
 }
 
+export interface StatsTotals {
+  volumeUsd: string;
+  revenueUsd: string;
+  trades: number;
+  traders: number;
+}
+
+export interface StatsBucket {
+  at: string;
+  volumeUsd: string;
+  revenueUsd: string;
+  trades: number;
+}
+
+/** The public analytics page. Totals and anonymous trades only, nothing that identifies a user. */
+export interface StatsView {
+  updatedAt: string;
+  firstTradeAt: string | null;
+  allTime: StatsTotals;
+  last24h: StatsTotals;
+  hourly: StatsBucket[];
+  daily: StatsBucket[];
+  byChain: Array<{ chain: ChainKey; volumeUsd: string; revenueUsd: string; trades: number }>;
+  recent: Array<{ id: string; side: "buy" | "sell"; amountUsd: string; filledAt: string; token: TokenRef }>;
+}
+
 export interface OrderView {
   id: string;
   type: import("./routing").OrderType;

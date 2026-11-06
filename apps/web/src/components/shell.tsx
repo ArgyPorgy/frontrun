@@ -10,7 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { useBalance, useConfig, useMe } from "@/lib/hooks";
 import { Avatar } from "./ui";
 
-type IconName = "trending" | "search" | "portfolio" | "profile" | "bell";
+type IconName = "trending" | "search" | "portfolio" | "profile" | "bell" | "analytics";
 
 function Icon({ name, active }: { name: IconName; active?: boolean }) {
   const common = { width: 22, height: 22, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: active ? 2.2 : 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
@@ -20,6 +20,14 @@ function Icon({ name, active }: { name: IconName; active?: boolean }) {
         <svg {...common}>
           <path d="M3 17l6-6 4 4 8-8" />
           <path d="M15 7h6v6" />
+        </svg>
+      );
+    case "analytics":
+      return (
+        <svg {...common}>
+          <path d="M5 20v-7" />
+          <path d="M12 20V5" />
+          <path d="M19 20v-11" />
         </svg>
       );
     case "search":
@@ -58,6 +66,7 @@ const TABS: Array<{ href: string; label: string; icon: IconName; match: (p: stri
   { href: "/", label: "Trending", icon: "trending", match: (p) => p === "/" || p.startsWith("/token") || p.startsWith("/thesis") || p.startsWith("/leaderboard") },
   { href: "/search", label: "Search", icon: "search", match: (p) => p.startsWith("/search") },
   { href: "/portfolio", label: "Portfolio", icon: "portfolio", match: (p) => p.startsWith("/portfolio") || p.startsWith("/deposit") },
+  { href: "/analytics", label: "Analytics", icon: "analytics", match: (p) => p.startsWith("/analytics") },
   { href: "/profile", label: "Profile", icon: "profile", match: (p) => p.startsWith("/profile") || p.startsWith("/u/") || p.startsWith("/settings") },
 ];
 
@@ -93,6 +102,7 @@ const WIDE_NAV: Array<{ href: string; label: string; match: (p: string) => boole
   { href: "/", label: "Discover", match: (p) => p === "/" || p.startsWith("/token") || p.startsWith("/thesis") },
   { href: "/portfolio", label: "Portfolio", match: (p) => p.startsWith("/portfolio") },
   { href: "/leaderboard", label: "Leaderboard", match: (p) => p.startsWith("/leaderboard") },
+  { href: "/analytics", label: "Analytics", match: (p) => p.startsWith("/analytics") },
 ];
 
 function Logo() {

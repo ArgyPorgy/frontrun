@@ -96,6 +96,8 @@ export async function attachWebsocket(app: FastifyInstance): Promise<() => Promi
       } else if (channel === CHANNELS.theses) {
         const event = JSON.parse(raw) as { thesis: ThesisView };
         io.to("feed").emit("thesis", event.thesis);
+      } else if (channel === CHANNELS.stats) {
+        io.to("feed").emit("stats");
       }
     } catch (err) {
       logger.warn({ err }, "bad pubsub message");
@@ -112,7 +114,7 @@ export async function attachWebsocket(app: FastifyInstance): Promise<() => Promi
     }
   });
 
-  await subscriber.subscribe(CHANNELS.ticks, CHANNELS.theses);
+  await subscriber.subscribe(CHANNELS.ticks, CHANNELS.theses, CHANNELS.stats);
   await subscriber.psubscribe(CHANNELS.userPattern);
 
   return async () => {

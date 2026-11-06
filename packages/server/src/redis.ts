@@ -21,6 +21,7 @@ export async function closeRedis() {
 export const CHANNELS = {
   ticks: "chan:ticks",
   theses: "chan:theses",
+  stats: "chan:stats",
   user: (userId: string) => `chan:user:${userId}`,
   userPattern: "chan:user:*",
 } as const;

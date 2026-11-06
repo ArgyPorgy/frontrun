@@ -86,6 +86,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         void queryClient.invalidateQueries({ queryKey: ["balance"] });
         void queryClient.invalidateQueries({ queryKey: ["position"] });
       });
+      socket.on("stats", () => void queryClient.invalidateQueries({ queryKey: ["stats"] }));
       socket.on("balance", () => {
         void queryClient.invalidateQueries({ queryKey: ["balance"] });
         void queryClient.invalidateQueries({ queryKey: ["me"] });

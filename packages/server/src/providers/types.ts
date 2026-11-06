@@ -67,6 +67,8 @@ export interface StatusUpdate {
   priceUsd?: string;
   /** Shown on the receipt. Part of usdIn/usdOut on all-in routes, so it isn't added to cost again. */
   feeUsd?: string;
+  /** What the app itself earned on this fill. */
+  revenueUsd?: string;
   /** Cost paid on top of usdIn or out of usdOut, like Arc gas on a direct swap. Goes into PnL. */
   extraCostUsd?: string;
   srcTx?: string;

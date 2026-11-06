@@ -41,6 +41,7 @@ export function paperFill(req: RouteRequest, quote: ProviderQuote): StatusUpdate
       usdIn: req.usdcIn,
       priceUsd: out.gt(0) ? D(req.usdcIn!).div(out).toFixed() : undefined,
       feeUsd: quote.feeUsd,
+      revenueUsd: quote.feeUsd,
     };
   }
   return {
@@ -49,6 +50,7 @@ export function paperFill(req: RouteRequest, quote: ProviderQuote): StatusUpdate
     usdOut: out.toFixed(),
     priceUsd: D(req.qtyIn!).gt(0) ? out.div(req.qtyIn!).toFixed() : undefined,
     feeUsd: quote.feeUsd,
+    revenueUsd: quote.feeUsd,
   };
 }
 

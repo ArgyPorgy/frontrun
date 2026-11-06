@@ -18,6 +18,7 @@ import type {
   StepResult,
   TapeTrade,
   ThesisProof,
+  StatsView,
   TrackerPostKind,
   TrackerPostView,
   TrackerSource,
@@ -112,6 +113,8 @@ export class ApiClient {
   trades = (query: { cursor?: string } = {}) => this.request<Page<TradeView>>("GET", "/v1/trades", { query });
 
   portfolio = () => this.request<PortfolioView>("GET", "/v1/portfolio");
+
+  stats = () => this.request<StatsView>("GET", "/v1/stats");
 
   tracker = (source: TrackerSource, opts: { before?: string; kind?: TrackerPostKind } = {}) =>
     this.request<{ items: TrackerPostView[]; configured: boolean }>("GET", `/v1/trackers/${source}`, { query: opts });

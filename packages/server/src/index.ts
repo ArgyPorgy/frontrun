@@ -10,6 +10,7 @@ export * from "./onchain";
 export * from "./notifications";
 export * from "./users";
 export * from "./theses";
+export * from "./stats";
 export * from "./trackers";
 export * from "./reconcile";
 export * from "./anchoring";

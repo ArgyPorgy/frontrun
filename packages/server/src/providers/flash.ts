@@ -391,6 +391,8 @@ export function flashStatusToUpdate(res: FlashOrderDetail, req: Pick<RouteReques
         ...(req.side === "buy" ? { usdIn: contra } : { usdOut: contra }),
         priceUsd: order.filled?.averageNotionalPrice ?? (qty && contra && D(qty).gt(0) ? D(contra).div(qty).toFixed() : undefined),
         feeUsd: fee,
+        // A market fill reports only the integrator fee: it was 0 on every fill until the fee was switched on.
+        revenueUsd: fee,
         srcTx,
         dstTx,
       };

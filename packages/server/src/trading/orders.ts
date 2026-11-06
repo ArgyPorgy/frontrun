@@ -288,7 +288,10 @@ export async function pollFlashOrders(limit = 100): Promise<number> {
           .returning();
         if (trade) {
           await db().update(schema.orders).set({ tradeId: trade.id, status: "triggered" }).where(eq(schema.orders.id, row.id));
-          await applyStatus(trade.id, flashStatusToUpdate(res, { side: row.side as "buy" | "sell" }));
+          const update = flashStatusToUpdate(res, { side: row.side as "buy" | "sell" });
+          // A resting order's reported fee also holds Flash's own, so the app's share comes from its rate.
+          const filledUsd = update.usdIn ?? update.usdOut ?? "0";
+          await applyStatus(trade.id, { ...update, revenueUsd: D(filledUsd).mul(env().FLASH_INTEGRATOR_FEE_BPS).div(10_000).toFixed() });
         }
       } else if (["ORDER_STATUS_CANCELLED", "ORDER_STATUS_REJECTED", "ORDER_STATUS_TERMINATED"].includes(res.order.status)) {
         await closeWithFailure(row, flashStatusToUpdate(res, { side: row.side as "buy" | "sell" }).error ?? "The order was closed.");

@@ -10,6 +10,7 @@ vi.hoisted(() => {
 import { BaseError, ContractFunctionRevertedError, HttpRequestError } from "viem";
 import { THESIS_REGISTRY_ABI, anchorArgs, canonicalThesis, isThesisSpecificFailure, thesisHash } from "../src/anchoring";
 import { assertSafeForProduction, resetEnvForTests, type Env } from "../src/env";
+import { fillBuckets } from "../src/stats";
 import { buildXQuery, extractTokens, isRelevant, newestXId, parseTelegramPage, parseXResponse, followPost, newFollows, X_ACCOUNTS, xAccountGroups } from "../src/trackers";
 import { pickWinner } from "../src/routing/engine";
 import type { ProviderQuote } from "../src/providers/types";
@@ -563,6 +564,33 @@ describe("the app's fee", () => {
   it("sends the fee to Flash on quotes and orders", () => {
     const request = { side: "buy", chain: "base", address: TOKEN, decimals: 18, usdcIn: "10", evmAddress: WALLET, solanaAddress: null, priceUsd: "1", notionalUsd: "10" } as const;
     expect(buildFlashParams(request, 50).flashIntegratorFeeBps).toBe("50");
+  });
+});
+
+describe("analytics", () => {
+  const hour = 3_600_000;
+  const start = Date.UTC(2026, 10, 6, 10);
+
+  it("lays rows on a full timeline, so quiet hours show as gaps", () => {
+    const row = { at: "2026-11-06T11:00:00Z", volumeUsd: "5", revenueUsd: "0.025", trades: 2 };
+    const buckets = fillBuckets([row], start, start + 2 * hour, hour);
+    expect(buckets.map((b) => [b.at, b.volumeUsd, b.trades])).toEqual([
+      ["2026-11-06T10:00:00.000Z", "0", 0],
+      ["2026-11-06T11:00:00Z", "5", 2],
+      ["2026-11-06T12:00:00.000Z", "0", 0],
+    ]);
+  });
+
+  it("drops a row outside the window, and copes with nothing at all", () => {
+    expect(fillBuckets([{ at: "2026-11-05T00:00:00Z", volumeUsd: "9", revenueUsd: "0", trades: 1 }], start, start, hour)[0]!.trades).toBe(0);
+    expect(fillBuckets([], start, start + hour, hour)).toHaveLength(2);
+  });
+
+  it("counts Flash's reported fee as revenue on a market fill", () => {
+    const filled = { status: "ORDER_STATUS_FILLED", filled: { targetAmount: "1", contraAmount: "10" } };
+    const update = flashStatusToUpdate({ order: filled, fills: [{ feeNotional: "0.05" }] } as never, { side: "buy" });
+    expect(update.revenueUsd).toBe("0.05");
+    expect(flashStatusToUpdate({ order: filled, fills: [] } as never, { side: "buy" }).revenueUsd).toBe("0");
   });
 });
 
