@@ -139,6 +139,11 @@ async function due(agent: AgentDetailView) {
   await db().update(schema.agents).set({ nextRunAt: new Date(Date.now() - 1000) }).where(eq(schema.agents.id, agent.id));
 }
 
+/** So a pass of the worker only answers the owner, and doesn't also run its first scheduled round. */
+async function notDue(agent: AgentDetailView) {
+  await db().update(schema.agents).set({ nextRunAt: new Date(Date.now() + 3_600_000) }).where(eq(schema.agents.id, agent.id));
+}
+
 async function expectApiError(promise: Promise<unknown>, code: string) {
   const err = await promise.then(() => null, (e: unknown) => e);
   expect(err).toBeInstanceOf(ApiError);
@@ -461,6 +466,123 @@ describe("a round of thinking", () => {
     const { items } = await client.notifications();
     expect(items.some((n) => n.message.includes("is paused"))).toBe(true);
   }, 30_000);
+});
+
+describe("what it says against what happened", () => {
+  it("challenges a claimed trade with nothing behind it, and keeps the honest answer", async () => {
+    const client = await login("argyporgy");
+    const agent = await newAgent(client);
+    await notDue(agent);
+    await client.sendAgentMessage(agent.id, "Keep retrying until it works.");
+    script.push(say("The trade was successfully executed, and you now hold 713,070,193 tokens."), say("Sorry, I got that wrong. Nothing has been traded."));
+    await runWorker();
+
+    expect(requests).toHaveLength(2);
+    expect(requests[1]!.messages.at(-1)).toMatchObject({ role: "system" });
+    expect(requests[1]!.messages.at(-1)!.content).toContain("no tool ran");
+    const reply = (await client.agentMessages(agent.id)).items.at(-1)!;
+    expect(reply.body).toBe("Sorry, I got that wrong. Nothing has been traded.");
+    expect(reply.actions).toEqual([]);
+  });
+
+  it("marks a claim the model won't take back, so the owner isn't misled", async () => {
+    const client = await login("argyporgy");
+    const agent = await newAgent(client);
+    await notDue(agent);
+    await client.sendAgentMessage(agent.id, "Did you buy it?");
+    script.push(say("Yes, I bought it."), say("Yes, I definitely bought it."));
+    await runWorker();
+    const reply = (await client.agentMessages(agent.id)).items.at(-1)!;
+    expect(reply.actions).toEqual([expect.objectContaining({ tool: "unverified_claim", ok: false, acted: false })]);
+    expect((await client.agent(agent.id)).portfolio.open).toHaveLength(0);
+    expect((await client.agentRuns(agent.id)).items[0]!.actions.some((a) => a.tool === "unverified_claim")).toBe(true);
+  });
+
+  it("doesn't question a claim that's true", async () => {
+    const client = await login("argyporgy");
+    const agent = await newAgent(client);
+    await notDue(agent);
+    await client.sendAgentMessage(agent.id, "Buy some.");
+    script.push(call("buy", { chain: "arc", address: TOKEN, amountUsd: 10 }), say("I bought it."));
+    await runWorker();
+    expect(requests).toHaveLength(2);
+    const reply = (await client.agentMessages(agent.id)).items.at(-1)!;
+    expect(reply.body).toBe("I bought it.");
+    expect(reply.actions).toEqual([expect.objectContaining({ tool: "buy", ok: true, acted: true })]);
+  }, 30_000);
+
+  it("doesn't question a plain answer that mentions no trade", async () => {
+    const client = await login("argyporgy");
+    const agent = await newAgent(client);
+    await notDue(agent);
+    await client.sendAgentMessage(agent.id, "How's it going?");
+    script.push(say("All quiet. Holding cash for now."));
+    await runWorker();
+    expect(requests).toHaveLength(1);
+  });
+
+  it("gives the model the real balance, positions and past attempts every round", async () => {
+    const client = await login("argyporgy");
+    const agent = await newAgent(client);
+    await notDue(agent);
+    await client.sendAgentMessage(agent.id, "Buy it.");
+    script.push(call("buy", { chain: "arc", address: TOKEN, amountUsd: 50 }), say("It was too big."));
+    await runWorker();
+    requests.length = 0;
+    await client.sendAgentMessage(agent.id, "Try again.");
+    script.push(say("Nothing to do."));
+    await runWorker();
+    const facts = requests[0]!.messages[1]!.content!;
+    expect(facts).toContain("USDC: 100");
+    expect(facts).toContain("Open positions: none");
+    expect(facts).toContain(TOKEN);
+    expect(facts).toContain("per-trade limit");
+  }, 30_000);
+});
+
+describe("warnings", () => {
+  const THIN = "0x1111111111111111111111111111111111111111";
+
+  it("stops for a warning until the owner accepts it", async () => {
+    await setPrice(THIN, "1", "100", "THIN");
+    const client = await login("argyporgy");
+    const agent = await newAgent(client);
+    await notDue(agent);
+    await client.sendAgentMessage(agent.id, "Buy some THIN.");
+    script.push(call("buy", { chain: "arc", address: THIN, amountUsd: 5 }), say("It warned me about the pool. Still want it?"));
+    await runWorker();
+    expect((await client.agent(agent.id)).portfolio.open).toHaveLength(0);
+    const asked = (await client.agentMessages(agent.id)).items.at(-1)!;
+    expect(asked.actions[0]).toMatchObject({ tool: "buy", ok: false, acted: false });
+    expect(requests[1]!.messages.some((m) => m.role === "tool" && m.content?.includes("ownerAccepted"))).toBe(true);
+
+    await client.sendAgentMessage(agent.id, "Yes, go ahead anyway.");
+    script.push(call("buy", { chain: "arc", address: THIN, amountUsd: 5, ownerAccepted: true }), say("Done, I bought it."));
+    await runWorker();
+    expect((await client.agent(agent.id)).portfolio.open.map((p) => p.token.symbol)).toEqual(["THIN"]);
+    expect((await client.agentMessages(agent.id)).items.at(-1)!.actions[0]).toMatchObject({ tool: "buy", ok: true, acted: true });
+  }, 30_000);
+
+  it("can't accept a warning for itself on a schedule, with nobody there", async () => {
+    await setPrice(THIN, "1", "100", "THIN");
+    const client = await login("argyporgy");
+    const agent = await newAgent(client);
+    script.push(call("buy", { chain: "arc", address: THIN, amountUsd: 5, ownerAccepted: true }), say("Couldn't."));
+    await due(agent);
+    await runWorker();
+    expect((await client.agent(agent.id)).portfolio.open).toHaveLength(0);
+  });
+
+  it("can't accept its way past a limit, even in a chat", async () => {
+    const client = await login("argyporgy");
+    const agent = await newAgent(client);
+    await notDue(agent);
+    await client.sendAgentMessage(agent.id, "Buy $90 of it, I accept.");
+    script.push(call("buy", { chain: "arc", address: TOKEN, amountUsd: 90, ownerAccepted: true }), say("That's over my limit."));
+    await runWorker();
+    expect((await client.agent(agent.id)).portfolio.open).toHaveLength(0);
+    expect((await client.agentMessages(agent.id)).items.at(-1)!.actions[0]!.summary).toContain("per-trade limit");
+  });
 });
 
 describe("talking to it", () => {

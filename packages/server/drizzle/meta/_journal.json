@@ -85,6 +85,13 @@
       "when": 1793994784230,
       "tag": "0011_ai_agents",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794013700562,
+      "tag": "0012_agent_message_actions",
+      "breakpoints": true
     }
   ]
 }

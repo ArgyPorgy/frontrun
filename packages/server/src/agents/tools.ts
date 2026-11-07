@@ -1,4 +1,4 @@
-import { CHAIN_KEYS, D, formatPrice, isValidAddress, liveBadge, tokenKey, type ChainKey, type OrderType, type TradeStatus } from "@frontrun/core";
+import { CHAIN_KEYS, D, checkSpendCaps, formatPrice, isValidAddress, liveBadge, tokenKey, type ChainKey, type OrderType, type TradeStatus } from "@frontrun/core";
 import { and, eq, sql } from "drizzle-orm";
 import { db, schema } from "../db/client";
 import { AppError } from "../errors";
@@ -31,6 +31,8 @@ export interface ToolContext {
   runId: string;
   budget: RunBudget;
   step: number;
+  /** A chat means the owner is there to accept a warning. On a schedule nobody is. */
+  trigger: "schedule" | "chat";
 }
 
 export interface ToolOutcome {
@@ -101,8 +103,17 @@ export const AGENT_TOOLS: ToolSpec[] = [
     type: "function",
     function: {
       name: "buy",
-      description: "Buys a token with your USDC at the market price and waits for the fill. Refused if it's over your limits or the token fails a safety check.",
-      parameters: { type: "object", properties: { chain: chainProp, address: addressProp, amountUsd: { type: "number", description: "USDC to spend." } }, required: ["chain", "address", "amountUsd"] },
+      description: "Buys a token with your USDC at the market price and waits for the fill. Refused if it's over your limits or the token fails a safety check. A warning, like high route costs, also stops it: tell your owner, and if they say to go ahead anyway, call this again with ownerAccepted set to true.",
+      parameters: {
+        type: "object",
+        properties: {
+          chain: chainProp,
+          address: addressProp,
+          amountUsd: { type: "number", description: "USDC to spend." },
+          ownerAccepted: { type: "boolean", description: "True only if your owner has told you to go ahead despite a warning. It has no effect on your limits, or in a scheduled round." },
+        },
+        required: ["chain", "address", "amountUsd"],
+      },
     },
   },
   {
@@ -200,15 +211,35 @@ async function buy(ctx: ToolContext, args: Record<string, unknown>): Promise<Too
   spendBudget(ctx);
   await ensureAgentCanTrade(ctx.user.id);
   const quote = await createQuote(ctx.user.id, { chain, address, side: "buy", amountUsd: String(amount) });
-  // Nobody's there to accept a warning, so anything that would ask a person to confirm is refused.
-  const stop = quote.blocked[0] ?? quote.confirmReasons[0];
-  if (stop) return { result: { refused: stop.message }, summary: `Wanted to buy ${quote.token.symbol}: ${stop.message}`, ok: false, acted: false };
-  if (!quote.oneTap) return { result: { refused: "This trade would need a signature." }, summary: `Couldn't buy ${quote.token.symbol}: it would need a signature.`, ok: false, acted: false };
-  const placed = await executeTrade(ctx.user.id, { quoteId: quote.id, idempotencyKey: `agent:${ctx.runId}:${ctx.step}` });
-  const trade = await waitForFill(placed.id);
-  const filled = trade?.status === "filled";
-  const summary = filled ? `Bought ${quote.token.symbol} with $${D(amount).toDecimalPlaces(2).toFixed()}` : `Tried to buy ${quote.token.symbol}: ${trade?.status ?? "unknown"}`;
-  return { result: tradeResult(trade), summary, ok: filled, acted: filled, ...(filled ? { notify: { message: `${ctx.user.username} bought ${quote.token.symbol} with $${D(amount).toDecimalPlaces(2).toFixed()}`, chain, address } } : {}) };
+  const refuse = (message: string, hint?: string): ToolOutcome => ({ result: { refused: message, nothingWasBought: true, ...(hint ? { whatToDo: hint } : {}) }, summary: `Wanted to buy ${quote.token.symbol}: ${message}`, ok: false, acted: false });
+  if (quote.blocked[0]) return refuse(quote.blocked[0].message);
+
+  // The owner's limits can't be talked past, whoever is asking.
+  const signer = await signerStatus(ctx.user.id);
+  const caps = checkSpendCaps({ amountUsd: amount, spentTodayUsd: signer.spentTodayUsd, perTradeCapUsd: ctx.agent.perTradeUsd, dailyCapUsd: ctx.agent.dailyLimitUsd });
+  if (!caps.allowed) return refuse(caps.reason === "per_trade" ? `That's over its per-trade limit of $${D(ctx.agent.perTradeUsd).toFixed()}.` : `That would pass its daily limit of $${D(ctx.agent.dailyLimitUsd).toFixed()}.`);
+
+  // A warning is a person's call. With the owner in the chat it's theirs, and on a schedule it's a no.
+  const warning = quote.confirmReasons[0];
+  if (warning) {
+    if (ctx.trigger !== "chat") return refuse(warning.message);
+    if (args.ownerAccepted !== true) return refuse(warning.message, "If your owner has already told you to go ahead despite this, call buy again now with ownerAccepted true. Otherwise tell them about it in plain words and ask.");
+    if (!gaslessEnabled() && !isPaperMode()) return refuse("This trade would need a signature.");
+  } else if (!quote.oneTap) {
+    return refuse("This trade would need a signature.");
+  }
+  const placed = await executeTrade(ctx.user.id, { quoteId: quote.id, idempotencyKey: `agent:${ctx.runId}:${ctx.step}`, confirmed: !!warning });
+  const usd = D(amount).toDecimalPlaces(2).toFixed();
+  return settled(await waitForFill(placed.id), { doing: `Buying ${quote.token.symbol} with $${usd}`, done: `Bought ${quote.token.symbol} with $${usd}`, failed: `Tried to buy ${quote.token.symbol}`, notifyAs: `${ctx.user.username} bought ${quote.token.symbol} with $${usd}`, chain, address });
+}
+
+/** Reports a trade by what the record says. One still settling has been placed, so it isn't a failure, or a fill. */
+function settled(trade: typeof schema.trades.$inferSelect | null, words: { doing: string; done: string; failed: string; notifyAs: string; chain: ChainKey; address: string }): ToolOutcome {
+  if (trade?.status === "filled") return { result: tradeResult(trade), summary: words.done, ok: true, acted: true, notify: { message: words.notifyAs, chain: words.chain, address: words.address } };
+  if (trade && !TERMINAL.includes(trade.status as TradeStatus)) {
+    return { result: { ...tradeResult(trade), note: "It's placed and still settling, so it won't show in your portfolio yet." }, summary: `${words.doing}: still settling`, ok: true, acted: true };
+  }
+  return { result: { ...tradeResult(trade), nothingWasTraded: true }, summary: `${words.failed}: ${trade?.error ?? trade?.status ?? "no record of it"}`, ok: false, acted: false };
 }
 
 async function sell(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolOutcome> {
@@ -222,11 +253,8 @@ async function sell(ctx: ToolContext, args: Record<string, unknown>): Promise<To
   if (!quote.oneTap && !gaslessEnabled() && !isPaperMode()) return { result: { refused: "This trade would need a signature." }, summary: `Couldn't sell ${quote.token.symbol}: it would need a signature.`, ok: false, acted: false };
   // A way out matters more than a good price, so a warning doesn't stop a sale.
   const placed = await executeTrade(ctx.user.id, { quoteId: quote.id, idempotencyKey: `agent:${ctx.runId}:${ctx.step}`, confirmed: true });
-  const trade = await waitForFill(placed.id);
-  const filled = trade?.status === "filled";
   const what = sellPct >= 100 ? "all of its" : `${Math.round(sellPct)}% of its`;
-  const summary = filled ? `Sold ${what} ${quote.token.symbol}` : `Tried to sell ${quote.token.symbol}: ${trade?.status ?? "unknown"}`;
-  return { result: tradeResult(trade), summary, ok: filled, acted: filled, ...(filled ? { notify: { message: `${ctx.user.username} sold ${what} ${quote.token.symbol}`, chain, address } } : {}) };
+  return settled(await waitForFill(placed.id), { doing: `Selling ${what} ${quote.token.symbol}`, done: `Sold ${what} ${quote.token.symbol}`, failed: `Tried to sell ${quote.token.symbol}`, notifyAs: `${ctx.user.username} sold ${what} ${quote.token.symbol}`, chain, address });
 }
 
 async function order(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolOutcome> {

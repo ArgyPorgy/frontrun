@@ -233,7 +233,7 @@ export async function listAgentRuns(owner: { id: string }, id: string): Promise<
     id: r.id,
     trigger: r.trigger,
     summary: r.summary,
-    actions: r.actions,
+    actions: r.actions.map(({ tool, summary, ok, acted }) => ({ tool, summary, ok, acted })),
     costUsd: r.costUsd,
     error: r.error,
     createdAt: r.createdAt.toISOString(),
@@ -244,7 +244,7 @@ export async function listAgentRuns(owner: { id: string }, id: string): Promise<
 export async function listAgentMessages(owner: { id: string }, id: string): Promise<AgentMessageView[]> {
   await ownedAgent(owner, id);
   const rows = await db().select().from(schema.agentMessages).where(eq(schema.agentMessages.agentId, id)).orderBy(desc(schema.agentMessages.createdAt)).limit(50);
-  return rows.reverse().map((m) => ({ id: m.id, role: m.role, body: m.body, pending: m.role === "owner" && !m.handledAt, createdAt: m.createdAt.toISOString() }));
+  return rows.reverse().map((m) => ({ id: m.id, role: m.role, body: m.body, pending: m.role === "owner" && !m.handledAt, actions: m.actions, createdAt: m.createdAt.toISOString() }));
 }
 
 /** The worker picks this up, so a slow model can't hold a web request open. */

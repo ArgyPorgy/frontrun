@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyFillToHeld, chainChange, heldBpsOf, liveBadge, positionEventLabel, reputationScore, type ClosedPositionStats, type HeldState, type ThesisLive } from "../src";
+import { applyFillToHeld, chainChange, claimsTrade, heldBpsOf, liveBadge, positionEventLabel, reputationScore, type ClosedPositionStats, type HeldState, type ThesisLive } from "../src";
 
 const held = (qty: string, bps = 10000, status: HeldState["status"] = "holding"): HeldState => ({ qty, bps, status });
 const live = (over: Partial<ThesisLive>): ThesisLive => ({ status: "holding", heldPct: 100, exitPriceUsd: null, exitReturnPct: null, changedAt: null, proofTx: null, events: [], ...over });
@@ -129,5 +129,15 @@ describe("reputationScore", () => {
 
   it("ranks a good record above a bad one", () => {
     expect(reputationScore(many(10))!.score).toBeGreaterThan(reputationScore(many(10, { won: false, returnPct: -30 }))!.score);
+  });
+});
+
+describe("claimsTrade", () => {
+  it("spots a note saying a trade happened", () => {
+    for (const note of ["The trade was successfully executed", "I bought 100 tokens", "Your order was placed", "you now hold Dacity Coin", "It went through"]) expect(claimsTrade(note)).toBe(true);
+  });
+
+  it("leaves other notes alone", () => {
+    for (const note of ["Nothing looks good, so I'm keeping cash.", "Want me to try again?", "The fees are 13% on this size."]) expect(claimsTrade(note)).toBe(false);
   });
 });

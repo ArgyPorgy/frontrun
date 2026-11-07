@@ -58,6 +58,7 @@ import { and, eq, gt, inArray, isNull } from "drizzle-orm";
 
 const INSTANCE = randomUUID();
 const stopping = { value: false };
+const leases = new Set<string>();
 
 /**
  * Runs a job on an interval. A Redis lease keeps it on one instance at a time, so scaling workers out
@@ -66,6 +67,7 @@ const stopping = { value: false };
 function every(name: string, intervalMs: number, job: () => Promise<unknown>, opts: { leaseMs?: number } = {}) {
   const leaseMs = opts.leaseMs ?? Math.max(intervalMs * 3, 5_000);
   const leaseKey = `lease:${name}`;
+  leases.add(leaseKey);
   const run = async () => {
     if (stopping.value) return;
     const started = Date.now();
@@ -248,6 +250,8 @@ async function main() {
 
   const shutdown = async () => {
     stopping.value = true;
+    // Hand these back, or a restart leaves jobs with long leases idle until the old worker's expire.
+    await Promise.all([...leases].map(async (key) => ((await redis().get(key)) === INSTANCE ? redis().del(key) : 0))).catch(() => {});
     await new Promise((r) => setTimeout(r, 200));
     await closeRedis();
     await closeDb();

@@ -347,7 +347,8 @@ export const agentRuns = pgTable("agent_runs", {
   agentId: uuid("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
   trigger: text("trigger", { enum: ["schedule", "chat"] }).notNull(),
   summary: text("summary"),
-  actions: jsonb("actions").$type<Array<{ tool: string; summary: string; ok: boolean; acted: boolean }>>().notNull().default([]),
+  /** What it asked for and what came of it. The args let it pick up where it left off next round. */
+  actions: jsonb("actions").$type<Array<{ tool: string; summary: string; ok: boolean; acted: boolean; args?: unknown }>>().notNull().default([]),
   inputTokens: integer("input_tokens").notNull().default(0),
   outputTokens: integer("output_tokens").notNull().default(0),
   costUsd: real("cost_usd").notNull().default(0),
@@ -364,6 +365,8 @@ export const agentMessages = pgTable("agent_messages", {
   body: text("body").notNull(),
   /** Set once the agent has answered this. */
   handledAt: ts("handled_at"),
+  /** On a reply: what the app recorded it doing, shown with it, since the words alone can't be trusted. */
+  actions: jsonb("actions").$type<Array<{ tool: string; summary: string; ok: boolean; acted: boolean }>>().notNull().default([]),
   createdAt: ts("created_at").notNull().defaultNow(),
 }, (t) => [index("agent_messages_agent").on(t.agentId, t.createdAt), index("agent_messages_pending").on(t.createdAt).where(sql`role = 'owner' and handled_at is null`)]);
 

@@ -59,11 +59,24 @@ export interface AgentsView {
   items: AgentView[];
 }
 
+/** What the app itself recorded the agent doing. A model can say anything, so this is what to believe. */
+export interface AgentAction {
+  tool: string;
+  summary: string;
+  ok: boolean;
+  acted: boolean;
+}
+
+/** Marks a note that claims a trade the app has no record of. */
+export const UNVERIFIED_CLAIM = "unverified_claim";
+/** The tools that change something, which are the ones an owner needs to see the result of. */
+export const AGENT_ACTION_TOOLS: readonly string[] = ["buy", "sell", "place_order", "cancel_order", "post_thesis", UNVERIFIED_CLAIM];
+
 export interface AgentRunView {
   id: string;
   trigger: "schedule" | "chat";
   summary: string | null;
-  actions: Array<{ tool: string; summary: string; ok: boolean; acted: boolean }>;
+  actions: AgentAction[];
   costUsd: number;
   error: string | null;
   createdAt: string;
@@ -75,7 +88,16 @@ export interface AgentMessageView {
   role: "owner" | "agent";
   body: string;
   pending: boolean;
+  /** What actually happened while it was writing this. */
+  actions: AgentAction[];
   createdAt: string;
+}
+
+const TRADE_CLAIM = /\b(bought|purchased|acquired|sold|executed|went through|filled|placed|i hold|you now hold|now hold)\b/i;
+
+/** Whether a note reads as though a trade happened. Used to check it against what the app recorded. */
+export function claimsTrade(note: string): boolean {
+  return TRADE_CLAIM.test(note);
 }
 
 /** The last part of a model's id, which is the part people recognize. */

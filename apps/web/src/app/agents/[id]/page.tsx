@@ -1,6 +1,6 @@
 "use client";
 
-import { D, formatPrice, formatQty, formatUsd, isPositiveDecimal, modelShortName, shortAddress, timeAgo, type AgentDetailView, type AgentRunView } from "@frontrun/core";
+import { D, UNVERIFIED_CLAIM, formatPrice, formatQty, formatUsd, isPositiveDecimal, modelShortName, shortAddress, timeAgo, type AgentAction, type AgentDetailView, type AgentRunView } from "@frontrun/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -54,6 +54,21 @@ function MoneySheet({ agent, kind, onClose }: { agent: AgentDetailView; kind: "f
   );
 }
 
+/** The app's own record of what happened, shown apart from the model's words because those can be wrong. */
+function ActionRecord({ actions }: { actions: AgentAction[] }) {
+  if (!actions.length) return null;
+  return (
+    <ul className="mt-1 space-y-0.5">
+      {actions.map((a, i) => (
+        <li key={i} className={`flex items-start gap-1.5 text-xs ${a.tool === UNVERIFIED_CLAIM ? "font-semibold text-down" : a.acted ? "font-medium text-signal" : "text-warn"}`}>
+          <span aria-hidden>{a.acted ? "✓" : "✕"}</span>
+          <span>{a.summary}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Chat({ agent }: { agent: AgentDetailView }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -81,7 +96,10 @@ function Chat({ agent }: { agent: AgentDetailView }) {
         <ul className="mt-2 max-h-72 space-y-2 overflow-y-auto">
           {items.map((m) => (
             <li key={m.id} className={`flex ${m.role === "owner" ? "justify-end" : ""}`}>
-              <p className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm break-words whitespace-pre-wrap ${m.role === "owner" ? "bg-signal/15" : "bg-surface"}`}>{m.body}</p>
+              <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${m.role === "owner" ? "bg-signal/15" : "bg-surface"}`}>
+                <p className="break-words whitespace-pre-wrap">{m.body}</p>
+                <ActionRecord actions={m.actions} />
+              </div>
             </li>
           ))}
           {thinking && <li className="text-xs text-muted">Thinking…</li>}
@@ -105,7 +123,8 @@ function Chat({ agent }: { agent: AgentDetailView }) {
 
 function RunRow({ run }: { run: AgentRunView }) {
   const acted = run.actions.filter((a) => a.acted);
-  const looked = run.actions.filter((a) => !a.acted);
+  const claim = run.actions.filter((a) => a.tool === UNVERIFIED_CLAIM);
+  const looked = run.actions.filter((a) => !a.acted && a.tool !== UNVERIFIED_CLAIM);
   return (
     <li className="px-4 py-3">
       <div className="flex items-baseline justify-between gap-2 text-xs text-faint">
@@ -120,6 +139,11 @@ function RunRow({ run }: { run: AgentRunView }) {
         </p>
       ))}
       {run.summary && <p className="mt-1 text-sm break-words whitespace-pre-wrap">{run.summary}</p>}
+      {claim.map((a, i) => (
+        <p key={i} className="mt-1 text-xs font-semibold text-down">
+          {a.summary}
+        </p>
+      ))}
       {!run.finishedAt && <p className="mt-1 text-sm text-muted">Thinking…</p>}
       {run.error && <p className="mt-1 text-sm text-down">The model failed this round, so nothing was done.</p>}
       {!!looked.length && (
