@@ -1,14 +1,19 @@
 import type { AgentModelView } from "@frontrun/core";
 import { env } from "../env";
+import { AppError } from "../errors";
 import { fetchJson } from "../http";
-import { cachedJson } from "../redis";
+import { logger } from "../logger";
+import { redis } from "../redis";
 
 /**
  * Every agent's model goes through one gateway, so an owner can pick from hundreds of models, open-source
  * ones included, without this app holding an account with each provider.
  */
 const GATEWAY = "https://openrouter.ai/api/v1";
+const MODELS_KEY = "agents:models";
+const MODELS_LAST_GOOD_KEY = "agents:models:last-good";
 const MODELS_TTL_SECONDS = 3600;
+const MODELS_LAST_GOOD_TTL_SECONDS = 30 * 86_400;
 
 /** Shown first. A mix of cheap and strong, closed and open. */
 const RECOMMENDED = [
@@ -61,11 +66,24 @@ export function toModelViews(models: GatewayModel[]): AgentModelView[] {
   return views.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
 }
 
+/** The gateway being slow or down shouldn't stop anyone choosing a model, so the last good list is kept for a while. */
 export async function agentModels(): Promise<AgentModelView[]> {
-  return cachedJson("agents:models", MODELS_TTL_SECONDS, async () => {
+  const fresh = await redis().get(MODELS_KEY);
+  if (fresh) return JSON.parse(fresh) as AgentModelView[];
+  try {
     const { data } = await fetchJson<{ data: GatewayModel[] }>(`${GATEWAY}/models`, { timeoutMs: 15_000, retries: 1 });
-    return toModelViews(data);
-  });
+    const views = toModelViews(data);
+    if (!views.length) throw new Error("The gateway listed no models that can call tools.");
+    const json = JSON.stringify(views);
+    await redis().set(MODELS_KEY, json, "EX", MODELS_TTL_SECONDS);
+    await redis().set(MODELS_LAST_GOOD_KEY, json, "EX", MODELS_LAST_GOOD_TTL_SECONDS);
+    return views;
+  } catch (err) {
+    logger.warn({ err: err instanceof Error ? err.message : err }, "couldn't fetch the model list");
+    const lastGood = await redis().get(MODELS_LAST_GOOD_KEY);
+    if (lastGood) return JSON.parse(lastGood) as AgentModelView[];
+    throw new AppError(503, "models_unavailable", "Couldn't load the models just now. Try again in a moment.");
+  }
 }
 
 export function modelGatewayConfigured(): boolean {

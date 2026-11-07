@@ -51,8 +51,13 @@ function call(name: string, args: Record<string, unknown> = {}): FakeReply {
   return { tool_calls: [{ name, args }], cost: 0.001 };
 }
 
+let modelsDown = false;
+let modelsEmpty = false;
+
 function gateway(url: string, init?: RequestInit): Response {
   if (url.endsWith("/models")) {
+    if (modelsDown) throw new Error("connect timeout");
+    if (modelsEmpty) return Response.json({ data: [] });
     return Response.json({
       data: [
         { id: MODEL, name: "Acme: Fast Model", supported_parameters: ["tools"], pricing: { prompt: "0.0000001", completion: "0.0000005" } },
@@ -161,6 +166,8 @@ beforeEach(async () => {
   await redis().flushdb();
   script.length = 0;
   requests.length = 0;
+  modelsDown = false;
+  modelsEmpty = false;
   await setPrice(TOKEN, "2");
   await setPrice(OTHER, "10");
 });
@@ -192,11 +199,35 @@ describe("models", () => {
     expect(isOpenSourceModel("openai/gpt-5")).toBe(false);
   });
 
-  it("lists them to a signed-in user", async () => {
-    const client = await login("argyporgy");
-    const { items } = await client.agentModels();
+  it("lists them to anyone, with no account", async () => {
+    const { items } = await new ApiClient({ baseUrl }).agentModels();
     expect(items.map((m) => m.id).sort()).toEqual(["acme/fast-model", "deepseek/open-model"]);
     expect(items.find((m) => m.id === "deepseek/open-model")).toMatchObject({ openSource: true, free: true });
+  });
+});
+
+describe("when the gateway is down", () => {
+  it("keeps offering the last good list", async () => {
+    const anon = new ApiClient({ baseUrl });
+    expect((await anon.agentModels()).items).toHaveLength(2);
+    await redis().del("agents:models");
+    modelsDown = true;
+    expect((await anon.agentModels()).items).toHaveLength(2);
+  });
+
+  it("says so plainly if it has never had a list", async () => {
+    modelsDown = true;
+    await expectApiError(new ApiClient({ baseUrl }).agentModels(), "models_unavailable");
+    const client = await login("argyporgy");
+    await expectApiError(client.createAgent({ name: "nomodels", ...settings }), "models_unavailable");
+  });
+
+  it("doesn't save an empty list, which would leave nothing to pick for an hour", async () => {
+    modelsEmpty = true;
+    await expectApiError(new ApiClient({ baseUrl }).agentModels(), "models_unavailable");
+    expect(await redis().exists("agents:models")).toBe(0);
+    modelsEmpty = false;
+    expect((await new ApiClient({ baseUrl }).agentModels()).items).toHaveLength(2);
   });
 });
 

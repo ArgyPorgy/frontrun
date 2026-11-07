@@ -21,11 +21,8 @@ const idParam = z.object({ id: z.string().uuid() });
 export async function registerAgentRoutes(app: FastifyInstance) {
   app.get("/v1/agents", async (req) => listAgents(await requireUser(req)));
 
-  // Static route first, so it's never swallowed by the "/:id" parametric route below.
-  app.get("/v1/agents/models", async (req) => {
-    await requireUser(req);
-    return { items: await agentModels() };
-  });
+  // Static route first, so it's never swallowed by the "/:id" parametric route below. Nothing private in it.
+  app.get("/v1/agents/models", async () => ({ items: await agentModels() }));
 
   app.post("/v1/agents", { config: { rateLimit: { max: 10, timeWindow: "1 hour" } } }, async (req) => {
     const user = await requireUser(req);

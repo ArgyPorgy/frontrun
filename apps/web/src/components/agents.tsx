@@ -11,6 +11,7 @@ import {
   AGENT_THINK_MINUTES,
   D,
   isPositiveDecimal,
+  modelShortName,
   type AgentModelView,
   type AgentView,
 } from "@frontrun/core";
@@ -47,10 +48,22 @@ function roundCost(m: AgentModelView): number {
   return (m.promptPrice * 15_000 + m.completionPrice * 1_500) / 1_000_000;
 }
 
+function CheckDot({ checked }: { checked: boolean }) {
+  return (
+    <span aria-hidden className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-2 ${checked ? "border-signal bg-signal text-signal-ink" : "border-line"}`}>
+      {checked && (
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4">
+          <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+    </span>
+  );
+}
+
 function ModelPicker({ value, onChange }: { value: string; onChange(id: string): void }) {
   const [view, setView] = useState<"suggested" | "open" | "all">("suggested");
   const [search, setSearch] = useState("");
-  const models = useQuery({ queryKey: ["agent-models"], queryFn: () => api.agentModels(), staleTime: 600_000 });
+  const models = useQuery({ queryKey: ["agent-models"], queryFn: () => api.agentModels(), staleTime: 600_000, retry: 1 });
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase();
     return (models.data?.items ?? [])
@@ -62,6 +75,16 @@ function ModelPicker({ value, onChange }: { value: string; onChange(id: string):
 
   return (
     <div>
+      <div className="mb-2 flex items-center gap-2.5 rounded-xl border border-signal/60 bg-signal/10 px-3 py-2">
+        <CheckDot checked />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold">{selected?.name ?? modelShortName(value)}</p>
+          <p className="truncate text-xs text-muted">
+            {selected ? `${selected.provider}${selected.openSource ? " · open source" : ""}` : "Selected"}
+          </p>
+        </div>
+        {selected && <span className="num shrink-0 text-xs text-muted">{priceLabel(selected)}</span>}
+      </div>
       <Segmented
         value={view}
         onChange={setView}
@@ -71,14 +94,30 @@ function ModelPicker({ value, onChange }: { value: string; onChange(id: string):
           { value: "all", label: `All ${models.data?.items.length ?? ""}` },
         ]}
       />
-      <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search models" aria-label="Search models" className="mt-2 w-full rounded-xl border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-signal" />
+      <input
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        // Enter here means search, not create the agent.
+        onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
+        placeholder="Search all models"
+        aria-label="Search models"
+        className="mt-2 w-full rounded-xl border border-line bg-bg px-3 py-2 text-sm outline-none placeholder:text-faint focus:border-signal"
+      />
       <ul className="mt-2 max-h-56 divide-y divide-line/60 overflow-y-auto rounded-xl border border-line">
         {models.isLoading && <li className="px-3 py-2 text-sm text-muted">Loading models…</li>}
-        {models.isError && <li className="px-3 py-2 text-sm text-down">Couldn't load the models. Try again in a moment.</li>}
+        {models.isError && (
+          <li className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-down">
+            Couldn't load the models.
+            <button type="button" onClick={() => void models.refetch()} className="shrink-0 font-semibold text-signal">
+              Try again
+            </button>
+          </li>
+        )}
         {!models.isLoading && !shown.length && !models.isError && <li className="px-3 py-2 text-sm text-muted">No model matches that.</li>}
         {shown.map((m) => (
           <li key={m.id}>
-            <button type="button" onClick={() => onChange(m.id)} className={`flex w-full items-center gap-2 px-3 py-2 text-left ${m.id === value ? "bg-signal/10" : ""}`}>
+            <button type="button" aria-pressed={m.id === value} onClick={() => onChange(m.id)} className={`flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-raised ${m.id === value ? "bg-signal/15" : ""}`}>
+              <CheckDot checked={m.id === value} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium">{m.name}</span>
                 <span className="block truncate text-xs text-faint">
@@ -116,7 +155,7 @@ function Field({ label, children, hint }: { label: string; children: ReactNode; 
   );
 }
 
-const inputClass = "w-full rounded-xl border border-line bg-bg px-3 py-2 outline-none focus:border-signal";
+const inputClass = "w-full rounded-xl border border-line bg-bg px-3 py-2 outline-none placeholder:text-faint focus:border-signal";
 
 export function AgentForm({ agent, submitLabel, pending, error, onSubmit }: { agent?: AgentView; submitLabel: string; pending: boolean; error: string | null; onSubmit(values: AgentFormValues): void }) {
   const [name, setName] = useState("");
@@ -134,7 +173,10 @@ export function AgentForm({ agent, submitLabel, pending, error, onSubmit }: { ag
     D(dailyLimitUsd).gte(perTradeUsd) &&
     D(dailyLimitUsd).lte(AGENT_MAX_DAILY_USD);
   const nameOk = !!agent || /^[a-zA-Z0-9_]{3,20}$/.test(name);
-  const ready = nameOk && limitsOk && strategy.trim().length >= 10 && !!model;
+  const strategyOk = strategy.trim().length >= 10;
+  const ready = nameOk && limitsOk && strategyOk && !!model;
+  // A greyed-out button on its own doesn't say what it's waiting for.
+  const waitingOn = !nameOk ? "Give it a name to continue: 3 to 20 letters, numbers or underscores." : !strategyOk ? "Write its strategy to continue: at least 10 characters." : null;
 
   return (
     <form
@@ -153,7 +195,7 @@ export function AgentForm({ agent, submitLabel, pending, error, onSubmit }: { ag
         <ModelPicker value={model} onChange={setModel} />
       </div>
       <Field label="Strategy" hint="In your own words. It reads this every time it thinks.">
-        <textarea value={strategy} onChange={(e) => setStrategy(e.target.value)} rows={4} maxLength={2000} placeholder="Look for tokens with rising volume and deep liquidity. Take profit around +40%, cut losers at -15%. Skip anything under a day old." className={`${inputClass} resize-none`} />
+        <textarea value={strategy} onChange={(e) => setStrategy(e.target.value)} rows={4} maxLength={2000} placeholder="For example: look for rising volume and deep liquidity. Take profit around +40%, cut losers at -15%." className={`${inputClass} resize-none`} />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Most per trade">
@@ -178,6 +220,7 @@ export function AgentForm({ agent, submitLabel, pending, error, onSubmit }: { ag
         </select>
       </Field>
       {error && <p className="mt-3 text-sm text-down">{error}</p>}
+      {waitingOn && <p className="mt-3 text-xs text-muted">{waitingOn}</p>}
       <Button type="submit" disabled={!ready || pending} className="mt-4 w-full">
         {pending ? "One moment…" : submitLabel}
       </Button>

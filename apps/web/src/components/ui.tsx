@@ -204,6 +204,7 @@ export function Segmented<T extends string>({
       {options.map((o) => (
         <button
           key={o.value}
+          type="button"
           role="tab"
           aria-selected={o.value === value}
           onClick={() => onChange(o.value)}
@@ -234,6 +235,7 @@ export function PillFilter<T extends string | number>({
       {options.map((o) => (
         <button
           key={String(o.value)}
+          type="button"
           onClick={() => onChange(o.value)}
           aria-pressed={o.value === value}
           className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
