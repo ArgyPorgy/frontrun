@@ -9,6 +9,7 @@ export * from "./agents";
 export * from "./builder";
 export * from "./terms";
 export * from "./perps";
+export * from "./indicators";
 export * from "./risk";
 export * from "./format";
 export * from "./types";

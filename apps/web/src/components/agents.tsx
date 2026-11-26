@@ -1,6 +1,6 @@
 "use client";
 
-import {
+import { AGENT_STRATEGY_PRESETS,
   AGENT_DAILY_MODEL_USD,
   AGENT_DEFAULT_DAILY_USD,
   AGENT_DEFAULT_THINK_MINUTES,
@@ -194,7 +194,19 @@ export function AgentForm({ agent, submitLabel, pending, error, onSubmit }: { ag
         <p className="mb-1 text-sm font-medium">Model</p>
         <ModelPicker value={model} onChange={setModel} />
       </div>
-      <Field label="Strategy" hint="In your own words. It reads this every time it thinks.">
+      <Field label="Strategy" hint="In your own words. It reads this every time it thinks. Start from a preset if you like, then make it yours.">
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {AGENT_STRATEGY_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setStrategy(p.strategy)}
+              className={`rounded-full border px-2.5 py-1 text-xs ${strategy === p.strategy ? "border-signal text-signal" : "border-line text-muted hover:text-fg"}`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
         <textarea value={strategy} onChange={(e) => setStrategy(e.target.value)} rows={4} maxLength={2000} placeholder="For example: look for rising volume and deep liquidity. Take profit around +40%, cut losers at -15%." className={`${inputClass} resize-none`} />
       </Field>
       <div className="grid grid-cols-2 gap-3">

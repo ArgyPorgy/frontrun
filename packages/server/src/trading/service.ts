@@ -32,7 +32,7 @@ import {
   type TradeStatus,
   type TradeView,
 } from "@frontrun/core";
-import { and, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, notInArray, lt, or, sql } from "drizzle-orm";
 import { db, schema, type Db } from "../db/client";
 import { env } from "../env";
 import { AppError, badRequest, conflict, forbidden, notFound, unprocessable } from "../errors";
@@ -130,7 +130,19 @@ async function spentToday(userId: string): Promise<string> {
         inArray(schema.trades.status, ["pending", "source_confirmed", "filled"]),
       ),
     );
-  return row?.total ?? "0";
+  // Perp collateral counts too, so one daily limit covers both. A partial close's booked slice opened earlier, so it's left out.
+  const [perps] = await db()
+    .select({ total: sql<string>`coalesce(sum(${schema.perpPositions.collateralUsd}), 0)` })
+    .from(schema.perpPositions)
+    .where(
+      and(
+        eq(schema.perpPositions.userId, userId),
+        gt(schema.perpPositions.createdAt, since),
+        notInArray(schema.perpPositions.status, ["failed", "cancelled"]),
+        sql`(${schema.perpPositions.openedAt} is null or ${schema.perpPositions.openedAt} >= ${schema.perpPositions.createdAt} - interval '1 minute')`,
+      ),
+    );
+  return D(row?.total ?? "0").add(perps?.total ?? "0").toFixed();
 }
 
 export async function activeGrant(userId: string) {

@@ -6,6 +6,7 @@ import {
   follow,
   leaderboard,
   listNotifications,
+  listPerps,
   markAllRead,
   notFound,
   notify,
@@ -39,6 +40,15 @@ export async function registerSocialRoutes(app: FastifyInstance) {
     const user = await findByUsername(username);
     if (!user || user.isBanned) throw notFound("User");
     return publicPositions(user.id);
+  });
+
+  // Perps are public like every other position: open ones, then the latest closed. Failed attempts aren't shown.
+  app.get("/v1/users/:username/perps", async (req) => {
+    const { username } = usernameParam.parse(req.params);
+    const user = await findByUsername(username);
+    if (!user || user.isBanned) throw notFound("User");
+    const items = await listPerps(user.id);
+    return { items: items.filter((p) => p.status !== "failed" && p.status !== "cancelled").slice(0, 30) };
   });
 
   app.post("/v1/users/:username/follow", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (req, reply) => {

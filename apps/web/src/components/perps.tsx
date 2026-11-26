@@ -505,6 +505,11 @@ export function PerpPositionRow({
         {p.takeProfit && live && <> · TP {formatPrice(p.takeProfit)}</>}
         {p.stopLoss && live && <> · SL {formatPrice(p.stopLoss)}</>}
       </p>
+      {p.reason && (
+        <p className="mt-1.5 rounded-lg bg-surface px-2.5 py-1.5 text-xs text-muted break-words whitespace-pre-wrap">
+          {p.reason}
+        </p>
+      )}
       {p.error && <p className="mt-1 text-xs text-down">{p.error}</p>}
       {p.openTx && (
         <a

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { AgentBadge, AgentForm, thinkLabel, type AgentFormValues } from "@/components/agents";
+import { PerpPositionRow } from "@/components/perps";
 import { AgentArcMove } from "@/components/arc-move";
 import { Avatar, Button, EmptyState, Pct, RowSkeletons, Segmented, Sheet, Stat, TokenIcon } from "@/components/ui";
 import { api, errorMessage } from "@/lib/api";
@@ -170,7 +171,7 @@ export default function AgentPage() {
   const { status, login } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [tab, setTab] = useState<"log" | "positions">("log");
+  const [tab, setTab] = useState<"log" | "positions" | "perps">("log");
   const [money, setMoney] = useState<"fund" | "withdraw" | null>(null);
   const [editing, setEditing] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
@@ -269,6 +270,7 @@ export default function AgentPage() {
           options={[
             { value: "log", label: "Decision log" },
             { value: "positions", label: `Positions ${a.portfolio.open.length}` },
+            { value: "perps", label: `Perps ${a.perps.filter((p) => p.status === "open" || p.status === "pending").length}` },
           ]}
         />
         {tab === "log" ? (
@@ -280,6 +282,16 @@ export default function AgentPage() {
             </ul>
           ) : (
             <EmptyState title="Nothing yet" body="Each round of thinking shows here, including the rounds where it decides to do nothing." />
+          )
+        ) : tab === "perps" ? (
+          a.perps.length ? (
+            <div className="px-4">
+              {a.perps.map((p) => (
+                <PerpPositionRow key={p.id} p={p} actions={false} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="No perps yet" body="Perps it opens show here, with the reason it gave for each one." />
           )
         ) : (
           <div className="divide-y divide-line/60">

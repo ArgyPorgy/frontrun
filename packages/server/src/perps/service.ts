@@ -86,6 +86,7 @@ export function perpToView(
     closeTx: row.closeTx,
     isPaper: row.isPaper,
     error: row.error,
+    reason: row.agentReason,
     createdAt: row.createdAt.toISOString(),
     openedAt: row.openedAt?.toISOString() ?? null,
     closedAt: row.closedAt?.toISOString() ?? null,

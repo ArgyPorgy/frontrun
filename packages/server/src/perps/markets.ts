@@ -69,6 +69,7 @@ interface RawPair {
   isPairListed?: boolean;
   openInterest?: { long?: number; short?: number };
   pairMaxOI?: number;
+  fundingRate?: { long?: number; short?: number };
 }
 
 interface Catalog {
@@ -98,6 +99,11 @@ async function loadCatalog(): Promise<Catalog> {
           shortUsd: p.openInterest?.short ?? 0,
           maxUsd: p.pairMaxOI ?? null,
         },
+        fundingRate:
+          typeof p.fundingRate?.long === "number" &&
+          typeof p.fundingRate?.short === "number"
+            ? { long: p.fundingRate.long, short: p.fundingRate.short }
+            : null,
         feedSymbol: p.feed?.attributes?.symbol ?? symbol,
       };
     });

@@ -31,6 +31,8 @@ export interface PerpMarketView {
   /** Fee on each side of the trade, as a percent of position size. */
   openFeePct: number;
   closeFeePct: number;
+  /** Veranta's funding rate for each side, as it reports it. Positive means that side pays. Null if it gave none. */
+  fundingRate: { long: number; short: number } | null;
 }
 
 export interface PerpPositionView {
@@ -54,6 +56,8 @@ export interface PerpPositionView {
   closeTx: string | null;
   isPaper: boolean;
   error: string | null;
+  /** An agent's public reason for opening it. */
+  reason: string | null;
   createdAt: string;
   openedAt: string | null;
   closedAt: string | null;

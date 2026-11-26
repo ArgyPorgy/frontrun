@@ -32,6 +32,7 @@ import { agentEvmRules } from "../trading/policy";
 import { isPaperMode, signerStatus, usdcBalance } from "../trading/service";
 import { loadSigningWallets, performServerStep, privy, serverSigningConfigured, solanaSigningConfigured } from "../trading/signer";
 import { listOrders } from "../trading/orders";
+import { listPerps } from "../perps/service";
 import { approveFlash } from "../signerOps";
 import { buildPortfolio, ensureDevWallets, follow, toSummary, type UserRow } from "../users";
 import { registerAgentBuilderCode } from "../builder-codes";
@@ -128,8 +129,8 @@ export async function listAgents(owner: UserRow): Promise<AgentsView> {
 
 export async function agentDetail(owner: { id: string }, id: string): Promise<AgentDetailView> {
   const { agent, user } = await ownedAgent(owner, id);
-  const [view, portfolio, orders] = await Promise.all([toView(agent, user), buildPortfolio(user.id), listOrders(user.id, { status: "open" })]);
-  return { ...view, portfolio, orders };
+  const [view, portfolio, orders, perps] = await Promise.all([toView(agent, user), buildPortfolio(user.id), listOrders(user.id, { status: "open" }), listPerps(user.id)]);
+  return { ...view, portfolio, orders, perps: perps.filter((p) => p.status !== "failed" && p.status !== "cancelled").slice(0, 30) };
 }
 
 /**

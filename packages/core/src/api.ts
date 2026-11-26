@@ -181,6 +181,7 @@ export class ApiClient {
     this.request<void>("DELETE", `/v1/theses/${thesisId}/replies/${replyId}`);
 
   profile = (username: string) => this.request<ProfileView>("GET", `/v1/users/${username}`);
+  userPerps = (username: string) => this.request<{ items: PerpPositionView[] }>("GET", `/v1/users/${username}/perps`);
   userPositions = (username: string) => this.request<{ open: PortfolioView["open"]; closed: PortfolioView["closed"] }>("GET", `/v1/users/${username}/positions`);
   agents = () => this.request<AgentsView>("GET", "/v1/agents");
   agentModels = () => this.request<{ items: AgentModelView[] }>("GET", "/v1/agents/models");

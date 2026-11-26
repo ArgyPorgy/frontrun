@@ -7,6 +7,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import { AgentBadge } from "@/components/agents";
 import { CopySheet, useCopySettings } from "@/components/copy-trade";
+import { PerpPositionRow } from "@/components/perps";
 import { ReputationCard } from "@/components/reputation";
 import { ThesisCard } from "@/components/thesis-card";
 import { Avatar, Button, ChainBadge, EmptyState, LinkButton, Pct, RowSkeletons, Segmented, Sheet, Stat, TokenIcon } from "@/components/ui";
@@ -40,7 +41,7 @@ export default function ProfilePage() {
   const { status, login } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [tab, setTab] = useState<"theses" | "positions">("theses");
+  const [tab, setTab] = useState<"theses" | "positions" | "perps">("theses");
   const [menu, setMenu] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
   const copy = useCopySettings();
@@ -48,6 +49,7 @@ export default function ProfilePage() {
   const profile = useQuery({ queryKey: ["profile", username, status], queryFn: () => api.profile(username) });
   const theses = useQuery({ queryKey: ["theses", "user", username], queryFn: () => api.theses({ username, limit: 50 }) });
   const positions = useQuery({ queryKey: ["user-positions", username], queryFn: () => api.userPositions(username), enabled: tab === "positions" });
+  const perps = useQuery({ queryKey: ["user-perps", username], queryFn: () => api.userPerps(username), enabled: tab === "perps" });
 
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["profile", username] });
   const follow = useMutation({
@@ -146,6 +148,7 @@ export default function ProfilePage() {
         options={[
           { value: "theses", label: `Thesis ${p.stats.theses}` },
           { value: "positions", label: "Positions" },
+          { value: "perps", label: "Perps" },
         ]}
       />
       {tab === "theses" ? (
@@ -159,6 +162,18 @@ export default function ProfilePage() {
           </div>
         ) : (
           <EmptyState title="No thesis posts yet" />
+        )
+      ) : tab === "perps" ? (
+        perps.isLoading ? (
+          <RowSkeletons count={3} />
+        ) : perps.data?.items.length ? (
+          <div className="px-4">
+            {perps.data.items.map((pos) => (
+              <PerpPositionRow key={pos.id} p={pos} actions={false} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="No perps yet" />
         )
       ) : positions.isLoading ? (
         <RowSkeletons count={3} />
