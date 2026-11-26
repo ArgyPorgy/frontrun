@@ -331,7 +331,7 @@ export async function anchorPositionEvents(limit = 10): Promise<number> {
       const recorded = await evmClient(PROOF_CHAIN).readContract({ address: ledger, abi: POSITION_LEDGER_ABI, functionName: "isRecorded", args: [args[2]] });
       const txHash = recorded ? await findLogTx(ledger, RECORDED_EVENT, { eventId: args[2] }) : await relayerWrite({ address: ledger, abi: POSITION_LEDGER_ABI, functionName: "record", args });
       await db().update(schema.thesisPositionEvents).set({ anchorTx: txHash, anchoredAt: new Date(), anchorChain: PROOF_CHAIN }).where(eq(schema.thesisPositionEvents.id, event.id));
-      logger.info({ eventId: event.id, txHash }, "position change recorded on Arc");
+      logger.info({ eventId: event.id, txHash }, "position change recorded on-chain");
       await announceChange(event.thesisId);
     } catch (err) {
       const message = err instanceof Error ? err.message.slice(0, 200) : String(err);

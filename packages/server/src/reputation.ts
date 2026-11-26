@@ -296,7 +296,7 @@ export async function publishReputation(limit = 5): Promise<number> {
         .update(schema.reputationScores)
         .set({ attestedScore: score.score, attestedClosed: score.closed, attestTx: txHash, attestedAt: new Date(), attestAttempts: 0, attestChain: PROOF_CHAIN })
         .where(eq(schema.reputationScores.userId, score.userId));
-      logger.info({ userId: score.userId, score: score.score, txHash }, "reputation attested on Arc");
+      logger.info({ userId: score.userId, score: score.score, txHash }, "reputation attested on-chain");
     } catch (err) {
       const message = err instanceof Error ? err.message.slice(0, 200) : String(err);
       if (!isThesisSpecificFailure(err)) {
