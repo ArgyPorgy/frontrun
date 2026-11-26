@@ -6,8 +6,7 @@ import {
   checkBody,
   fromBaseUnits,
   type ChainKey,
-  type PriceTick,
-} from "@frontrun/core";
+  type PriceTick, HOME_CHAIN, HOME_USDC_DECIMALS } from "@frontrun/core";
 import {
   CHANNELS,
   DEX_BATCH_SIZE,
@@ -19,7 +18,7 @@ import {
   anchorPendingTheses,
   backfillAgentBuilderCodes,
   anchorPositionEvents,
-  arcUsdcBalances,
+  homeUsdcBalances,
   checkWatchedOrders,
   pollTelegramTracker,
   pollXTracker,
@@ -153,7 +152,7 @@ async function watchBalances() {
     const [userId, address] = e.split(":") as [string, string];
     return { userId, address };
   });
-  const balances = await arcUsdcBalances(parsed.map((p) => p.address));
+  const balances = await homeUsdcBalances(parsed.map((p) => p.address));
   await Promise.all(
     parsed.map(async ({ userId, address }) => {
       const balance = balances.get(address);
@@ -163,14 +162,14 @@ async function watchBalances() {
       await redis().set(key, balance.toString(), "EX", 86_400);
       if (previous === null) return;
       if (BigInt(previous) === balance) return;
-      const usdc = fromBaseUnits(balance, CHAINS.arc.usdcDecimals);
+      const usdc = fromBaseUnits(balance, HOME_USDC_DECIMALS);
       await publish(CHANNELS.user(userId), { type: "balance", usdc });
       const gained = balance - BigInt(previous);
       // Tiny changes are gas or fill settlement, and a real deposit clears this bar. So do a sale's proceeds,
       // which reach the wallet before the sale reports as filled, so a recent trade rules out a deposit.
       if (gained >= 100_000n && !(await hasRecentTrade(userId))) {
-        const amount = D(fromBaseUnits(gained, CHAINS.arc.usdcDecimals)).toFixed(2);
-        await notify(userId, { type: "deposit", message: `$${amount} USDC arrived on Arc` }, { push: true });
+        const amount = D(fromBaseUnits(gained, HOME_USDC_DECIMALS)).toFixed(2);
+        await notify(userId, { type: "deposit", message: `$${amount} USDC arrived on ${CHAINS[HOME_CHAIN].name}` }, { push: true });
       }
     }),
   );

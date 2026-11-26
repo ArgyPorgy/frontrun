@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { applyFillToHeld, chainChange, claimsTrade, heldBpsOf, liveBadge, positionEventLabel, reputationScore, type ClosedPositionStats, type HeldState, type ThesisLive } from "../src";
 
 const held = (qty: string, bps = 10000, status: HeldState["status"] = "holding"): HeldState => ({ qty, bps, status });
-const live = (over: Partial<ThesisLive>): ThesisLive => ({ status: "holding", heldPct: 100, exitPriceUsd: null, exitReturnPct: null, changedAt: null, proofTx: null, events: [], ...over });
+const live = (over: Partial<ThesisLive>): ThesisLive => ({ status: "holding", heldPct: 100, exitPriceUsd: null, exitReturnPct: null, changedAt: null, proofTx: null, proofChain: null, events: [], ...over });
 
 describe("applyFillToHeld", () => {
   it("shows a partial sale as a trim of what was held at posting", () => {

@@ -10,7 +10,7 @@
  * something a real trade needs, fails the run.
  */
 import { randomUUID } from "node:crypto";
-import { ARC_USDC, CHAINS, FLASH_ALLOWANCE_ARC, UNISWAP_ARC, type StepResult, FRONTRUN_BUILDER_CODE, withBuilderCode } from "@frontrun/core";
+import { ARC_USDC, CHAINS, FLASH_ALLOWANCE_ARC, UNISWAP_ARC, type StepResult, FRONTRUN_BUILDER_CODE, withBuilderCode, HOME_USDC, UNISWAP_BASE } from "@frontrun/core";
 import { PrivyClient } from "@privy-io/node";
 import {
   appendTransactionMessageInstruction,
@@ -137,7 +137,7 @@ async function evmSuite() {
   const flashReq = req({});
   const flashQuote = await flashProvider.quote(flashReq);
   const raw = flashQuote.raw as FlashQuoteRaw;
-  assertOrderMatches(raw.evm!.orderTypedData!, { funder: addr, spentToken: ARC_USDC, fromAmount: 5_000_000n, chainId: ARC_ID });
+  assertOrderMatches(raw.evm!.orderTypedData!, { funder: addr, spentToken: HOME_USDC, fromAmount: 5_000_000n, chainId: CHAINS.base.chainId! });
   console.log("  PASS  Flash order payload matches our sanity check");
 
   const order = await allowed("Sign a real Flash order", () => signTyped(wallet.id, raw.evm!.orderTypedData!));
@@ -151,11 +151,11 @@ async function evmSuite() {
     }
   }
   if (raw.evm?.approveTx) {
-    const signed = await allowed("Sign Flash's one-time USDC approval", () => signTx(wallet.id, raw.evm!.approveTx!));
+    const signed = await allowed("Sign Flash's one-time USDC approval", () => signTx(wallet.id, { ...raw.evm!.approveTx!, chainId: CHAINS.base.chainId! }));
     if (signed) {
       const from = await recoverTransactionAddress({ serializedTransaction: signed.signed_transaction as TransactionSerialized });
       const parsed = parseTransaction(signed.signed_transaction as TransactionSerialized);
-      if (from.toLowerCase() === addr.toLowerCase() && parsed.chainId === ARC_ID) console.log("  PASS  Signed approval recovers to this wallet on chain 5042");
+      if (from.toLowerCase() === addr.toLowerCase() && parsed.chainId === CHAINS.base.chainId) console.log("  PASS  Signed approval recovers to this wallet on Base");
       else {
         failures++;
         console.log("  FAIL  Signed approval doesn't recover to this wallet");
@@ -184,22 +184,34 @@ async function evmSuite() {
   await allowed("Sell-side approval of another token to Flash", () => signTx(wallet.id, { to: BASE_WETH, chainId: CHAINS.base.chainId!, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [FLASH_ALLOWANCE_ARC as Hex, 2n ** 256n - 1n] }) }));
 
   // Uniswap Trading API: quote, Permit2 signature, then the swap transaction. Signed, never sent.
-  const uniReq = req({ chain: "arc", address: ARC_WETH });
+  const uniReq = req({ chain: "base", address: BASE_WETH });
   try {
     const uniQuote = await uniswapProvider.quote(uniReq);
     const ctx = { tradeId: randomUUID(), userId: "test", request: uniReq, quote: uniQuote, completed: [] as Array<{ id: string; signature?: string; txHash?: string }> };
-    // On Arc a buy pays USDC as native value: no approval and no permit, straight to the swap.
-    const next = await uniswapProvider.advance(ctx);
-    if ("steps" in next && next.steps[0]?.kind === "evm_tx") {
+    // On Base USDC is a plain token: approve Permit2 once, sign the permit, then the swap through Base's router.
+    let next = await uniswapProvider.advance(ctx);
+    if ("steps" in next && next.steps[0]?.kind === "evm_tx" && next.steps[0].id === "approve") {
+      const approve = next.steps[0];
+      await allowed("Sign the buy's Permit2 approval on Base", () => signTx(wallet.id, { to: approve.to, data: approve.data, chainId: CHAINS.base.chainId! }));
+      ctx.completed.push({ id: "approve", txHash: "0xskipped" });
+      next = await uniswapProvider.advance(ctx);
+    }
+    if ("steps" in next && next.steps[0]?.kind === "evm_typed_data") {
+      const permit = await allowed("Sign the buy's Permit2 message", () => signTyped(wallet.id, (next as { steps: Array<{ typedData: string }> }).steps[0]!.typedData));
+      if (permit) ctx.completed.push({ id: "permit", signature: permit.signature });
+      next = await uniswapProvider.advance(ctx);
+    }
+    if ("steps" in next && next.steps[0]?.kind === "evm_tx" && next.steps[0].id === "swap") {
       const step = next.steps[0];
-      console.log(`  ${step.id === "swap" ? "PASS" : "FAIL"}  Buy goes straight to the swap, with no approval step (first step: ${step.id})`);
-      if (step.id !== "swap") failures++;
       console.log(`  INFO  Uniswap built a swap transaction to ${step.to}`);
-      if (step.to.toLowerCase() !== UNISWAP_ARC.universalRouter212.toLowerCase()) {
+      if (step.to.toLowerCase() !== UNISWAP_BASE.universalRouter20.toLowerCase()) {
         failures++;
-        console.log("  FAIL  That isn't the Universal Router 2.1.2 address on Arc");
+        console.log("  FAIL  That isn't Uniswap's Universal Router on Base");
       }
-      await allowed("Sign the Uniswap swap transaction", () => signTx(wallet.id, { to: step.to, data: step.data, value: step.value }));
+      await allowed("Sign the Uniswap swap transaction", () => signTx(wallet.id, { to: step.to, data: step.data, value: step.value, chainId: CHAINS.base.chainId! }));
+    } else {
+      failures++;
+      console.log("  FAIL  The buy never reached a swap transaction");
     }
   } catch (err) {
     failures++;
@@ -207,7 +219,7 @@ async function evmSuite() {
   }
 
   // Uniswap sell: approve Permit2, sign the permit, build the swap. Signed, never sent.
-  const sellReq = req({ chain: "arc", address: ARC_WETH, side: "sell", usdcIn: undefined, qtyIn: "0.001", notionalUsd: "2.3" });
+  const sellReq = req({ chain: "base", address: BASE_WETH, side: "sell", usdcIn: undefined, qtyIn: "0.001", notionalUsd: "2.3" });
   try {
     const sellQuote = await uniswapProvider.quote(sellReq);
     const ctx = { tradeId: randomUUID(), userId: "test", request: sellReq, quote: sellQuote, completed: [] as Array<{ id: string; signature?: string; txHash?: string }> };
@@ -311,6 +323,10 @@ async function evmSuite() {
   const usdc = ARC_USDC as Hex;
   const router = UNISWAP_ARC.universalRouter212 as Hex;
   await allowed("Gasless: approve USDC to Flash", () => signOperation(execute(usdc, 0n, approveCall(FLASH_ALLOWANCE_ARC as Hex))));
+  // Base is home now: the one-tap approval and Uniswap's router there have to sign, with nothing else let through.
+  await allowed("Base: approve Base USDC to Flash", () => signTx(wallet.id, { to: HOME_USDC, data: withBuilderCode(approveCall(FLASH_ALLOWANCE_ARC as Hex)), chainId: 8453 }));
+  await allowed("Base: call Uniswap's Universal Router", () => signTx(wallet.id, { to: UNISWAP_BASE.universalRouter20, data: withBuilderCode("0x3593564c"), chainId: 8453 }));
+  await denied("Base: send Base USDC to an unknown address", () => signTx(wallet.id, { to: HOME_USDC, data: stealCall, chainId: 8453 }));
   // Base Builder Codes ride on the end of calldata. The policy has to read past them, and still refuse what it should.
   await allowed("Builder Code: approve Flash with the code appended", () => signTx(wallet.id, { to: usdc, data: withBuilderCode(approveCall(FLASH_ALLOWANCE_ARC as Hex)) }));
   await denied("Builder Code: a code doesn't let an unknown approval through", () => signTx(wallet.id, { to: usdc, data: withBuilderCode(approveCall(ATTACKER)) }));
@@ -358,7 +374,7 @@ async function evmSuite() {
     ["take-profit", { side: "sell", qty: "0.01", orderType: "take-profit", triggers: [{ notionalPrice: "9000", triggerType: "upper" }] }],
   ] as const) {
     try {
-      const params = { targetChain: "arc", contraChain: "arc", targetAsset: ARC_WETH, contraAsset: ARC_USDC, funderAddress: addr, maxPriceImpact: "0.5", flashIntegratorFeeBps: "50", ...extra } as RestingOrderParams;
+      const params = { targetChain: "base", contraChain: "base", targetAsset: BASE_WETH, contraAsset: HOME_USDC, funderAddress: addr, maxPriceImpact: "0.5", flashIntegratorFeeBps: "50", ...extra } as RestingOrderParams;
       const raw = await requestRestingQuote(params);
       const signed = await allowed(`Sign a real ${name} order`, () => signTyped(wallet.id, raw.evm!.orderTypedData!));
       if (signed) {

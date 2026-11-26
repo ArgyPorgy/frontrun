@@ -1,7 +1,7 @@
-import { CHAINS, D, builderCodeSuffix, fromBaseUnits, withBuilderCode, type ChainKey, type ExecStep, type StepResult } from "@frontrun/core";
+import { CHAINS, D, HOME_CHAIN, builderCodeSuffix, fromBaseUnits, withBuilderCode, type ChainKey, type ExecStep, type StepResult } from "@frontrun/core";
 import { PrivyClient } from "@privy-io/node";
 import { getBase58Decoder } from "@solana/kit";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import { createWalletClient, http, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { db, schema } from "../db/client";
@@ -119,7 +119,24 @@ async function nativePriceUsd(chain: ChainKey): Promise<string> {
  * enough native gas. The cost is recorded here and recovered from that sell's proceeds by Flash's
  * integrator fee, so the backend never takes a separate transfer from the user.
  */
-export async function ensureGasForSetup(args: { chain: ChainKey; address: string; userId: string; tradeId: string }): Promise<boolean> {
+/** Withdrawals a day that get gas sent for them, so the gas wallet can't be drained by repeated requests. */
+const WITHDRAWAL_TOPUPS_PER_DAY = 3;
+
+/**
+ * A withdrawal is sent by the person's own wallet, which holds no ETH on Base. This sends just enough for it,
+ * a few cents' worth, from the gas wallet. It skips wallets that already have enough.
+ */
+export async function ensureGasForWithdrawal(userId: string): Promise<boolean> {
+  const wallets = await loadSigningWallets(userId);
+  const [row] = await db()
+    .select({ n: sql<number>`count(*)::int` })
+    .from(schema.gasTopups)
+    .where(and(eq(schema.gasTopups.userId, userId), eq(schema.gasTopups.chain, HOME_CHAIN), gt(schema.gasTopups.createdAt, new Date(Date.now() - 86_400_000))));
+  if ((row?.n ?? 0) >= WITHDRAWAL_TOPUPS_PER_DAY) return false;
+  return ensureGasForSetup({ chain: HOME_CHAIN, address: wallets.evmAddress, userId, tradeId: null });
+}
+
+export async function ensureGasForSetup(args: { chain: ChainKey; address: string; userId: string; tradeId: string | null }): Promise<boolean> {
   const { chain, address, userId, tradeId } = args;
   const key = env().GAS_TOPUP_PRIVATE_KEY;
   const topup = CHAINS[chain].gasTopupWei;

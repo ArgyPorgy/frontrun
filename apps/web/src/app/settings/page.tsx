@@ -197,7 +197,11 @@ function WithdrawSheet({ open, onClose }: { open: boolean; onClose(): void }) {
   const send = useMutation({
     mutationFn: async () => {
       if (config.tradingMode === "paper") await api.paperWithdraw({ to, amountUsd: amount });
-      else await wallet.sendUsdc(to, amount);
+      else {
+        // The wallet sends this itself, so it needs a few cents of ETH on Base, which the app covers.
+        await api.prepareWithdrawal();
+        await wallet.sendUsdc(to, amount);
+      }
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["balance"] });
@@ -213,7 +217,7 @@ function WithdrawSheet({ open, onClose }: { open: boolean; onClose(): void }) {
   return (
     <Sheet open={open} onClose={onClose} title="Withdraw USDC">
       <label className="block text-sm text-muted">
-        To address on Arc
+        To address on Base
         <input value={to} onChange={(e) => setTo(e.target.value.trim())} placeholder="0x…" autoCapitalize="none" autoCorrect="off" className="num mt-1 w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-ink outline-none focus:border-signal" />
       </label>
       <label className="mt-3 block text-sm text-muted">
@@ -225,9 +229,9 @@ function WithdrawSheet({ open, onClose }: { open: boolean; onClose(): void }) {
         </span>
         <input value={amount} inputMode="decimal" onChange={(e) => setAmount(e.target.value)} placeholder="0.00" className="num mt-1 w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-ink outline-none focus:border-signal" />
       </label>
-      {to && !validTo && <p className="mt-2 text-sm text-down">That isn&apos;t a valid Arc address.</p>}
+      {to && !validTo && <p className="mt-2 text-sm text-down">That isn&apos;t a valid Base address.</p>}
       {amount && !validAmount && <p className="mt-2 text-sm text-down">That&apos;s more than you can withdraw. A few cents stay back to send it.</p>}
-      <p className="mt-2 text-xs text-faint">Only send to an address that accepts USDC on Arc. This can&apos;t be undone.</p>
+      <p className="mt-2 text-xs text-faint">Only send to an address that accepts USDC on Base. This can&apos;t be undone.</p>
       <Button onClick={() => send.mutate()} disabled={!validTo || !validAmount || send.isPending} className="mt-3 w-full">
         {send.isPending ? "Sending…" : "Withdraw"}
       </Button>
@@ -350,7 +354,7 @@ export default function SettingsPage() {
         <Row label="Add USDC" action={<LinkButton href="/deposit" variant="secondary" className="px-3 py-1.5 text-sm">Add</LinkButton>} />
         <Row
           label="Withdraw USDC"
-          value="Send your balance to any address on Arc."
+          value="Send your balance to any address on Base."
           action={
             <Button variant="secondary" className="px-3 py-1.5 text-sm" onClick={() => setWithdraw(true)}>
               Withdraw

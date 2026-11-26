@@ -43,12 +43,26 @@ export interface ChainInfo {
 /** Arc USDC: same balance, two interfaces. Native gas side is 18 decimals, ERC-20 side is 6. */
 export const ARC_USDC = "0x3600000000000000000000000000000000000000";
 export const PERMIT2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
-/** DefinitiveFlashAllowance on Arc: the spender in the one-tap approval. */
-export const FLASH_ALLOWANCE_ARC = "0x5d00000873b6BF41539e6f5365B0Ff7d3c368f78";
+/** DefinitiveFlashAllowance, the spender in the one-tap approval. It's at the same address on Base and Arc. */
+export const FLASH_ALLOWANCE = "0x5d00000873b6BF41539e6f5365B0Ff7d3c368f78";
+export const FLASH_ALLOWANCE_ARC = FLASH_ALLOWANCE;
+/** Base USDC, read from the chain. */
+export const BASE_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+/** Where every account's USDC lives: buys spend from here and sales pay out here. */
+export const HOME_CHAIN = "base" as const;
+export const HOME_USDC = BASE_USDC;
+export const HOME_USDC_DECIMALS = 6;
+/** Uniswap's Universal Router on Base, as the Trading API names it when quoting with router version 2.0. */
+export const UNISWAP_BASE = { universalRouter20: "0x6fF5693b99212Da76ad316178A184AB56D299b43" } as const;
 export const EVM_NATIVE_SENTINEL = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
 /** Where a thesis's position history and a wallet's reputation score live. Public, so they're kept here. */
 export const POSITION_LEDGER_ARC = "0xf64eed5e5706a29381123a6ec70b07947446070a";
 export const REPUTATION_REGISTRY_ARC = "0xae22ba7f5bcb367a179e21cf24d2ad10d917dc4e";
+/** The proof contracts now live on the home chain. The Arc ones above stay for the records already written there. */
+export const PROOF_CHAIN = "base" as const;
+export const THESIS_REGISTRY_BASE = "0x6ee6020dd5739b90fba29f518df5409b5801f0bd";
+export const POSITION_LEDGER_BASE = "0xbce0c97590ff096367d1de13f7b4d492b9700bb5";
+export const REPUTATION_REGISTRY_BASE = "0x835a22de76897cf9c35be601f76e606ccedb4f40";
 /**
  * Flash can't bridge some tokens directly, like Robinhood's stock tokens. These trade through a stablecoin
  * on their own chain that Flash can bridge. USDG is the one NVDA's main Uniswap pool pairs with.
@@ -66,6 +80,12 @@ export const UNISWAP_ARC = {
   v4PoolManager: "0x8366a39CC670B4001A1121B8F6A443A643e40951",
   v4Quoter: "0x8Dc178eFB8111BB0973Dd9d722ebeFF267c98F94",
 } as const;
+
+/** The Universal Router each chain's swaps go through, and the version header that picks it. */
+export const UNISWAP_ROUTERS: Partial<Record<ChainKey, { router: string; version: string }>> = {
+  base: { router: UNISWAP_BASE.universalRouter20, version: "2.0" },
+  arc: { router: UNISWAP_ARC.universalRouter212, version: "2.1.2" },
+};
 
 export const CHAINS: Record<ChainKey, ChainInfo> = {
   arc: {
@@ -124,7 +144,7 @@ export const CHAINS: Record<ChainKey, ChainInfo> = {
     explorerTxPath: "/tx/",
     explorerTokenPath: "/token/",
     nativeSymbol: "ETH",
-    usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA91CD6",
+    usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     usdcDecimals: 6,
     privySponsored: false,
     gasTopupWei: "20000000000000",

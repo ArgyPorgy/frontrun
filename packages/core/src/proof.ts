@@ -1,3 +1,4 @@
+import type { ChainKey } from "./chains";
 import { formatPrice } from "./format";
 import { D, type Numeric } from "./money";
 
@@ -67,8 +68,10 @@ export interface ThesisPositionEvent {
   heldPct: number;
   priceUsd: string | null;
   at: string;
-  /** Set once this change is on Arc. */
+  /** Set once this change is recorded on-chain. */
   txHash: string | null;
+  /** Where it's recorded: Base now, Arc for older records. */
+  chain: ChainKey;
 }
 
 /** The author's position right now. "none" means they held nothing when they posted. */
@@ -78,8 +81,9 @@ export interface ThesisLive {
   exitPriceUsd: string | null;
   exitReturnPct: number | null;
   changedAt: string | null;
-  /** The latest change that's on Arc. */
+  /** The latest change that's recorded on-chain, and where. */
   proofTx: string | null;
+  proofChain: ChainKey | null;
   events: ThesisPositionEvent[];
 }
 

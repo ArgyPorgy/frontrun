@@ -1,4 +1,4 @@
-import { CHAINS, createReplySchema, createThesisSchema, isValidAddress, listThesesSchema, reportSchema, type ThesisProof } from "@frontrun/core";
+import { CHAINS, createReplySchema, createThesisSchema, isValidAddress, listThesesSchema, reportSchema, type ThesisProof, THESIS_REGISTRY_BASE, type ChainKey } from "@frontrun/core";
 import {
   AppError,
   createReply,
@@ -49,8 +49,8 @@ export async function registerThesisRoutes(app: FastifyInstance) {
     const thesis = await db().query.theses.findFirst({ where: eq(schema.theses.id, id) });
     if (!thesis || thesis.deletedAt || thesis.hiddenAt) throw notFound("Thesis");
     return {
-      registry: env().THESIS_REGISTRY_ADDRESS ?? null,
-      chainId: CHAINS.arc.chainId!,
+      registry: thesis.anchorChain === "arc" ? (env().THESIS_REGISTRY_ADDRESS ?? null) : THESIS_REGISTRY_BASE,
+      chainId: CHAINS[thesis.anchorChain as ChainKey].chainId!,
       payload: thesis.anchorPayload,
       hash: thesis.anchorHash,
       txHash: thesis.anchorTx,

@@ -1,6 +1,6 @@
 "use client";
 
-import { ARC_USDC, CHAINS, builderCodeSuffix, toBaseUnits, type ExecStep, type StepResult } from "@frontrun/core";
+import { CHAINS, HOME_CHAIN, HOME_USDC, HOME_USDC_DECIMALS, builderCodeSuffix, toBaseUnits, type ExecStep, type StepResult } from "@frontrun/core";
 import {
   PrivyProvider,
   useExportWallet,
@@ -137,14 +137,14 @@ function Bridge({ signerId, policyIds, solanaPolicyIds, children }: { signerId: 
         }
       },
       async sendUsdc(to, amountUsd) {
-        // Always the 6-decimal ERC-20 interface. Arc's native 18-decimal side is only for gas.
+        // USDC on the home chain, as a plain token transfer.
         const data = encodeFunctionData({
           abi: erc20Abi,
           functionName: "transfer",
-          args: [to as `0x${string}`, toBaseUnits(amountUsd, CHAINS.arc.usdcDecimals)],
+          args: [to as `0x${string}`, toBaseUnits(amountUsd, HOME_USDC_DECIMALS)],
         });
         const { hash } = await sendTransaction(
-          { to: ARC_USDC, data, chainId: CHAINS.arc.chainId! },
+          { to: HOME_USDC, data, chainId: CHAINS[HOME_CHAIN].chainId! },
           { address: evmAddress, uiOptions: { showWalletUIs: true } },
         );
         return hash;
@@ -202,8 +202,8 @@ export function PrivyAuth({
       config={{
         loginMethods: ["google", "email", "wallet"],
         appearance: { theme: "dark", accentColor: "#6deab2", walletChainType: "ethereum-and-solana" },
-        defaultChain: arc,
-        supportedChains: [arc, robinhood, base, arbitrum, mainnet, bsc, hyperEvm],
+        defaultChain: base,
+        supportedChains: [base, arc, robinhood, arbitrum, mainnet, bsc, hyperEvm],
         solana: { rpcs: solanaRpcs },
         externalWallets: { solana: { connectors: solanaConnectors } },
         // Base Builder Code on everything the wallet sends from the browser, so Base credits it to Front Run.

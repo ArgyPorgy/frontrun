@@ -1,3 +1,4 @@
+import type { ChainKey } from "./chains";
 import { LEADERBOARD_MIN_RESOLVED } from "./thesis";
 
 /** What one closed position contributes. Several theses on one position count once. */
@@ -99,6 +100,8 @@ export function reputationScore(positions: ClosedPositionStats[]): Reputation | 
 export interface ReputationView extends Reputation {
   wallet: string | null;
   registry: string;
+  /** Where the latest score was written: Base now, Arc before the move. */
+  attestChain: ChainKey;
   attestTx: string | null;
   attestedAt: string | null;
   computedAt: string;

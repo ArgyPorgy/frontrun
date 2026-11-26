@@ -89,7 +89,7 @@ async function toViews(rows: Array<{ thesis: ThesisRow; user: UserRow }>, viewer
       currentPriceUsd: current,
       anchor:
         thesis.anchorTx && thesis.anchorHash && thesis.anchoredAt
-          ? { hash: thesis.anchorHash, txHash: thesis.anchorTx, anchoredAt: thesis.anchoredAt.toISOString() }
+          ? { hash: thesis.anchorHash, txHash: thesis.anchorTx, anchoredAt: thesis.anchoredAt.toISOString(), chain: thesis.anchorChain as ChainKey }
           : null,
       live: toThesisLive(thesis, events.get(thesis.id) ?? []),
       authorScore: scores.get(user.id) ?? null,

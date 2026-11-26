@@ -595,7 +595,7 @@ describe("buying", () => {
     const { client } = await loginFunded("solbuyer");
     const { trade } = await buy(client, SOL_TOKEN, "20", "solana");
     expect(trade.status).toBe("filled");
-    expect(trade.srcChain).toBe("arc");
+    expect(trade.srcChain).toBe("base");
     expect((await client.portfolio()).open[0]!.token.chain).toBe("solana");
   });
 });

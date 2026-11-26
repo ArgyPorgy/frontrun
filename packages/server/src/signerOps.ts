@@ -1,8 +1,8 @@
-import { ARC_USDC, FLASH_ALLOWANCE_ARC, PERMIT2, type ExecStep } from "@frontrun/core";
+import { FLASH_ALLOWANCE, HOME_CHAIN, HOME_USDC, PERMIT2, type ExecStep } from "@frontrun/core";
 import { and, eq, isNull } from "drizzle-orm";
 import { db, schema } from "./db/client";
 import { conflict } from "./errors";
-import { arcUsdcBalance, encodeApprove, erc20Allowance } from "./onchain";
+import { encodeApprove, erc20Allowance, homeUsdcBalance } from "./onchain";
 import { activeGrant, isPaperMode, signerStatus } from "./trading/service";
 import { loadSigningWallets, performServerStep, serverSigningConfigured } from "./trading/signer";
 import { sponsorshipConfigured } from "./trading/sponsor";
@@ -11,8 +11,8 @@ const MAX_UINT256 = 2n ** 256n - 1n;
 const OPS_CONTEXT = "account-setup";
 
 /**
- * The one approval one-tap trading needs: max USDC to Flash. It's also the wallet's first footprint
- * on Arc. Gas comes out of the same USDC balance, so the wallet must be funded first.
+ * The one approval one-tap trading needs: max USDC to Flash, on the home chain. It's sponsored, so it
+ * costs the user nothing and the wallet needs no ETH.
  */
 export async function approveFlash(userId: string) {
   const grant = await activeGrant(userId);
@@ -24,21 +24,21 @@ export async function approveFlash(userId: string) {
   }
   if (!serverSigningConfigured()) throw conflict("signer_unavailable", "One-tap trading isn't available on this server.");
   const wallets = await loadSigningWallets(userId);
-  const allowance = await erc20Allowance("arc", ARC_USDC, wallets.evmAddress, FLASH_ALLOWANCE_ARC);
+  const allowance = await erc20Allowance(HOME_CHAIN, HOME_USDC, wallets.evmAddress, FLASH_ALLOWANCE);
   if (allowance > 0n) return signerStatus(userId);
 
-  if (!sponsorshipConfigured("arc")) {
-    const balance = await arcUsdcBalance(wallets.evmAddress);
-    if (balance === 0n) throw conflict("needs_deposit", "Add a little USDC first. Gas on Arc is paid in USDC.");
+  if (!sponsorshipConfigured(HOME_CHAIN)) {
+    const balance = await homeUsdcBalance(wallets.evmAddress);
+    if (balance === 0n) throw conflict("needs_deposit", "Add a little USDC first.");
   }
 
   const step: ExecStep = {
     id: "approve",
     kind: "evm_tx",
-    chain: "arc",
+    chain: HOME_CHAIN,
     label: "Approve USDC for trading",
-    to: ARC_USDC,
-    data: encodeApprove(FLASH_ALLOWANCE_ARC, MAX_UINT256),
+    to: HOME_USDC,
+    data: encodeApprove(FLASH_ALLOWANCE, MAX_UINT256),
     waitForReceipt: true,
   };
   const result = await performServerStep(wallets, step, { userId, tradeId: OPS_CONTEXT });
@@ -58,15 +58,15 @@ export async function revokeApprovals(userId: string): Promise<{ txHash: string 
   }
   const wallets = await loadSigningWallets(userId);
   const steps: ExecStep[] = [];
-  for (const spender of [FLASH_ALLOWANCE_ARC, PERMIT2]) {
-    const allowance = await erc20Allowance("arc", ARC_USDC, wallets.evmAddress, spender);
+  for (const spender of [FLASH_ALLOWANCE, PERMIT2]) {
+    const allowance = await erc20Allowance(HOME_CHAIN, HOME_USDC, wallets.evmAddress, spender);
     if (allowance > 0n) {
       steps.push({
         id: `revoke-${spender.slice(0, 8)}`,
         kind: "evm_tx",
-        chain: "arc",
+        chain: HOME_CHAIN,
         label: "Revoke approval",
-        to: ARC_USDC,
+        to: HOME_USDC,
         data: encodeApprove(spender, 0n),
         waitForReceipt: true,
       });

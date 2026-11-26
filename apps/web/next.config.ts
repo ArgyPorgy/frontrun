@@ -12,7 +12,7 @@ const csp = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self'",
-  `connect-src 'self' ${apiUrl} ${apiWs} https://auth.privy.io wss://relay.walletconnect.com wss://relay.walletconnect.org https://explorer-api.walletconnect.com https://*.rpc.privy.systems https://rpc.mainnet.arc.io ${solanaRpc} ${solanaRpc.replace(/^http/, "ws")}`,
+  `connect-src 'self' ${apiUrl} ${apiWs} https://auth.privy.io wss://relay.walletconnect.com wss://relay.walletconnect.org https://explorer-api.walletconnect.com https://*.rpc.privy.systems https://rpc.mainnet.arc.io https://mainnet.base.org ${solanaRpc} ${solanaRpc.replace(/^http/, "ws")}`,
   "frame-src https://auth.privy.io https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com",
   "child-src https://auth.privy.io https://verify.walletconnect.com https://verify.walletconnect.org",
   "worker-src 'self'",

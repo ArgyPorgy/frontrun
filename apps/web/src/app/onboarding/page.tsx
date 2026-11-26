@@ -82,7 +82,7 @@ function DepositStep({ onSkip }: { onSkip(): void }) {
     <div className="px-4 pt-6">
       <p className="text-xs font-medium text-muted">Step 2 of 3</p>
       <h1 className="mt-1 text-2xl font-semibold tracking-tight">Add USDC</h1>
-      <p className="mt-1 text-muted">One balance on Arc covers every trade on every chain. You never need another token.</p>
+      <p className="mt-1 text-muted">One balance on Base covers every trade on every chain. You never need another token.</p>
       <LinkButton href="/deposit" className="mt-5 block w-full">
         Add funds
       </LinkButton>

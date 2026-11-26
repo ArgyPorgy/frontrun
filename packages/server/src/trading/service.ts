@@ -41,7 +41,7 @@ import { logger } from "../logger";
 import { getSnapshot, getTokenDetail, rememberToken } from "../market/service";
 import { notify, notifyFollowers } from "../notifications";
 import { resolveClosedTheses } from "../theses";
-import { arcUsdcBalance, erc20Allowance, tokenBalance } from "../onchain";
+import { erc20Allowance, homeUsdcBalance, tokenBalance } from "../onchain";
 import {
   PROVIDERS,
   connectorReceived,
@@ -58,7 +58,7 @@ import {
 import { CHANNELS, KEYS, publish, redis } from "../redis";
 import { statsChanged } from "../stats";
 import { applyGuardrails, raceQuotes, withinTolerance, type RaceAlternative } from "../routing/engine";
-import { FLASH_ALLOWANCE_ARC, ARC_USDC } from "@frontrun/core";
+import { FLASH_ALLOWANCE, HOME_CHAIN, HOME_USDC, HOME_USDC_DECIMALS } from "@frontrun/core";
 import { loadSigningWallets, performServerStep, serverSigningConfigured, solanaSigningConfigured, type SigningWallets } from "./signer";
 import { gaslessEnabled } from "./sponsor";
 
@@ -104,8 +104,6 @@ export function isPaperMode(): boolean {
   return env().TRADING_MODE === "paper";
 }
 
-const gasReserve = () => fromBaseUnits(ARC_GAS_RESERVE_USDC6, CHAINS.arc.usdcDecimals);
-
 export async function usdcBalance(userId: string): Promise<{ usdc: string; spendable: string; withdrawable: string }> {
   if (isPaperMode()) {
     const user = await db().query.users.findFirst({ where: eq(schema.users.id, userId) });
@@ -113,11 +111,10 @@ export async function usdcBalance(userId: string): Promise<{ usdc: string; spend
     return { usdc: D(balance).toFixed(), spendable: D(balance).toFixed(), withdrawable: D(balance).toFixed() };
   }
   const wallets = await loadSigningWallets(userId);
-  const raw = await arcUsdcBalance(wallets.evmAddress);
-  const usdc = fromBaseUnits(raw, CHAINS.arc.usdcDecimals);
-  const afterReserve = Decimal.max(D(usdc).sub(gasReserve()), 0).toFixed();
-  // Trades are sponsored, so they can use it all. A withdrawal is sent by the wallet and still pays its own gas.
-  return { usdc, spendable: gaslessEnabled() ? usdc : afterReserve, withdrawable: afterReserve };
+  const raw = await homeUsdcBalance(wallets.evmAddress);
+  const usdc = fromBaseUnits(raw, HOME_USDC_DECIMALS);
+  // Gas on Base is ETH, never this USDC, and it's sponsored or topped up, so all of it can be traded or withdrawn.
+  return { usdc, spendable: usdc, withdrawable: usdc };
 }
 
 async function spentToday(userId: string): Promise<string> {
@@ -147,11 +144,12 @@ export async function signerStatus(userId: string): Promise<SignerStatus> {
   const grant = await activeGrant(userId);
   const spent = await spentToday(userId);
   const active = !!grant && grant.expiresAt.getTime() > Date.now();
-  let flashApproved = !!grant?.approvalTx;
-  if (!isPaperMode() && !flashApproved) {
+  // Live, only the chain counts: an approval recorded on Arc says nothing about the home chain.
+  let flashApproved = isPaperMode() && !!grant?.approvalTx;
+  if (!isPaperMode()) {
     const wallets = await loadSigningWallets(userId).catch(() => null);
     if (wallets) {
-      const allowance = await erc20Allowance("arc", ARC_USDC, wallets.evmAddress, FLASH_ALLOWANCE_ARC).catch(() => 0n);
+      const allowance = await erc20Allowance(HOME_CHAIN, HOME_USDC, wallets.evmAddress, FLASH_ALLOWANCE).catch(() => 0n);
       flashApproved = allowance > 0n;
     }
   }
@@ -284,7 +282,7 @@ export async function createQuote(userId: string, input: QuoteRequest): Promise<
       copy = { thesisId: thesis.id, authorEntry: thesis.authorAvgEntry, capUsd: COPY_BUY_CAP_USD };
     }
     // No minimum of our own. USDC just can't go below 6 decimals, and routes refuse what they can't serve.
-    amount = amount.toDecimalPlaces(CHAINS.arc.usdcDecimals, Decimal.ROUND_DOWN);
+    amount = amount.toDecimalPlaces(HOME_USDC_DECIMALS, Decimal.ROUND_DOWN);
     if (amount.lte(0)) throw badRequest("amount_too_small", "That's smaller than USDC can represent.");
     const balance = await usdcBalance(userId);
     if (amount.gt(balance.spendable)) {
@@ -506,7 +504,7 @@ export async function executeTrade(
   // The second order is sent in the background, when no wallet is there to sign it.
   if (mode === "wallet" && isTwoStep(winner.raw)) throw conflict("needs_one_tap", "Turn on one-tap trading to trade this token.");
   const state: ExecState = { request, quote: winner, completed: [], mode, pendingSteps: null, reQuoted, slippage: record.slippage };
-  const srcChain: ChainKey = request.side === "buy" ? "arc" : request.chain;
+  const srcChain: ChainKey = request.side === "buy" ? (request.contra?.chain ?? HOME_CHAIN) : request.chain;
 
   const [trade] = await db()
     .insert(schema.trades)

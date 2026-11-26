@@ -5,7 +5,6 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { LogoMark, Wordmark } from "@/components/brand";
-import { ArcStudioBadge } from "@/components/shell";
 import { TokenIcon } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -177,7 +176,7 @@ function AlphaFeedArt() {
       <div className="rounded-2xl bg-raised p-3.5">
         <div className="flex items-center gap-2.5">
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-cyan text-xs font-bold text-signal-ink">A</span>
-          <span className="text-sm font-semibold">Arc Alpha Group</span>
+          <span className="text-sm font-semibold">Base Alpha Group</span>
           <span className="num ml-auto rounded-full bg-cyan/20 px-2 py-0.5 text-[10px] text-cyan uppercase">telegram</span>
         </div>
         <p className="mt-2 text-sm">early call: new meme on Base, liquidity locked.</p>
@@ -477,7 +476,6 @@ function Footer() {
         </nav>
       </div>
       <p className="mx-auto max-w-6xl px-5 text-xs text-faint">Trading involves risk, including the loss of principal. Nothing here is financial advice. Posts marked live are real posts, shortened with links removed, and don't mean their authors use or endorse this app. All other names and figures are illustrative.</p>
-      <ArcStudioBadge />
     </footer>
   );
 }

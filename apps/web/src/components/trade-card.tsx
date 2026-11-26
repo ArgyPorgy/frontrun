@@ -1,6 +1,6 @@
 "use client";
 
-import { APP_NAME, D, explorerTxUrl, formatPct, formatPrice, formatQty, formatUsd, type TradeView } from "@frontrun/core";
+import { APP_NAME, D, explorerTxUrl, formatPct, formatPrice, formatQty, formatUsd, type TradeView, HOME_CHAIN } from "@frontrun/core";
 import { useState } from "react";
 import { APP_URL } from "@/lib/api";
 import { Button, ChainLogo, Sheet, TokenIcon } from "./ui";
@@ -145,7 +145,7 @@ function FilledCard({ trade }: { trade: TradeView }) {
             <div className="flex justify-between">
               <dt>Destination tx</dt>
               <dd>
-                <a className="underline" href={explorerTxUrl(trade.side === "buy" ? trade.token.chain : "arc", trade.dstTx)} target="_blank" rel="noreferrer">
+                <a className="underline" href={explorerTxUrl(trade.side === "buy" ? trade.token.chain : HOME_CHAIN, trade.dstTx)} target="_blank" rel="noreferrer">
                   View
                 </a>
               </dd>

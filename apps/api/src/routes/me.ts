@@ -19,8 +19,7 @@ import {
   paperWithdraw,
   schema,
   updateProfile,
-  usdcBalance,
-} from "@frontrun/server";
+  usdcBalance, ensureGasForWithdrawal } from "@frontrun/server";
 import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -62,6 +61,12 @@ export async function registerMeRoutes(app: FastifyInstance) {
     const user = await requireUser(req);
     const { version } = z.object({ version: z.string().min(1).max(32) }).parse(req.body);
     return buildMe(await acceptTerms(user, version));
+  });
+
+  // Paper withdrawals never touch a chain, so there's no gas to send.
+  app.post("/v1/me/withdraw/gas", { config: { rateLimit: { max: 10, timeWindow: "1 hour" } } }, async (req) => {
+    const user = await requireUser(req);
+    return { sent: isPaperMode() ? false : await ensureGasForWithdrawal(user.id) };
   });
 
   app.get("/v1/me/balance", async (req) => {

@@ -1,12 +1,12 @@
-import { CHAINS, builderCodeSuffix, toBaseUnits } from "@frontrun/core";
+import { CHAINS, builderCodeSuffix, toBaseUnits, PROOF_CHAIN, THESIS_REGISTRY_BASE } from "@frontrun/core";
 import { and, asc, eq, isNull, lt } from "drizzle-orm";
 import { BaseError, ContractFunctionRevertedError, createWalletClient, getAbiItem, http, keccak256, parseAbi, toBytes, type Abi, type AbiEvent, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { arc } from "viem/chains";
+import { base } from "viem/chains";
 import { db, schema } from "./db/client";
 import { env } from "./env";
 import { logger } from "./logger";
-import { arcUsdcBalance, evmClient } from "./onchain";
+import { evmClient } from "./onchain";
 import { isPaperMode } from "./trading/service";
 import { normalizePrivateKey } from "./trading/signer";
 
@@ -34,7 +34,7 @@ const MAX_ATTEMPTS = 5;
 const LOG_CHUNK_BLOCKS = 2_000n;
 const LOG_CHUNKS = 25;
 /** Below this the relayer could run dry, which only delays anchors, so it warns instead of stopping. */
-const LOW_BALANCE_USDC6 = 250_000n;
+const LOW_BALANCE_WEI = 300_000_000_000_000n;
 
 export interface ThesisAnchorInput {
   id: string;
@@ -81,7 +81,7 @@ export function anchorArgs(t: ThesisAnchorInput) {
 
 export function anchoringEnabled(): boolean {
   const e = env();
-  return !!(e.THESIS_REGISTRY_ADDRESS && (e.ANCHOR_RELAYER_PRIVATE_KEY || e.GAS_TOPUP_PRIVATE_KEY));
+  return !!(THESIS_REGISTRY_BASE && (e.ANCHOR_RELAYER_PRIVATE_KEY || e.GAS_TOPUP_PRIVATE_KEY));
 }
 
 /** Anything written to Arc comes from this one wallet: theses, position changes and reputation scores. */
@@ -100,22 +100,22 @@ function relayerAccount() {
 /** Sends one write from the relayer and waits for it. Simulating first means a bad call costs no gas. */
 export async function relayerWrite(call: { address: Address; abi: Abi; functionName: string; args: readonly unknown[] }): Promise<Hex> {
   const account = relayerAccount();
-  const client = evmClient("arc");
+  const client = evmClient(PROOF_CHAIN);
   const { request } = await client.simulateContract({ account, address: call.address, abi: call.abi, functionName: call.functionName, args: call.args });
-  const wallet = createWalletClient({ account, chain: arc, transport: http(env().ARC_RPC_URL) });
+  const wallet = createWalletClient({ account, chain: base, transport: http(env().BASE_RPC_URL) });
   const hash = await wallet.writeContract({ ...request, dataSuffix: builderCodeSuffix() });
   const receipt = await client.waitForTransactionReceipt({ hash, timeout: 60_000 });
-  if (receipt.status !== "success") throw new Error(`Arc transaction ${hash} reverted.`);
+  if (receipt.status !== "success") throw new Error(`Transaction ${hash} reverted.`);
   return hash;
 }
 
 export async function sendAnchor(args: ReturnType<typeof anchorArgs>): Promise<Hex> {
-  return relayerWrite({ address: env().THESIS_REGISTRY_ADDRESS as Address, abi: THESIS_REGISTRY_ABI, functionName: "anchor", args });
+  return relayerWrite({ address: THESIS_REGISTRY_BASE as Address, abi: THESIS_REGISTRY_ABI, functionName: "anchor", args });
 }
 
 /** Finds the transaction behind a write we know landed, looking back through recent blocks. */
 export async function findLogTx(address: Address, event: AbiEvent, args: Record<string, unknown>): Promise<Hex> {
-  const client = evmClient("arc");
+  const client = evmClient(PROOF_CHAIN);
   let toBlock = await client.getBlockNumber();
   for (let i = 0; i < LOG_CHUNKS && toBlock > 0n; i++) {
     const fromBlock = toBlock >= LOG_CHUNK_BLOCKS ? toBlock - LOG_CHUNK_BLOCKS + 1n : 0n;
@@ -133,8 +133,8 @@ export async function findLogTx(address: Address, event: AbiEvent, args: Record<
  * This covers a worker that died, or timed out, after sending but before saving the result.
  */
 export async function findAnchorTx(hash: Hex): Promise<Hex | null> {
-  const registry = env().THESIS_REGISTRY_ADDRESS as Address;
-  const anchoredAt = await evmClient("arc").readContract({ address: registry, abi: THESIS_REGISTRY_ABI, functionName: "anchoredAt", args: [hash] });
+  const registry = THESIS_REGISTRY_BASE as Address;
+  const anchoredAt = await evmClient(PROOF_CHAIN).readContract({ address: registry, abi: THESIS_REGISTRY_ABI, functionName: "anchoredAt", args: [hash] });
   if (anchoredAt === 0n) return null;
   return findLogTx(registry, ANCHORED_EVENT, { thesisHash: hash });
 }
@@ -170,9 +170,9 @@ export async function anchorPendingTheses(limit = 10): Promise<number> {
     .limit(limit);
   if (!rows.length) return 0;
 
-  const balance = await arcUsdcBalance(relayerAccount().address).catch(() => null);
-  if (balance !== null && balance < LOW_BALANCE_USDC6) {
-    logger.error({ balanceUsdc6: balance.toString() }, "ALERT: thesis anchoring wallet is running low on USDC");
+  const balance = await evmClient(PROOF_CHAIN).getBalance({ address: relayerAccount().address }).catch(() => null);
+  if (balance !== null && balance < LOW_BALANCE_WEI) {
+    logger.error({ balanceWei: balance.toString() }, "ALERT: the proof wallet is running low on ETH on Base");
   }
 
   for (const { thesis, wallet } of rows) {
@@ -192,7 +192,7 @@ export async function anchorPendingTheses(limit = 10): Promise<number> {
       const txHash = (await findAnchorTx(hash)) ?? (await sendAnchor(anchorArgs(input)));
       await db()
         .update(schema.theses)
-        .set({ anchorTx: txHash, anchorHash: hash, anchorPayload: payload, anchoredAt: new Date() })
+        .set({ anchorTx: txHash, anchorHash: hash, anchorPayload: payload, anchoredAt: new Date(), anchorChain: PROOF_CHAIN })
         .where(eq(schema.theses.id, thesis.id));
       logger.info({ thesisId: thesis.id, txHash }, "thesis anchored");
     } catch (err) {

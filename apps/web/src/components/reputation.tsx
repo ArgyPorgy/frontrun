@@ -2,7 +2,7 @@
 
 import { API_URL } from "@/lib/api";
 import { useToast } from "@/lib/toast";
-import { CHAINS, REPUTATION_WEIGHTS, SCORE_OF_SELECTOR, explorerTxUrl, formatPct, shortAddress, timeAgo, type ReputationComponents, type ReputationView } from "@frontrun/core";
+import { CHAINS, REPUTATION_WEIGHTS, SCORE_OF_SELECTOR, explorerTxUrl, formatPct, shortAddress, timeAgo, type ChainKey, type ReputationComponents, type ReputationView } from "@frontrun/core";
 import { useQuery } from "@tanstack/react-query";
 
 const PARTS: Array<{ key: keyof ReputationComponents; label: string; detail: (r: ReputationView) => string }> = [
@@ -33,16 +33,16 @@ export function ScoreGauge({ score, size = 76 }: { score: number; size?: number 
   );
 }
 
-/** Reads the score straight from Arc in this browser, so it isn't our word for it. */
-async function readScoreFromArc(registry: string, wallet: string): Promise<{ score: number; attestedAt: number }> {
+/** Reads the score straight from the chain in this browser, so it isn't our word for it. */
+async function readScoreOnChain(chain: ChainKey, registry: string, wallet: string): Promise<{ score: number; attestedAt: number }> {
   const data = `${SCORE_OF_SELECTOR}${wallet.slice(2).toLowerCase().padStart(64, "0")}`;
-  const res = await fetch(CHAINS.arc.defaultRpc, {
+  const res = await fetch(CHAINS[chain].defaultRpc, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to: registry, data }, "latest"] }),
   });
   const { result } = (await res.json()) as { result?: string };
-  if (!result || result.length < 130) throw new Error("No answer from Arc");
+  if (!result || result.length < 130) throw new Error("No answer from the chain");
   return { score: Number(BigInt(`0x${result.slice(2, 66)}`)), attestedAt: Number(BigInt(`0x${result.slice(66, 130)}`)) };
 }
 
@@ -69,13 +69,13 @@ function Copyable({ label, text }: { label: string; text: string }) {
 
 export function ReputationCard({ reputation: r }: { reputation: ReputationView }) {
   const onChain = useQuery({
-    queryKey: ["arc-score", r.wallet],
-    queryFn: () => readScoreFromArc(r.registry, r.wallet!),
+    queryKey: ["chain-score", r.attestChain, r.wallet],
+    queryFn: () => readScoreOnChain(r.attestChain, r.registry, r.wallet!),
     enabled: !!r.wallet && !!r.attestTx,
     staleTime: 30_000,
     retry: 1,
   });
-  const cast = r.wallet ? `cast call ${r.registry} "scoreOf(address)(uint16,uint64)" ${r.wallet} --rpc-url ${CHAINS.arc.defaultRpc}` : null;
+  const cast = r.wallet ? `cast call ${r.registry} "scoreOf(address)(uint16,uint64)" ${r.wallet} --rpc-url ${CHAINS[r.attestChain].defaultRpc}` : null;
   const solidity = r.wallet ? `(uint16 score, uint64 attestedAt) = IReputationRegistry(${r.registry}).scoreOf(trader);` : null;
 
   return (
@@ -91,11 +91,11 @@ export function ReputationCard({ reputation: r }: { reputation: ReputationView }
             From {r.closed} closed {r.closed === 1 ? "position" : "positions"} with a verified thesis. {r.provisional ? "A short record is pulled toward the middle." : ""}
           </p>
           {r.attestTx ? (
-            <a href={explorerTxUrl("arc", r.attestTx)} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-signal underline underline-offset-2">
-              Attested on Arc{r.attestedAt ? ` ${timeAgo(r.attestedAt)}` : ""}
+            <a href={explorerTxUrl(r.attestChain, r.attestTx)} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-signal underline underline-offset-2">
+              Attested on {CHAINS[r.attestChain].name}{r.attestedAt ? ` ${timeAgo(r.attestedAt)}` : ""}
             </a>
           ) : (
-            <p className="mt-1 text-xs text-faint">Writing to Arc</p>
+            <p className="mt-1 text-xs text-faint">Writing to Base</p>
           )}
         </div>
       </div>
@@ -127,12 +127,12 @@ export function ReputationCard({ reputation: r }: { reputation: ReputationView }
             <p className="text-xs text-muted">
               {onChain.data ? (
                 <>
-                  Just read from Arc in your browser: <span className="num font-semibold text-signal">{onChain.data.score}</span> for wallet {shortAddress(r.wallet)}.
+                  Just read from {CHAINS[r.attestChain].name} in your browser: <span className="num font-semibold text-signal">{onChain.data.score}</span> for wallet {shortAddress(r.wallet)}.
                 </>
               ) : onChain.isError ? (
-                "Couldn't reach Arc from here just now. The commands below read the same record."
+                "Couldn't reach the chain from here just now. The commands below read the same record."
               ) : (
-                "Reading from Arc in your browser…"
+                "Reading from the chain in your browser…"
               )}
             </p>
             {cast && <Copyable label="From a terminal" text={cast} />}

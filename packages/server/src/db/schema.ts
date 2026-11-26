@@ -205,6 +205,8 @@ export const theses = pgTable("theses", {
   anchorTx: text("anchor_tx"),
   anchoredAt: ts("anchored_at"),
   anchorAttempts: integer("anchor_attempts").notNull().default(0),
+  /** Where the anchor was written. Older theses were anchored on Arc, newer ones on Base. */
+  anchorChain: text("anchor_chain").notNull().default("arc"),
   /** What the author held when posting. What they've done since is measured against this. */
   qtyAtPost: qty("qty_at_post"),
   heldQty: qty("held_qty"),
@@ -238,6 +240,7 @@ export const thesisPositionEvents = pgTable("thesis_position_events", {
   anchorTx: text("anchor_tx"),
   anchoredAt: ts("anchored_at"),
   anchorAttempts: integer("anchor_attempts").notNull().default(0),
+  anchorChain: text("anchor_chain").notNull().default("arc"),
   createdAt: ts("created_at").notNull().defaultNow(),
 }, (t) => [
   uniqueIndex("thesis_position_events_trade").on(t.thesisId, t.tradeId),
@@ -262,6 +265,7 @@ export const reputationScores = pgTable("reputation_scores", {
   attestedClosed: integer("attested_closed"),
   attestTx: text("attest_tx"),
   attestedAt: ts("attested_at"),
+  attestChain: text("attest_chain").notNull().default("arc"),
   attestAttempts: integer("attest_attempts").notNull().default(0),
 }, (t) => [index("reputation_scores_rank").on(t.score)]);
 

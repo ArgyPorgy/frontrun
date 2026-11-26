@@ -33,10 +33,10 @@ vi.mock("../../../packages/server/src/onchain", async (original) => ({
   ...(await original<object>()),
   tokenBalance: async () => chain.connectorHeld,
   erc20Allowance: async () => 0n,
-  arcUsdcBalance: async () => 100_000_000n,
+  homeUsdcBalance: async () => 100_000_000n,
 }));
 
-import { ARC_USDC, FLASH_ALLOWANCE_ARC, TWO_STEP_CONNECTORS, toBaseUnits } from "@frontrun/core";
+import { FLASH_ALLOWANCE_ARC, HOME_USDC as ARC_USDC, TWO_STEP_CONNECTORS, toBaseUnits } from "@frontrun/core";
 import { KEYS, applyGuardrails, closeDb, closeRedis, db, executeTrade, flashProvider, isTwoStep, pollActiveTrades, redis, runMigrations, schema, type TwoStepRoute } from "@frontrun/server";
 import { and, eq, isNull, sql } from "drizzle-orm";
 
@@ -64,7 +64,7 @@ let secondOrderQuoteRate = 0.98;
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 function flashQuote(body: FlashOrderBody) {
-  if (body.contraChain === "arc" && body.targetAsset === NVDA) return json({ error: { code: "NOT_FOUND", message: "flash quote failed: no bridge routes available for this cross-chain transfer" } }, 404);
+  if (body.contraChain === "base" && body.targetAsset === NVDA) return json({ error: { code: "NOT_FOUND", message: "flash quote failed: no bridge routes available for this cross-chain transfer" } }, 404);
   const spent = body.side === "sell" ? body.targetAsset : body.contraAsset;
   const decimals = spent === NVDA ? 18 : 6;
   const stable = body.targetAsset === USDG || body.contraAsset === USDG;
@@ -82,7 +82,7 @@ function flashQuote(body: FlashOrderBody) {
     evm: {
       approveTx: spent === ARC_USDC ? null : { to: spent, data: APPROVE_FLASH },
       orderTypedData: JSON.stringify({
-        domain: { name: "DefinitiveFlashAllowance", chainId: spent === ARC_USDC ? 5042 : 4663, verifyingContract: FLASH_ALLOWANCE_ARC },
+        domain: { name: "DefinitiveFlashAllowance", chainId: spent === ARC_USDC ? 8453 : 4663, verifyingContract: FLASH_ALLOWANCE_ARC },
         primaryType: "FlashOrder",
         message: { swapper: body.funderAddress, fromToken: spent, fromAmount: toBaseUnits(body.qty, decimals).toString() },
       }),
@@ -195,7 +195,7 @@ describe("selling a token Flash can't bridge directly", () => {
     expect((await tradeRow(trade.id)).status).toBe("source_confirmed");
     await tick();
     expect(placed).toHaveLength(2);
-    expect(placed[1]).toMatchObject({ targetAsset: USDG, contraAsset: ARC_USDC, contraChain: "arc", side: "sell", qty: "3.6", flashIntegratorFeeBps: "50" });
+    expect(placed[1]).toMatchObject({ targetAsset: USDG, contraAsset: ARC_USDC, contraChain: "base", side: "sell", qty: "3.6", flashIntegratorFeeBps: "50" });
 
     fills["order-2"] = filled("3.6", "3.55", "0xbridged", "0.018");
     await tick();
@@ -333,7 +333,7 @@ describe("selling a token Flash can't bridge directly", () => {
 describe("buying a token Flash can't bridge directly", () => {
   it("buys the stablecoin from Arc, then the token, and records one trade", async () => {
     const trade = await placeTrade("buy");
-    expect(placed[0]).toMatchObject({ targetAsset: USDG, contraAsset: ARC_USDC, contraChain: "arc", side: "buy", qty: "4", flashIntegratorFeeBps: "50" });
+    expect(placed[0]).toMatchObject({ targetAsset: USDG, contraAsset: ARC_USDC, contraChain: "base", side: "buy", qty: "4", flashIntegratorFeeBps: "50" });
 
     fills["order-1"] = filled("3.9", "4", "0xbridged", "0.02");
     await tick();

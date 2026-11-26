@@ -1,4 +1,4 @@
-import { APP_NAME, CAP_DEFAULTS, COPY_BUY_CAP_USD, FLASH_ALLOWANCE_ARC, ARC_USDC, type PublicConfig } from "@frontrun/core";
+import { APP_NAME, CAP_DEFAULTS, CHAINS, COPY_BUY_CAP_USD, FLASH_ALLOWANCE, HOME_CHAIN, HOME_USDC, type PublicConfig } from "@frontrun/core";
 import { gaslessEnabled, db, env, providerAvailability, redis, schema, serverSigningConfigured } from "@frontrun/server";
 import { sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
@@ -28,8 +28,8 @@ export async function registerSystemRoutes(app: FastifyInstance) {
       providers: providerAvailability(),
       caps: { perTradeUsd: CAP_DEFAULTS.perTradeUsd, dailyUsd: CAP_DEFAULTS.dailyUsd, grantDays: CAP_DEFAULTS.grantDays },
       copyBuyCapUsd: COPY_BUY_CAP_USD,
-      flashSpender: FLASH_ALLOWANCE_ARC,
-      bridgeUrlTemplate: `https://jumper.exchange/?toChain=5042&toToken=${ARC_USDC}&toAddress={address}`,
+      flashSpender: FLASH_ALLOWANCE,
+      bridgeUrlTemplate: `https://jumper.exchange/?toChain=${CHAINS[HOME_CHAIN].chainId}&toToken=${HOME_USDC}&toAddress={address}`,
     };
   });
 

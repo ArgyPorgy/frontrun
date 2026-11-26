@@ -1,4 +1,4 @@
-import { ARC_USDC, FLASH_ALLOWANCE_ARC, PERMIT2, UNISWAP_ARC } from "@frontrun/core";
+import { ARC_USDC, FLASH_ALLOWANCE, HOME_USDC, PERMIT2, UNISWAP_ARC, UNISWAP_BASE } from "@frontrun/core";
 import { SMART_ACCOUNT_IMPLEMENTATION } from "./sponsor";
 
 /** LI.FI's contract on Arc, read from a live quote. Add others here if the route's contract changes. */
@@ -7,8 +7,8 @@ const LIFI_ARC = "0xA4072583658Fae592A3506A42431cb6316a8d40b";
 /** Privy's docs don't say how addresses are compared, so both spellings are listed. */
 const anyCase = (addresses: string[]) => [...new Set(addresses.flatMap((a) => [a, a.toLowerCase()]))];
 
-const ROUTERS = anyCase([UNISWAP_ARC.universalRouter212, UNISWAP_ARC.v3SwapRouter02, LIFI_ARC]);
-const APPROVABLE_SPENDERS = anyCase([FLASH_ALLOWANCE_ARC, PERMIT2, UNISWAP_ARC.v3SwapRouter02, LIFI_ARC]);
+const ROUTERS = anyCase([UNISWAP_BASE.universalRouter20, UNISWAP_ARC.universalRouter212, UNISWAP_ARC.v3SwapRouter02, LIFI_ARC]);
+const APPROVABLE_SPENDERS = anyCase([FLASH_ALLOWANCE, PERMIT2, UNISWAP_ARC.v3SwapRouter02, LIFI_ARC]);
 
 const APPROVE_ABI = [
   {
@@ -51,7 +51,7 @@ export const evmRules = () => [
     name: "Sign Flash orders",
     method: "eth_signTypedData_v4" as const,
     action: "ALLOW" as const,
-    conditions: [{ field_source: "ethereum_typed_data_domain" as const, field: "verifyingContract" as const, operator: "in" as const, value: anyCase([FLASH_ALLOWANCE_ARC]) }],
+    conditions: [{ field_source: "ethereum_typed_data_domain" as const, field: "verifyingContract" as const, operator: "in" as const, value: anyCase([FLASH_ALLOWANCE]) }],
   },
   {
     name: "Sign Permit2 approvals",
@@ -147,7 +147,7 @@ export const agentEvmRules = (owner: string) => [
     method,
     action: "ALLOW" as const,
     conditions: [
-      { field_source: "ethereum_transaction" as const, field: "to" as const, operator: "in" as const, value: anyCase([ARC_USDC]) },
+      { field_source: "ethereum_transaction" as const, field: "to" as const, operator: "in" as const, value: anyCase([HOME_USDC, ARC_USDC]) },
       { field_source: "ethereum_calldata" as const, field: "transfer.to", abi: TRANSFER_ABI, operator: "in" as const, value: anyCase([owner]) },
     ],
   })),

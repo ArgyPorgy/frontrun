@@ -18,8 +18,7 @@ import {
   type AgentView,
   type CreateAgentInput,
   type ExecStep,
-  type UpdateAgentInput,
-} from "@frontrun/core";
+  type UpdateAgentInput, HOME_CHAIN, HOME_USDC, HOME_USDC_DECIMALS } from "@frontrun/core";
 import { and, asc, desc, eq, gt, sql } from "drizzle-orm";
 import { encodeFunctionData, erc20Abi, type Hex } from "viem";
 import { db, schema } from "../db/client";
@@ -283,10 +282,10 @@ export async function withdrawFromAgent(owner: { id: string }, id: string, amoun
     const step: ExecStep = {
       id: "agent-withdraw",
       kind: "evm_tx",
-      chain: "arc",
+      chain: HOME_CHAIN,
       label: "Send USDC to the agent's owner",
-      to: ARC_USDC,
-      data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [ownerWallet.address as Hex, toBaseUnits(amount.toFixed(), CHAINS.arc.usdcDecimals)] }),
+      to: HOME_USDC,
+      data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [ownerWallet.address as Hex, toBaseUnits(amount.toFixed(), HOME_USDC_DECIMALS)] }),
       waitForReceipt: true,
     };
     const result = await performServerStep(await loadSigningWallets(user.id), step, { userId: user.id, tradeId: "agent-withdraw" });

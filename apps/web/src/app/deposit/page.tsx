@@ -17,7 +17,7 @@ function AddressQr({ address }: { address: string }) {
   }, [address]);
   if (!svg) return <div className="h-44 w-44 rounded-2xl bg-raised" />;
   // The SVG is generated locally from the wallet address, so there's no outside markup to escape.
-  return <div className="h-44 w-44 overflow-hidden rounded-2xl" role="img" aria-label="QR code for your Arc address" dangerouslySetInnerHTML={{ __html: svg }} />;
+  return <div className="h-44 w-44 overflow-hidden rounded-2xl" role="img" aria-label="QR code for your Base address" dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 
 function Option({ title, body, children }: { title: string; body: string; children: React.ReactNode }) {
@@ -80,12 +80,12 @@ export default function DepositPage() {
             <AddressQr address={address} />
             <p className="num mt-3 text-center text-xs break-all text-muted">{address}</p>
             <CopyButton text={address} label="Copy address" className="mt-2 px-3 py-1.5 text-sm" />
-            <p className="mt-3 max-w-xs text-center text-sm text-warn">Send only USDC, and only on the Arc network. Funds sent on other networks may not arrive here.</p>
+            <p className="mt-3 max-w-xs text-center text-sm text-warn">Send only USDC, and only on the Base network. Funds sent on other networks may not arrive here.</p>
             <p className="mt-1 text-center text-xs text-muted">We&apos;ll let you know as soon as it lands.</p>
           </section>
 
           <section className="mt-5 space-y-2 px-4">
-            <Option title="From another chain" body="Bridge USDC or any token to your Arc address.">
+            <Option title="From another chain" body="Bridge USDC or any token to your Base address.">
               <a
                 href={config.bridgeUrlTemplate.replace("{address}", address)}
                 target="_blank"
@@ -95,12 +95,12 @@ export default function DepositPage() {
                 Bridge
               </a>
             </Option>
-            <Option title="Buy with card" body="Buy USDC on Arc through Circle's portal. Paste your address there.">
+            <Option title="Buy with card" body="Buy USDC on Base with a card. Paste your address there.">
               <a href="https://portal.arc.io/deposit/fiat" target="_blank" rel="noreferrer" className="shrink-0 rounded-xl bg-raised px-3 py-2 text-sm font-semibold">
                 Buy
               </a>
             </Option>
-            <Option title="From an exchange" body="Withdraw USDC to your address and pick Arc, if your exchange supports it.">
+            <Option title="From an exchange" body="Withdraw USDC to your address and pick the Base network.">
               <CopyButton text={address} label="Copy" className="shrink-0 px-3 py-2 text-sm" />
             </Option>
           </section>

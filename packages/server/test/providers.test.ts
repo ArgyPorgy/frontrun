@@ -1,4 +1,4 @@
-import { ARC_USDC, FLASH_ALLOWANCE_ARC, TWO_STEP_CONNECTORS, UNISWAP_ARC, type BasketToken } from "@frontrun/core";
+import { ARC_USDC, FLASH_ALLOWANCE_ARC, HOME_USDC, TWO_STEP_CONNECTORS, UNISWAP_ARC, type BasketToken } from "@frontrun/core";
 import { mixBasket } from "../src/market/basket";
 import { encodeFunctionData, erc20Abi, encodeAbiParameters, keccak256, toHex } from "viem";
 import { describe, expect, it, vi } from "vitest";
@@ -208,9 +208,9 @@ const baseReq: RouteRequest = {
 };
 
 describe("Flash request building", () => {
-  it("spends Arc USDC on a cross-chain buy and pins the recipient to the user", () => {
-    const p = buildFlashParams(baseReq, 0);
-    expect(p).toMatchObject({ targetChain: "base", contraChain: "arc", contraAsset: ARC_USDC, side: "buy", qty: "25", funderAddress: WALLET, recipientAddress: WALLET });
+  it("spends home USDC on a cross-chain buy and pins the recipient to the user", () => {
+    const p = buildFlashParams({ ...baseReq, chain: "arbitrum" }, 0);
+    expect(p).toMatchObject({ targetChain: "arbitrum", contraChain: "base", contraAsset: HOME_USDC, side: "buy", qty: "25", funderAddress: WALLET, recipientAddress: WALLET });
     expect(p.maxSlippage).toBe("0.2");
     expect(p.maxPriceImpact).toBe("0.5");
   });
@@ -221,7 +221,7 @@ describe("Flash request building", () => {
     expect(p.recipientAddress).toBe(baseReq.solanaAddress);
   });
 
-  it("funds Solana sells from the Solana wallet and returns USDC to Arc", () => {
+  it("funds Solana sells from the Solana wallet and returns USDC home", () => {
     const p = buildFlashParams({ ...baseReq, chain: "solana", side: "sell", usdcIn: undefined, qtyIn: "100" }, 0);
     expect(p.funderAddress).toBe(baseReq.solanaAddress);
     expect(p.recipientAddress).toBe(WALLET);
@@ -229,7 +229,7 @@ describe("Flash request building", () => {
   });
 
   it("uses 1% slippage same-chain and no recipient", () => {
-    const p = buildFlashParams({ ...baseReq, chain: "arc" }, 0);
+    const p = buildFlashParams({ ...baseReq, chain: "base" }, 0);
     expect(p.maxSlippage).toBe("0.05");
     expect(p.maxPriceImpact).toBe("0.5");
     expect(p.recipientAddress).toBeUndefined();
@@ -605,12 +605,12 @@ describe("routing", () => {
     expect(first).toMatchObject({ targetChain: "robinhood", contraChain: "robinhood", targetAsset: TOKEN, contraAsset: usdg.address, side: "sell", qty: "0.02", maxSlippage: "0.05" });
     expect(first.recipientAddress).toBeUndefined();
     const second = buildFlashParams(secondLegRequest(sell, usdg, "3.6"), 50);
-    expect(second).toMatchObject({ contraChain: "arc", targetAsset: usdg.address, contraAsset: ARC_USDC, side: "sell", qty: "3.6", recipientAddress: WALLET, flashIntegratorFeeBps: "50" });
+    expect(second).toMatchObject({ contraChain: "base", targetAsset: usdg.address, contraAsset: HOME_USDC, side: "sell", qty: "3.6", recipientAddress: WALLET, flashIntegratorFeeBps: "50" });
   });
 
   it("builds a buy as Arc to stablecoin, then stablecoin to token", () => {
     const buy = { ...stock, side: "buy", usdcIn: "4" } as const;
-    expect(buildFlashParams(firstLegRequest(buy, usdg), 50)).toMatchObject({ contraChain: "arc", targetAsset: usdg.address, contraAsset: ARC_USDC, side: "buy", qty: "4", recipientAddress: WALLET });
+    expect(buildFlashParams(firstLegRequest(buy, usdg), 50)).toMatchObject({ contraChain: "base", targetAsset: usdg.address, contraAsset: HOME_USDC, side: "buy", qty: "4", recipientAddress: WALLET });
     const second = secondLegRequest(buy, usdg, "3.9");
     expect(buildFlashParams(second, 0)).toMatchObject({ contraChain: "robinhood", targetAsset: TOKEN, contraAsset: usdg.address, side: "buy", qty: "3.9" });
     expect(spentChain(second)).toBe("robinhood");

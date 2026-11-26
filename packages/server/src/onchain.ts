@@ -6,8 +6,7 @@ import {
   PERMIT2,
   arcNativeToUsdc6,
   fromBaseUnits,
-  type ChainKey,
-} from "@frontrun/core";
+  type ChainKey, HOME_CHAIN, HOME_USDC } from "@frontrun/core";
 import {
   createPublicClient,
   decodeEventLog,
@@ -89,6 +88,23 @@ export async function arcUsdcBalance(address: string): Promise<bigint> {
     functionName: "balanceOf",
     args: [address as Hex],
   });
+}
+
+/** USDC in an account's home wallet, at 6 decimals. */
+export async function homeUsdcBalance(address: string): Promise<bigint> {
+  return evmClient(HOME_CHAIN).readContract({ address: HOME_USDC as Hex, abi: erc20Abi, functionName: "balanceOf", args: [address as Hex] });
+}
+
+export async function homeUsdcBalances(addresses: string[]): Promise<Map<string, bigint>> {
+  const results = await evmClient(HOME_CHAIN).multicall({
+    contracts: addresses.map((address) => ({ address: HOME_USDC as Hex, abi: erc20Abi, functionName: "balanceOf" as const, args: [address as Hex] as const })),
+    allowFailure: true,
+  });
+  const out = new Map<string, bigint>();
+  results.forEach((r, i) => {
+    if (r.status === "success") out.set(addresses[i]!, r.result as bigint);
+  });
+  return out;
 }
 
 export async function arcUsdcBalances(addresses: string[]): Promise<Map<string, bigint>> {
@@ -250,11 +266,18 @@ export const ARC_SYSTEM_EMITTER = "0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE";
  * what gets read for a USDC leg, and the ERC-20 log is ignored, then the value is scaled to 6 decimals.
  * Refunds are netted off, so a router returning unused value doesn't read as money spent.
  */
-export function parseSwapReceipt(receipt: Pick<TransactionReceipt, "logs" | "gasUsed" | "effectiveGasPrice"> & { from?: string }, wallet: string, tokenIn: string, tokenOut: string): ReceiptFill {
+export function parseSwapReceipt(
+  receipt: Pick<TransactionReceipt, "logs" | "gasUsed" | "effectiveGasPrice"> & { from?: string },
+  wallet: string,
+  tokenIn: string,
+  tokenOut: string,
+  chain: ChainKey = "arc",
+): ReceiptFill {
   const me = getAddress(wallet);
-  const usdc = getAddress(ARC_USDC);
+  // Only Arc has a native USDC with its own emitter. Elsewhere USDC is a plain token that logs once.
+  const usdc = chain === "arc" ? getAddress(ARC_USDC) : null;
   const system = getAddress(ARC_SYSTEM_EMITTER);
-  const emitterFor = (token: string) => (getAddress(token) === usdc ? system : getAddress(token));
+  const emitterFor = (token: string) => (usdc && getAddress(token) === usdc ? system : getAddress(token));
   const inEmitter = emitterFor(tokenIn);
   const outEmitter = emitterFor(tokenOut);
   const scale = (emitter: string, value: bigint) => (emitter === system ? arcNativeToUsdc6(value) : value);

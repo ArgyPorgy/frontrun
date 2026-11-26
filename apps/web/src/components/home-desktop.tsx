@@ -1,6 +1,6 @@
 "use client";
 
-import { D, cleanAmountInput, formatCompactUsd, formatPrice, formatQty, formatUsd, parseAmountInput, type ChainKey, type PositionView, type TokenListItem } from "@frontrun/core";
+import { D, cleanAmountInput, formatCompactUsd, formatPrice, formatQty, formatUsd, parseAmountInput, type ChainKey, type PositionView, type TokenListItem, HOME_CHAIN } from "@frontrun/core";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -324,7 +324,7 @@ function PositionsPanel() {
 /** The wide layout: thesis feed on the left, tokens in the middle, positions on the right. */
 export function HomeDesktop() {
   const [tab, setTab] = useState<"trending" | "new">("trending");
-  const [chain, setChain] = useState<ChainKey | "all">("all");
+  const [chain, setChain] = useState<ChainKey | "all">(HOME_CHAIN);
   const market = useQuery({
     queryKey: ["market", tab, chain],
     queryFn: () => api.marketList({ tab, chain: chain === "all" ? undefined : chain }),

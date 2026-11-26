@@ -1,3 +1,4 @@
+import { HOME_CHAIN } from "@frontrun/core";
 import type { ProviderId } from "@frontrun/core";
 import { flashProvider } from "./flash";
 import { lifiProvider } from "./lifi";
@@ -13,9 +14,9 @@ export const PROVIDERS: Record<ProviderId, RouteProvider> = {
   paper: paperProvider,
 };
 
-/** Arc: Uniswap against Flash. Other chains: Flash first, LI.FI as the fallback. */
+/** The home chain: Uniswap against Flash, where Uniswap's swap is the user's own transaction. Elsewhere: Flash, LI.FI as the fallback. */
 export function providersFor(req: RouteRequest): RouteProvider[] {
-  const order: ProviderId[] = req.chain === "arc" ? ["uniswap", "uniswap_direct", "flash"] : ["flash", "lifi"];
+  const order: ProviderId[] = req.chain === HOME_CHAIN && !req.contra ? ["uniswap", "flash"] : ["flash", "lifi"];
   return order.map((id) => PROVIDERS[id]).filter((p) => p.enabled() && p.supports(req));
 }
 

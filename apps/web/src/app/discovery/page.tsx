@@ -1,6 +1,6 @@
 "use client";
 
-import { formatPct, type ChainKey, type TokenListItem } from "@frontrun/core";
+import { HOME_CHAIN, formatPct, type ChainKey, type TokenListItem } from "@frontrun/core";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { TelegramLogo, XLogo } from "@/components/brand";
@@ -43,7 +43,7 @@ function Landing({ items }: { items: TokenListItem[] }) {
           Any token. One USDC balance. Every thesis from someone who actually holds.
         </h1>
         <p className="mt-2 max-w-md text-muted">
-          Buy on 8 chains from your balance on Arc in one tap. Every thesis shows the author&apos;s real position and whether they were right.
+          Buy on 8 chains from your balance on Base in one tap. Every thesis shows the author&apos;s real position and whether they were right.
         </p>
         <Button onClick={login} className="mt-4 w-full md:w-auto md:px-8">
           {mode === "dev" ? "Sign in (dev mode)" : "Sign in with Google"}
@@ -104,7 +104,7 @@ export default function DiscoveryPage() {
 function HomeMobile() {
   const { status } = useAuth();
   const [tab, setTab] = useState<Tab>("trending");
-  const [chain, setChain] = useState<ChainKey | "all">("all");
+  const [chain, setChain] = useState<ChainKey | "all">(HOME_CHAIN);
 
   const market = useQuery({
     queryKey: ["market", tab === "new" ? "new" : "trending", chain],

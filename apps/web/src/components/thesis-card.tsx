@@ -13,8 +13,7 @@ import {
   positionTier,
   timeAgo,
   type ChainKey,
-  type ThesisView,
-} from "@frontrun/core";
+  type ThesisView, CHAINS, HOME_CHAIN } from "@frontrun/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -64,7 +63,7 @@ export function LivePositionBadge({ thesis }: { thesis: ThesisView }) {
   );
 }
 
-/** Every change to the position since posting, with its record on Arc. */
+/** Every change to the position since posting, with its on-chain record. */
 export function PositionHistory({ thesis }: { thesis: ThesisView }) {
   if (thesis.live.status === "none") return null;
   return (
@@ -76,8 +75,8 @@ export function PositionHistory({ thesis }: { thesis: ThesisView }) {
           <span className="flex shrink-0 items-baseline gap-2 text-xs text-faint">
             {timeAgo(thesis.ts)}
             {thesis.anchor && (
-              <a href={explorerTxUrl("arc", thesis.anchor.txHash)} target="_blank" rel="noreferrer" className="text-signal underline underline-offset-2">
-                Arc
+              <a href={explorerTxUrl(thesis.anchor.chain, thesis.anchor.txHash)} target="_blank" rel="noreferrer" className="text-signal underline underline-offset-2">
+                {CHAINS[thesis.anchor.chain].name}
               </a>
             )}
           </span>
@@ -91,17 +90,17 @@ export function PositionHistory({ thesis }: { thesis: ThesisView }) {
             <span className="flex shrink-0 items-baseline gap-2 text-xs text-faint">
               {timeAgo(event.at)}
               {event.txHash ? (
-                <a href={explorerTxUrl("arc", event.txHash)} target="_blank" rel="noreferrer" className="text-signal underline underline-offset-2">
-                  Arc
+                <a href={explorerTxUrl(event.chain, event.txHash)} target="_blank" rel="noreferrer" className="text-signal underline underline-offset-2">
+                  {CHAINS[event.chain].name}
                 </a>
               ) : (
-                <span>Writing to Arc</span>
+                <span>Writing on-chain</span>
               )}
             </span>
           </li>
         ))}
       </ol>
-      {!thesis.live.events.length && <p className="mt-2 text-xs text-faint">Nothing has changed since this was posted. Any sale will show here and on Arc.</p>}
+      {!thesis.live.events.length && <p className="mt-2 text-xs text-faint">Nothing has changed since this was posted. Any sale will show here and on Base.</p>}
     </section>
   );
 }
@@ -227,16 +226,16 @@ export function ThesisCard({
           <div className="num mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
             <LivePositionBadge thesis={thesis} />
             {thesis.live.proofTx && (
-              <a href={explorerTxUrl("arc", thesis.live.proofTx)} target="_blank" rel="noreferrer" className="text-signal underline underline-offset-2" title="This change to the author's position is recorded on Arc">
-                Proof on Arc
+              <a href={explorerTxUrl(thesis.live.proofChain ?? HOME_CHAIN, thesis.live.proofTx)} target="_blank" rel="noreferrer" className="text-signal underline underline-offset-2" title="This change to the author's position is recorded on-chain">
+                Proof on {CHAINS[thesis.live.proofChain ?? HOME_CHAIN].name}
               </a>
             )}
             <span>Posted at {formatPrice(thesis.priceAtPost)}</span>
             {thesis.verified && <span>With {formatCompactUsd(thesis.positionUsdAtPost)}</span>}
             <OutcomeBadge thesis={thesis} />
             {thesis.anchor && (
-              <a href={explorerTxUrl("arc", thesis.anchor.txHash)} target="_blank" rel="noreferrer" className="text-signal underline underline-offset-2" title="This thesis's hash is recorded on Arc, so it can't be changed after the fact">
-                Anchored on Arc
+              <a href={explorerTxUrl(thesis.anchor.chain, thesis.anchor.txHash)} target="_blank" rel="noreferrer" className="text-signal underline underline-offset-2" title="This thesis's hash is recorded on-chain, so it can't be changed after the fact">
+                Anchored on {CHAINS[thesis.anchor.chain].name}
               </a>
             )}
           </div>

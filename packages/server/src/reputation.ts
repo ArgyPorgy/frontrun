@@ -1,7 +1,9 @@
 import {
   D,
   LEADERBOARD_MIN_RESOLVED,
+  PROOF_CHAIN,
   REPUTATION_REGISTRY_ARC,
+  REPUTATION_REGISTRY_BASE,
   reputationScore,
   type ClosedPositionStats,
   type LeaderboardGroup,
@@ -9,8 +11,7 @@ import {
   type LeaderboardVersus,
   type Reputation,
   type ReputationComponents,
-  type ReputationView,
-} from "@frontrun/core";
+  type ReputationView, type ChainKey } from "@frontrun/core";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { parseAbi, type Address } from "viem";
 import { isThesisSpecificFailure, relayerEnabled, relayerWrite } from "./anchoring";
@@ -170,7 +171,8 @@ function toView(row: ScoreRow, wallet: string | null): ReputationView {
   return {
     ...toReputation(row),
     wallet,
-    registry: REPUTATION_REGISTRY_ARC,
+    registry: row.attestChain === "arc" ? REPUTATION_REGISTRY_ARC : REPUTATION_REGISTRY_BASE,
+    attestChain: row.attestChain as ChainKey,
     attestTx: row.attestTx,
     attestedAt: row.attestedAt?.toISOString() ?? null,
     computedAt: row.computedAt.toISOString(),
@@ -268,7 +270,7 @@ async function humansVersusAgents(): Promise<LeaderboardVersus> {
 
 /** Worker: writes changed scores to Arc, one at a time since they share the relayer's nonce. */
 export async function publishReputation(limit = 5): Promise<number> {
-  if (!REPUTATION_REGISTRY_ARC || !relayerEnabled() || isPaperMode()) return 0;
+  if (!REPUTATION_REGISTRY_BASE || !relayerEnabled() || isPaperMode()) return 0;
   const rows = await db()
     .select({ score: schema.reputationScores, wallet: schema.wallets.address })
     .from(schema.reputationScores)
@@ -287,10 +289,10 @@ export async function publishReputation(limit = 5): Promise<number> {
     .limit(limit);
   for (const { score, wallet } of rows) {
     try {
-      const txHash = await relayerWrite({ address: REPUTATION_REGISTRY_ARC as Address, abi: REPUTATION_REGISTRY_ABI, functionName: "attest", args: attestArgs(wallet, score) });
+      const txHash = await relayerWrite({ address: REPUTATION_REGISTRY_BASE as Address, abi: REPUTATION_REGISTRY_ABI, functionName: "attest", args: attestArgs(wallet, score) });
       await db()
         .update(schema.reputationScores)
-        .set({ attestedScore: score.score, attestedClosed: score.closed, attestTx: txHash, attestedAt: new Date(), attestAttempts: 0 })
+        .set({ attestedScore: score.score, attestedClosed: score.closed, attestTx: txHash, attestedAt: new Date(), attestAttempts: 0, attestChain: PROOF_CHAIN })
         .where(eq(schema.reputationScores.userId, score.userId));
       logger.info({ userId: score.userId, score: score.score, txHash }, "reputation attested on Arc");
     } catch (err) {

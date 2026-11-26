@@ -1,7 +1,8 @@
 import {
   D,
   POSITION_ACTION_CODES,
-  POSITION_LEDGER_ARC,
+  POSITION_LEDGER_BASE,
+  PROOF_CHAIN,
   applyFillToHeld,
   chainChange,
   returnSincePost,
@@ -61,10 +62,13 @@ export function toThesisLive(thesis: Thesis, events: PositionEvent[]): ThesisLiv
     priceUsd: e.priceUsd ? D(e.priceUsd).toFixed() : null,
     at: e.occurredAt.toISOString(),
     txHash: e.anchorTx,
+    chain: e.anchorChain as ChainKey,
   }));
-  const proofTx = [...views].reverse().find((e) => e.txHash)?.txHash ?? null;
+  const proven = [...views].reverse().find((e) => e.txHash);
+  const proofTx = proven?.txHash ?? null;
+  const proofChain = proven?.chain ?? null;
   const changedAt = thesis.positionChangedAt?.toISOString() ?? null;
-  if (!thesis.verified) return { status: "none", heldPct: 0, exitPriceUsd: null, exitReturnPct: null, changedAt: null, proofTx: null, events: [] };
+  if (!thesis.verified) return { status: "none", heldPct: 0, exitPriceUsd: null, exitReturnPct: null, changedAt: null, proofTx: null, proofChain: null, events: [] };
   // A thesis is only judged once its position is sold, so a judged one has exited whatever the sweep has got to.
   if (thesis.outcome !== "pending" || thesis.positionStatus === "exited") {
     const exitPrice = thesis.priceAtResolve ?? ordered[ordered.length - 1]?.priceUsd ?? null;
@@ -75,10 +79,11 @@ export function toThesisLive(thesis: Thesis, events: PositionEvent[]): ThesisLiv
       exitReturnPct: thesis.returnPct ?? (exitPrice ? returnSincePost(thesis.priceAtPost, exitPrice) : null),
       changedAt: changedAt ?? thesis.resolvedAt?.toISOString() ?? null,
       proofTx,
+      proofChain,
       events: views,
     };
   }
-  return { status: thesis.positionStatus, heldPct: thesis.heldBps / 100, exitPriceUsd: null, exitReturnPct: null, changedAt, proofTx, events: views };
+  return { status: thesis.positionStatus, heldPct: thesis.heldBps / 100, exitPriceUsd: null, exitReturnPct: null, changedAt, proofTx, proofChain, events: views };
 }
 
 export async function positionEventsFor(thesisIds: string[]): Promise<Map<string, PositionEvent[]>> {
@@ -310,7 +315,7 @@ export function ledgerArgs(event: Pick<PositionEvent, "id" | "action" | "heldBps
  * it's recorded against the hash that thesis was anchored under.
  */
 export async function anchorPositionEvents(limit = 10): Promise<number> {
-  if (!POSITION_LEDGER_ARC || !relayerEnabled() || isPaperMode()) return 0;
+  if (!POSITION_LEDGER_BASE || !relayerEnabled() || isPaperMode()) return 0;
   const rows = await db()
     .select({ event: schema.thesisPositionEvents, hash: schema.theses.anchorHash, wallet: schema.wallets.address })
     .from(schema.thesisPositionEvents)
@@ -319,13 +324,13 @@ export async function anchorPositionEvents(limit = 10): Promise<number> {
     .where(and(isNull(schema.thesisPositionEvents.anchorTx), lt(schema.thesisPositionEvents.anchorAttempts, MAX_ATTEMPTS), isNotNull(schema.theses.anchorHash)))
     .orderBy(asc(schema.thesisPositionEvents.occurredAt))
     .limit(limit);
-  const ledger = POSITION_LEDGER_ARC as Address;
+  const ledger = POSITION_LEDGER_BASE as Address;
   for (const { event, hash, wallet } of rows) {
     const args = ledgerArgs(event, hash!, wallet);
     try {
-      const recorded = await evmClient("arc").readContract({ address: ledger, abi: POSITION_LEDGER_ABI, functionName: "isRecorded", args: [args[2]] });
+      const recorded = await evmClient(PROOF_CHAIN).readContract({ address: ledger, abi: POSITION_LEDGER_ABI, functionName: "isRecorded", args: [args[2]] });
       const txHash = recorded ? await findLogTx(ledger, RECORDED_EVENT, { eventId: args[2] }) : await relayerWrite({ address: ledger, abi: POSITION_LEDGER_ABI, functionName: "record", args });
-      await db().update(schema.thesisPositionEvents).set({ anchorTx: txHash, anchoredAt: new Date() }).where(eq(schema.thesisPositionEvents.id, event.id));
+      await db().update(schema.thesisPositionEvents).set({ anchorTx: txHash, anchoredAt: new Date(), anchorChain: PROOF_CHAIN }).where(eq(schema.thesisPositionEvents.id, event.id));
       logger.info({ eventId: event.id, txHash }, "position change recorded on Arc");
       await announceChange(event.thesisId);
     } catch (err) {

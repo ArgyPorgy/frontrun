@@ -159,7 +159,7 @@ export interface ThesisView {
   returnPct: number | null;
   currentPriceUsd: string | null;
   /** Set once this thesis has been anchored on Arc. */
-  anchor: { hash: string; txHash: string; anchoredAt: string } | null;
+  anchor: { hash: string; txHash: string; anchoredAt: string; chain: ChainKey } | null;
   /** What the author has done with their position since posting. */
   live: ThesisLive;
   /** The author's reputation score, once they have one. */

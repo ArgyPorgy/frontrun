@@ -1,4 +1,4 @@
-import { ARC_USDC, CHAINS, D, Decimal, FLASH_ALLOWANCE_ARC, GUARDRAILS, PERMIT2, orderDirection, orderSide, tokenKey, toBaseUnits, triggerHit, triggerProblem, normalizeAddress, type ChainKey, type ExecStep, type OrderType, type OrderView } from "@frontrun/core";
+import { ARC_USDC, CHAINS, D, Decimal, FLASH_ALLOWANCE_ARC, GUARDRAILS, PERMIT2, orderDirection, orderSide, tokenKey, toBaseUnits, triggerHit, triggerProblem, normalizeAddress, type ChainKey, type ExecStep, type OrderType, type OrderView, FLASH_ALLOWANCE, HOME_CHAIN, HOME_USDC, HOME_USDC_DECIMALS } from "@frontrun/core";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "../db/client";
 import { env } from "../env";
@@ -23,7 +23,7 @@ import { authContext, loadSigningWallets, performServerStep, privy, serverSignin
 export type OrderRow = typeof schema.orders.$inferSelect;
 
 const MAX_ATTEMPTS = 5;
-const RESTING_SPENDERS = [FLASH_ALLOWANCE_ARC, PERMIT2];
+const RESTING_SPENDERS = [FLASH_ALLOWANCE, PERMIT2];
 const CANCEL_PREFIX = "Definitive Flash v1 — Cancel Order";
 
 function toView(row: OrderRow, token: OrderView["token"]): OrderView {
@@ -46,7 +46,7 @@ function toView(row: OrderRow, token: OrderView["token"]): OrderView {
 
 /** Same-chain, so Flash can hold it. Paper mode never talks to a venue, so it watches its own prices. */
 function engineFor(chain: ChainKey): "flash" | "app" {
-  return !isPaperMode() && chain === "arc" && !!env().FLASH_API_KEY ? "flash" : "app";
+  return !isPaperMode() && chain === HOME_CHAIN && !!env().FLASH_API_KEY ? "flash" : "app";
 }
 
 async function requireLiveSigner(userId: string) {
@@ -62,10 +62,10 @@ function restingParams(row: OrderRow, qty: string, funder: string): RestingOrder
   const isLimit = row.type === "limit_buy" || row.type === "limit_sell";
   const flashType = isLimit ? "limit" : row.type === "stop_loss" ? "stop-loss" : row.type === "take_profit" ? "take-profit" : "stop";
   return {
-    targetChain: "arc",
-    contraChain: "arc",
+    targetChain: CHAINS[HOME_CHAIN].flashSlug,
+    contraChain: CHAINS[HOME_CHAIN].flashSlug,
     targetAsset: row.tokenAddr,
-    contraAsset: ARC_USDC,
+    contraAsset: HOME_USDC,
     side: row.side as "buy" | "sell",
     qty,
     orderType: flashType,
@@ -81,25 +81,25 @@ async function placeOnFlash(row: OrderRow, qty: string, decimals: number | null)
   const wallets = await loadSigningWallets(row.userId);
   const params = restingParams(row, qty, wallets.evmAddress);
   const raw = await requestRestingQuote(params);
-  const spent = row.side === "buy" ? ARC_USDC : row.tokenAddr;
+  const spent = row.side === "buy" ? HOME_USDC : row.tokenAddr;
   const ctx = { userId: row.userId, tradeId: row.id };
   if (raw.evm?.approveTx) {
     assertApprovalMatches(raw.evm.approveTx, spent, RESTING_SPENDERS);
-    const step: ExecStep = { id: "approve", kind: "evm_tx", chain: "arc", label: "Approve once", to: raw.evm.approveTx.to, data: raw.evm.approveTx.data, waitForReceipt: true };
+    const step: ExecStep = { id: "approve", kind: "evm_tx", chain: HOME_CHAIN, label: "Approve once", to: raw.evm.approveTx.to, data: raw.evm.approveTx.data, waitForReceipt: true };
     await performServerStep(wallets, step, ctx);
   }
   const permit = raw.evm?.permitTypedData
-    ? await performServerStep(wallets, { id: "permit", kind: "evm_typed_data", chain: "arc", label: "Approve Permit2", typedData: raw.evm.permitTypedData }, ctx)
+    ? await performServerStep(wallets, { id: "permit", kind: "evm_typed_data", chain: HOME_CHAIN, label: "Approve Permit2", typedData: raw.evm.permitTypedData }, ctx)
     : null;
   const typed = raw.evm?.orderTypedData;
   if (!typed) throw new Error("The quote came back without an order to sign.");
   assertOrderMatches(typed, {
     funder: wallets.evmAddress,
     spentToken: spent,
-    chainId: CHAINS.arc.chainId!,
-    fromAmount: row.side === "buy" ? toBaseUnits(qty, CHAINS.arc.usdcDecimals) : decimals !== null ? toBaseUnits(qty, decimals) : undefined,
+    chainId: CHAINS[HOME_CHAIN].chainId!,
+    fromAmount: row.side === "buy" ? toBaseUnits(qty, HOME_USDC_DECIMALS) : decimals !== null ? toBaseUnits(qty, decimals) : undefined,
   });
-  const signed = await performServerStep(wallets, { id: "order", kind: "evm_typed_data", chain: "arc", label: "Sign order", typedData: typed }, ctx);
+  const signed = await performServerStep(wallets, { id: "order", kind: "evm_typed_data", chain: HOME_CHAIN, label: "Sign order", typedData: typed }, ctx);
   return submitRestingOrder(params, raw, signed.signature!, permit?.signature);
 }
 
@@ -114,7 +114,7 @@ export async function placeOrder(userId: string, input: { chain: ChainKey; addre
 
   let qty: string;
   if (side === "buy") {
-    const amount = D(input.amountUsd ?? 0).toDecimalPlaces(CHAINS.arc.usdcDecimals, Decimal.ROUND_DOWN);
+    const amount = D(input.amountUsd ?? 0).toDecimalPlaces(HOME_USDC_DECIMALS, Decimal.ROUND_DOWN);
     if (amount.lte(0)) throw unprocessable("amount_too_small", "Enter an amount to buy.");
     const balance = await usdcBalance(userId);
     if (amount.gt(balance.spendable)) throw unprocessable("insufficient_balance", "You don't have enough USDC for this order.", balance);
@@ -280,7 +280,7 @@ export async function pollFlashOrders(limit = 100): Promise<number> {
             tokenAddr: row.tokenAddr,
             usdIn: row.amountUsd,
             provider: "flash",
-            srcChain: "arc",
+            srcChain: HOME_CHAIN,
             status: "pending",
             isPaper: false,
             idempotencyKey: `order:${row.id}`,

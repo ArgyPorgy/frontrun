@@ -12,8 +12,7 @@ import {
   type Timeframe,
   type TokenDetail,
   type TokenListItem,
-  type TokenSnapshot,
-} from "@frontrun/core";
+  type TokenSnapshot, HOME_CHAIN } from "@frontrun/core";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db, schema } from "../db/client";
 import { flashAsset, flashSearch, type FlashSearchHit } from "../providers/flash";
@@ -325,7 +324,7 @@ export async function marketList(tab: MarketTab, chain?: ChainKey): Promise<Toke
   let lists = await Promise.all(chains.map((c) => loadList(tab, c)));
   if (lists.every((l) => l.length === 0)) {
     // Cold start before the worker's first pass: load one chain on demand so the page isn't empty.
-    const first = chain ?? "arc";
+    const first = chain ?? HOME_CHAIN;
     lists = [await refreshMarketList(tab, first, "interactive").catch(() => [])];
   }
   return decorate(interleave(lists, 60));

@@ -1,6 +1,6 @@
 "use client";
 
-import { CHAINS, CHAIN_KEYS, type ChainKey, type ThesisView } from "@frontrun/core";
+import { CHAINS, CHAIN_KEYS, HOME_CHAIN, type ChainKey, type ThesisView } from "@frontrun/core";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -10,9 +10,11 @@ import { useSocket } from "@/lib/socket";
 import { ThesisCard } from "./thesis-card";
 import { Button, ChainLogo, EmptyState, RowSkeletons } from "./ui";
 
+/** Base first and selected by default, since that's where every balance lives. */
 export const CHAIN_OPTIONS: Array<{ value: ChainKey | "all"; label: string; icon?: React.ReactNode }> = [
+  { value: HOME_CHAIN, label: CHAINS[HOME_CHAIN].name, icon: <ChainLogo chain={HOME_CHAIN} size={14} /> },
   { value: "all", label: "All chains" },
-  ...CHAIN_KEYS.map((k) => ({ value: k as ChainKey | "all", label: CHAINS[k].name, icon: <ChainLogo chain={k} size={14} /> })),
+  ...CHAIN_KEYS.filter((k) => k !== HOME_CHAIN).map((k) => ({ value: k as ChainKey | "all", label: CHAINS[k].name, icon: <ChainLogo chain={k} size={14} /> })),
 ];
 
 export function ThesisFeed({ tab, chain, showLeaderboard = true }: { tab: "top" | "recent" | "following"; chain: ChainKey | "all"; showLeaderboard?: boolean }) {

@@ -1,3 +1,4 @@
+import { HOME_CHAIN } from "@frontrun/core";
 import type { ChainKey, ExecStep, ProviderId, StepResult, TradeStatus } from "@frontrun/core";
 
 export interface RouteRequest {
@@ -90,11 +91,11 @@ export interface RouteProvider {
 }
 
 export function spentChain(req: Pick<RouteRequest, "side" | "chain" | "contra">): ChainKey {
-  return req.side === "buy" ? (req.contra?.chain ?? "arc") : req.chain;
+  return req.side === "buy" ? (req.contra?.chain ?? HOME_CHAIN) : req.chain;
 }
 
 export function isCrossChain(req: Pick<RouteRequest, "chain" | "contra">): boolean {
-  return req.chain !== (req.contra?.chain ?? "arc");
+  return req.chain !== (req.contra?.chain ?? HOME_CHAIN);
 }
 
 export function completedStep(ctx: ExecContext, id: string): StepResult | undefined {

@@ -13,7 +13,7 @@ const display = Space_Grotesk({ subsets: ["latin"], weight: ["300", "400", "500"
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
   title: { default: "Front Run", template: "%s · Front Run" },
-  description: "Trade any token from one USDC balance on Arc, with thesis posts pinned to the chart by people who actually hold.",
+  description: "Trade any token from one USDC balance on Base, with thesis posts pinned to the chart by people who actually hold.",
   appleWebApp: { capable: true, title: "Front Run", statusBarStyle: "black-translucent" },
   icons: { icon: "/brand/icon-192.png", apple: "/brand/icon-180.png" },
 };

@@ -11,8 +11,7 @@ import {
   resolveSlippage,
   toBaseUnits,
   type ChainKey,
-  type ExecStep,
-} from "@frontrun/core";
+  type ExecStep, FLASH_ALLOWANCE, HOME_CHAIN, HOME_USDC, HOME_USDC_DECIMALS } from "@frontrun/core";
 import { and, eq, isNull } from "drizzle-orm";
 import { decodeFunctionData, erc20Abi, type Hex } from "viem";
 import { db, schema } from "../db/client";
@@ -88,9 +87,9 @@ export function buildFlashParams(req: RouteRequest, feeBps: number): FlashParams
   const source = spentChain(req);
   const params: FlashParams = {
     targetChain: CHAINS[req.chain].flashSlug,
-    contraChain: req.contra ? CHAINS[req.contra.chain].flashSlug : "arc",
+    contraChain: CHAINS[req.contra?.chain ?? HOME_CHAIN].flashSlug,
     targetAsset: req.address,
-    contraAsset: req.contra?.asset ?? ARC_USDC,
+    contraAsset: req.contra?.asset ?? HOME_USDC,
     side: req.side,
     qty: req.side === "buy" ? req.usdcIn! : req.qtyIn!,
     orderType: "market",
@@ -100,7 +99,7 @@ export function buildFlashParams(req: RouteRequest, feeBps: number): FlashParams
   };
   if (crossChain) {
     // The funds land on the side the user isn't spending from.
-    params.recipientAddress = recipientOn(req, req.side === "buy" ? req.chain : "arc");
+    params.recipientAddress = recipientOn(req, req.side === "buy" ? req.chain : (req.contra?.chain ?? HOME_CHAIN));
   }
   if (feeBps > 0) params.flashIntegratorFeeBps = String(feeBps);
   return params;
@@ -146,7 +145,7 @@ export function assertApprovalMatches(tx: { to: string; data: string }, spentTok
   if (!knownSpenders.some((s) => s.toLowerCase() === spender)) throw new Error("Refusing to sign: approval names an unknown spender.");
 }
 
-const KNOWN_SPENDERS = [FLASH_ALLOWANCE_ARC, PERMIT2];
+const KNOWN_SPENDERS = [FLASH_ALLOWANCE, PERMIT2];
 
 function quoteToProvider(raw: FlashQuoteRaw, req: RouteRequest, latencyMs: number): ProviderQuote {
   const crossChain = isCrossChain(req);
@@ -167,7 +166,7 @@ function quoteToProvider(raw: FlashQuoteRaw, req: RouteRequest, latencyMs: numbe
     recommendedSlippage: raw.recommendedSlippage != null ? Number(raw.recommendedSlippage) : null,
     crossChain,
     needsSetup: hasEvmSetup || hasSvmSetup,
-    sponsoredSetup: source !== "arc" && CHAINS[source].privySponsored,
+    sponsoredSetup: source !== HOME_CHAIN && CHAINS[source].privySponsored,
     latencyMs,
     raw,
   };
@@ -379,7 +378,7 @@ async function advanceOrder(ctx: ExecContext): Promise<AdvanceResult> {
     }
     if (steps.length) return { steps };
   } else {
-    const spentToken = req.side === "buy" ? (req.contra?.asset ?? ARC_USDC) : req.address;
+    const spentToken = req.side === "buy" ? (req.contra?.asset ?? HOME_USDC) : req.address;
     if (raw.evm?.approveTx && !completedStep(ctx, "approve")) {
       assertApprovalMatches(raw.evm.approveTx, spentToken, KNOWN_SPENDERS);
       steps.push({
@@ -406,7 +405,7 @@ async function advanceOrder(ctx: ExecContext): Promise<AdvanceResult> {
         chainId: CHAINS[source].chainId!,
         fromAmount:
           req.side === "buy"
-            ? toBaseUnits(req.usdcIn!, req.contra?.decimals ?? CHAINS.arc.usdcDecimals)
+            ? toBaseUnits(req.usdcIn!, req.contra?.decimals ?? HOME_USDC_DECIMALS)
             : req.decimals !== null
               ? toBaseUnits(req.qtyIn!, req.decimals)
               : undefined,

@@ -66,7 +66,7 @@ export default function LeaderboardPage() {
     <div>
       <PageTitle>Reputation Score Leaderboard</PageTitle>
       <p className="px-4 pb-3 text-sm text-muted">
-        A score out of 100 from closed positions: how often a verified thesis ended in profit, what it returned, and what it took to get there in drawdown, holding time and fees. People and AI agents rank side by side. It's written to Arc, so any app can read it. Takes {minResolved} closed positions to rank.
+        A score out of 100 from closed positions: how often a verified thesis ended in profit, what it returned, and what it took to get there in drawdown, holding time and fees. People and AI agents rank side by side. It's written to Base, so any app can read it. Takes {minResolved} closed positions to rank.
       </p>
       {query.data && <Versus humans={query.data.versus.humans} agents={query.data.versus.agents} />}
       <Segmented
