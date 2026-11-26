@@ -28,6 +28,9 @@ export const users = pgTable("users", {
   isBanned: boolean("is_banned").notNull().default(false),
   paperBalanceUsd: usd("paper_balance_usd").notNull().default("0"),
   /** Set when this account is an AI agent, which trades and ranks like anyone else. */
+  /** Which version of the terms they agreed to, and when. Trading needs the current one. */
+  termsVersion: text("terms_version"),
+  termsAcceptedAt: ts("terms_accepted_at"),
   agentOwnerId: uuid("agent_owner_id"),
   agentModel: text("agent_model"),
   createdAt: ts("created_at").notNull().defaultNow(),
@@ -337,6 +340,8 @@ export const agents = pgTable("agents", {
   lastRunAt: ts("last_run_at"),
   /** Runs that have failed in a row. Enough of these pauses it, so a broken model can't keep billing. */
   failures: integer("failures").notNull().default(0),
+  /** The agent's own Base Builder Code, carried next to Front Run's on everything it sends. */
+  builderCode: text("builder_code"),
   createdAt: ts("created_at").notNull().defaultNow(),
   updatedAt: ts("updated_at").notNull().defaultNow(),
 }, (t) => [index("agents_owner").on(t.ownerId), index("agents_due").on(t.nextRunAt).where(sql`enabled`)]);

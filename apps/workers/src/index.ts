@@ -17,6 +17,7 @@ import {
   KEYS,
   activeTokenKeys,
   anchorPendingTheses,
+  backfillAgentBuilderCodes,
   anchorPositionEvents,
   arcUsdcBalances,
   checkWatchedOrders,
@@ -226,6 +227,7 @@ async function main() {
   every("copy-trades", 3_000, () => runCopyTrades(), { leaseMs: 2 * 60_000 });
   // A long lease, since one agent thinking can take a minute or two, and only one runs at a time.
   every("agent-runs", 5_000, () => runAgents(), { leaseMs: 10 * 60_000 });
+  every("agent-builder-codes", 10 * 60_000, () => backfillAgentBuilderCodes());
   every("reconcile", 5 * 60_000, () => reconcilePositions(), { leaseMs: 10 * 60_000 });
   every("thesis-resolve", 60_000, async () => {
     await resolveClosedTheses();

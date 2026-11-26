@@ -21,18 +21,18 @@ import {
 import { and, desc, eq, lt } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { requireUser } from "../auth";
+import { requireTrader, requireUser } from "../auth";
 
 export async function registerTradingRoutes(app: FastifyInstance) {
   app.post("/v1/quotes", { config: { rateLimit: { max: 90, timeWindow: "1 minute" } } }, async (req) => {
-    const user = await requireUser(req);
+    const user = await requireTrader(req);
     const body = quoteRequestSchema.parse(req.body);
     if (!isValidAddress(body.chain, body.address)) throw new AppError(400, "invalid_address", "That isn't a valid token address.");
     return createQuote(user.id, body);
   });
 
   app.post("/v1/trades", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req) => {
-    const user = await requireUser(req);
+    const user = await requireTrader(req);
     return executeTrade(user.id, executeTradeSchema.parse(req.body));
   });
 
@@ -44,7 +44,7 @@ export async function registerTradingRoutes(app: FastifyInstance) {
   });
 
   app.post("/v1/orders", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req) => {
-    const user = await requireUser(req);
+    const user = await requireTrader(req);
     return placeOrder(user.id, createOrderSchema.parse(req.body));
   });
 
@@ -63,7 +63,7 @@ export async function registerTradingRoutes(app: FastifyInstance) {
   app.get("/v1/copy", async (req) => listCopySettings(await requireUser(req)));
 
   app.put("/v1/copy/:username", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req) => {
-    const user = await requireUser(req);
+    const user = await requireTrader(req);
     const { username } = z.object({ username: z.string().min(1).max(64) }).parse(req.params);
     return saveCopySetting(user, username, copySettingSchema.parse(req.body));
   });

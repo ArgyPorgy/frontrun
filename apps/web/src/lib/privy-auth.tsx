@@ -1,6 +1,6 @@
 "use client";
 
-import { ARC_USDC, CHAINS, toBaseUnits, type ExecStep, type StepResult } from "@frontrun/core";
+import { ARC_USDC, CHAINS, builderCodeSuffix, toBaseUnits, type ExecStep, type StepResult } from "@frontrun/core";
 import {
   PrivyProvider,
   useExportWallet,
@@ -10,6 +10,7 @@ import {
   useSigners,
   useSignTypedData,
   useWallets,
+  dataSuffix,
 } from "@privy-io/react-auth";
 import {
   toSolanaWalletConnectors,
@@ -205,6 +206,8 @@ export function PrivyAuth({
         supportedChains: [arc, robinhood, base, arbitrum, mainnet, bsc, hyperEvm],
         solana: { rpcs: solanaRpcs },
         externalWallets: { solana: { connectors: solanaConnectors } },
+        // Base Builder Code on everything the wallet sends from the browser, so Base credits it to Front Run.
+        plugins: [dataSuffix(builderCodeSuffix())],
         embeddedWallets: {
           // Everyone gets both wallets, including people who sign in with an external wallet,
           // since one-tap trading and Solana sells both run on the embedded ones.

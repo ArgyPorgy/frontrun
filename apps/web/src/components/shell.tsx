@@ -11,6 +11,7 @@ import { useAuth } from "@/lib/auth";
 import { useBalance, useConfig, useMe } from "@/lib/hooks";
 import { Avatar } from "./ui";
 import { Footer } from "./footer";
+import { TermsGate } from "./terms-gate";
 
 type IconName = "trending" | "search" | "portfolio" | "profile" | "bell" | "analytics" | "agents";
 
@@ -304,6 +305,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <ArcStudioBadge />
       </main>
       <Footer />
+      <TermsGate />
     </div>
   );
 }

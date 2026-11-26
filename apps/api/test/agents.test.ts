@@ -28,8 +28,8 @@ vi.hoisted(() => {
   });
 });
 
-import { ApiClient, ApiError, tokenKey, type AgentDetailView, type ChainKey, type TokenSnapshot } from "@frontrun/core";
-import { KEYS, closeDb, closeRedis, db, isOpenSourceModel, pollActiveTrades, redis, runAgents, runMigrations, schema, toModelViews } from "@frontrun/server";
+import { ApiClient, ApiError, TERMS_VERSION, FRONTRUN_BUILDER_CODE, tokenKey, type AgentDetailView, type ChainKey, type TokenSnapshot } from "@frontrun/core";
+import { KEYS, builderCodesFor, closeDb, closeRedis, db, isOpenSourceModel, pollActiveTrades, redis, runAgents, runMigrations, schema, toModelViews } from "@frontrun/server";
 import { eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app";
@@ -52,6 +52,7 @@ function call(name: string, args: Record<string, unknown> = {}): FakeReply {
 }
 
 let modelsDown = false;
+const baseCodeRequests: string[] = [];
 let modelsEmpty = false;
 
 function gateway(url: string, init?: RequestInit): Response {
@@ -108,6 +109,7 @@ async function login(handle: string) {
   const client = new ApiClient({ baseUrl, getToken: () => token });
   await client.syncMe();
   await client.updateMe({ username: handle });
+  await client.acceptTerms(TERMS_VERSION);
   await client.paperDeposit();
   return client;
 }
@@ -155,6 +157,11 @@ beforeAll(async () => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     if (url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost")) return realFetch(input, init);
     if (url.startsWith("https://openrouter.ai/")) return gateway(url, init);
+    if (url.startsWith("https://api.base.dev/")) {
+      const { walletAddress } = JSON.parse(String(init?.body)) as { walletAddress: string };
+      baseCodeRequests.push(walletAddress);
+      return Response.json({ builderCode: `bc_${walletAddress.slice(2, 10).toLowerCase()}`, walletAddress });
+    }
     throw new Error(`blocked network call in test: ${url}`);
   });
   await runMigrations();
@@ -237,6 +244,15 @@ describe("when the gateway is down", () => {
 });
 
 describe("creating an agent", () => {
+  it("gets its own Base Builder Code, carried next to Front Run's", async () => {
+    const client = await login("argyporgy");
+    const agent = await newAgent(client, "testbot", "0");
+    expect(baseCodeRequests).toContain(agent.wallet.evm);
+    const codes = await builderCodesFor(agent.user.id);
+    expect(codes).toEqual([FRONTRUN_BUILDER_CODE, `bc_${agent.wallet.evm.slice(2, 10).toLowerCase()}`]);
+    expect(await builderCodesFor((await client.me()).id)).toEqual([FRONTRUN_BUILDER_CODE]);
+  });
+
   it("stays closed to accounts outside the beta", async () => {
     const client = await login("someone");
     const view = await client.agents();

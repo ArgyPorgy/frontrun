@@ -28,7 +28,7 @@ vi.hoisted(() => {
   });
 });
 
-import { ApiClient, ApiError, REPUTATION_REGISTRY_ARC, tokenKey, type ChainKey, type TokenSnapshot, type TradeCardView } from "@frontrun/core";
+import { ApiClient, ApiError, TERMS_VERSION, REPUTATION_REGISTRY_ARC, tokenKey, type ChainKey, type TokenSnapshot, type TradeCardView } from "@frontrun/core";
 import {
   DEX_BACKGROUND_PER_MINUTE,
   DexBusyError,
@@ -114,6 +114,7 @@ async function login(handle: string) {
   const client = new ApiClient({ baseUrl, getToken: () => token });
   await client.syncMe();
   await client.updateMe({ username: handle });
+  await client.acceptTerms(TERMS_VERSION);
   return { client, token };
 }
 
@@ -946,6 +947,23 @@ describe("theses", () => {
     await vi.waitFor(async () => {
       expect((await author.client.notifications()).items.map((n) => n.type)).toContain("copy_buy");
     });
+  });
+});
+
+describe("terms", () => {
+  it("won't trade until the current terms are accepted, and records when they were", async () => {
+    const anon = new ApiClient({ baseUrl });
+    const { token } = await anon.devLogin("newcomer");
+    const client = new ApiClient({ baseUrl, getToken: () => token });
+    await client.syncMe();
+    expect((await client.me()).termsAccepted).toBe(false);
+    await expectApiError(client.quote({ chain: "arc", address: TOKEN_A, side: "buy", amountUsd: "10" }), "accept_terms");
+    await expectApiError(client.acceptTerms("2020-01-01"), "terms_changed");
+    expect((await client.acceptTerms(TERMS_VERSION)).termsAccepted).toBe(true);
+    await client.paperDeposit();
+    expect((await client.quote({ chain: "arc", address: TOKEN_A, side: "buy", amountUsd: "10" })).id).toBeTruthy();
+    const [row] = await db().select().from(schema.auditLog).where(eq(schema.auditLog.action, "terms_accepted"));
+    expect(row?.detail).toEqual({ version: TERMS_VERSION });
   });
 });
 

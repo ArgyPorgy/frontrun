@@ -1,4 +1,4 @@
-import { CHAINS, toBaseUnits } from "@frontrun/core";
+import { CHAINS, builderCodeSuffix, toBaseUnits } from "@frontrun/core";
 import { and, asc, eq, isNull, lt } from "drizzle-orm";
 import { BaseError, ContractFunctionRevertedError, createWalletClient, getAbiItem, http, keccak256, parseAbi, toBytes, type Abi, type AbiEvent, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -103,7 +103,7 @@ export async function relayerWrite(call: { address: Address; abi: Abi; functionN
   const client = evmClient("arc");
   const { request } = await client.simulateContract({ account, address: call.address, abi: call.abi, functionName: call.functionName, args: call.args });
   const wallet = createWalletClient({ account, chain: arc, transport: http(env().ARC_RPC_URL) });
-  const hash = await wallet.writeContract(request);
+  const hash = await wallet.writeContract({ ...request, dataSuffix: builderCodeSuffix() });
   const receipt = await client.waitForTransactionReceipt({ hash, timeout: 60_000 });
   if (receipt.status !== "success") throw new Error(`Arc transaction ${hash} reverted.`);
   return hash;

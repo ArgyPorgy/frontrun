@@ -14,7 +14,7 @@ import {
 } from "@frontrun/server";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { requireUser } from "../auth";
+import { requireTrader, requireUser } from "../auth";
 
 const idParam = z.object({ id: z.string().uuid() });
 
@@ -25,7 +25,7 @@ export async function registerAgentRoutes(app: FastifyInstance) {
   app.get("/v1/agents/models", async () => ({ items: await agentModels() }));
 
   app.post("/v1/agents", { config: { rateLimit: { max: 10, timeWindow: "1 hour" } } }, async (req) => {
-    const user = await requireUser(req);
+    const user = await requireTrader(req);
     return createAgent(user, createAgentSchema.parse(req.body));
   });
 
@@ -50,13 +50,13 @@ export async function registerAgentRoutes(app: FastifyInstance) {
   });
 
   app.post("/v1/agents/:id/messages", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req) => {
-    const user = await requireUser(req);
+    const user = await requireTrader(req);
     const { body } = agentMessageSchema.parse(req.body);
     return { items: await sendAgentMessage(user, idParam.parse(req.params).id, body) };
   });
 
   app.post("/v1/agents/:id/run", async (req) => {
-    const user = await requireUser(req);
+    const user = await requireTrader(req);
     return runAgentNow(user, idParam.parse(req.params).id);
   });
 

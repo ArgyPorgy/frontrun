@@ -7,6 +7,7 @@ import {
   type BalanceView,
 } from "@frontrun/core";
 import {
+  acceptTerms,
   AppError,
   buildMe,
   buildPortfolio,
@@ -22,6 +23,7 @@ import {
 } from "@frontrun/server";
 import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 import { ensureWallets, issueDevToken, requireUser } from "../auth";
 
 async function balanceView(userId: string): Promise<BalanceView> {
@@ -54,6 +56,12 @@ export async function registerMeRoutes(app: FastifyInstance) {
     const patch = updateProfileSchema.parse(req.body);
     const updated = await updateProfile(user, patch);
     return buildMe(updated);
+  });
+
+  app.post("/v1/me/terms", async (req) => {
+    const user = await requireUser(req);
+    const { version } = z.object({ version: z.string().min(1).max(32) }).parse(req.body);
+    return buildMe(await acceptTerms(user, version));
   });
 
   app.get("/v1/me/balance", async (req) => {

@@ -10,7 +10,7 @@
  * something a real trade needs, fails the run.
  */
 import { randomUUID } from "node:crypto";
-import { ARC_USDC, CHAINS, FLASH_ALLOWANCE_ARC, UNISWAP_ARC, type StepResult } from "@frontrun/core";
+import { ARC_USDC, CHAINS, FLASH_ALLOWANCE_ARC, UNISWAP_ARC, type StepResult, FRONTRUN_BUILDER_CODE, withBuilderCode } from "@frontrun/core";
 import { PrivyClient } from "@privy-io/node";
 import {
   appendTransactionMessageInstruction,
@@ -311,6 +311,11 @@ async function evmSuite() {
   const usdc = ARC_USDC as Hex;
   const router = UNISWAP_ARC.universalRouter212 as Hex;
   await allowed("Gasless: approve USDC to Flash", () => signOperation(execute(usdc, 0n, approveCall(FLASH_ALLOWANCE_ARC as Hex))));
+  // Base Builder Codes ride on the end of calldata. The policy has to read past them, and still refuse what it should.
+  await allowed("Builder Code: approve Flash with the code appended", () => signTx(wallet.id, { to: usdc, data: withBuilderCode(approveCall(FLASH_ALLOWANCE_ARC as Hex)) }));
+  await denied("Builder Code: a code doesn't let an unknown approval through", () => signTx(wallet.id, { to: usdc, data: withBuilderCode(approveCall(ATTACKER)) }));
+  await allowed("Builder Code: gasless approval with the code on callData", () => signOperation(withBuilderCode(execute(usdc, 0n, approveCall(FLASH_ALLOWANCE_ARC as Hex)), [FRONTRUN_BUILDER_CODE, "bc_agent123"])));
+  await denied("Builder Code: a code doesn't let a gasless theft through", () => signOperation(withBuilderCode(execute(usdc, 0n, stealCall))));
   await allowed("Gasless: call the Uniswap router with value", () => signOperation(execute(router, 10n ** 18n, "0x3593564c")));
   await denied("Gasless: approve USDC to an unknown address", () => signOperation(execute(usdc, 0n, approveCall(ATTACKER))));
   await denied("Gasless: transfer USDC to an unknown address", () => signOperation(execute(usdc, 0n, stealCall)));

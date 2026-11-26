@@ -99,6 +99,7 @@ export class ApiClient {
   syncMe = () => this.request<MeView>("POST", "/v1/me/sync", { body: {} });
   updateMe = (body: { username?: string; avatarUrl?: string | null }) => this.request<MeView>("PATCH", "/v1/me", { body });
   balance = () => this.request<BalanceView>("GET", "/v1/me/balance");
+  acceptTerms = (version: string) => this.request<MeView>("POST", "/v1/me/terms", { body: { version } });
 
   marketList = (query: { tab: "trending" | "new"; chain?: ChainKey }) =>
     this.request<{ items: TokenListItem[]; attribution: string }>("GET", "/v1/market/tokens", { query });

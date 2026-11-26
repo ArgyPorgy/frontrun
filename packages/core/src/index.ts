@@ -6,6 +6,8 @@ export * from "./thesis";
 export * from "./proof";
 export * from "./reputation";
 export * from "./agents";
+export * from "./builder";
+export * from "./terms";
 export * from "./risk";
 export * from "./format";
 export * from "./types";

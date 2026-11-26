@@ -129,6 +129,8 @@ export interface MeView extends UserSummary {
   following: number;
   /** Set in paper mode only. */
   paperBalanceUsd: string | null;
+  /** Whether they've agreed to the current terms, which trading needs. */
+  termsAccepted: boolean;
 }
 
 export interface BalanceView {

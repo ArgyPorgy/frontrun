@@ -1,3 +1,4 @@
+import { TERMS_VERSION } from "@frontrun/core";
 import { createSecretKey } from "node:crypto";
 import { AppError, ensureDevWallets, ensureUser, env, privy, syncWalletsFromPrivy, type UserRow } from "@frontrun/server";
 import type { FastifyRequest } from "fastify";
@@ -49,6 +50,13 @@ export async function optionalUser(req: FastifyRequest): Promise<UserRow | null>
 export async function requireUser(req: FastifyRequest): Promise<UserRow> {
   const user = await optionalUser(req);
   if (!user) throw new AppError(401, "unauthorized", "Sign in to continue.");
+  return user;
+}
+
+/** Trading needs the current terms accepted, which is where people confirm who can use the app. */
+export async function requireTrader(req: FastifyRequest): Promise<UserRow> {
+  const user = await requireUser(req);
+  if (user.termsVersion !== TERMS_VERSION) throw new AppError(403, "accept_terms", "Accept the terms to trade.");
   return user;
 }
 

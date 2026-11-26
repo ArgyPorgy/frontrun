@@ -1,4 +1,4 @@
-import type { ChainKey } from "@frontrun/core";
+import { withBuilderCode, type ChainKey } from "@frontrun/core";
 import { concat, encodeFunctionData, parseAbi, type Hex } from "viem";
 import { entryPoint07Abi, entryPoint07Address } from "viem/account-abstraction";
 import { env } from "../env";
@@ -134,7 +134,7 @@ interface SponsorResult {
  * Sends one call from the user's wallet, with the gas paid for them, and waits for it to land. Returns
  * the hash of the transaction that carried it.
  */
-export async function sendSponsored(args: { walletId: string; sender: string; chain: ChainKey; to: string; data: string; value?: string }): Promise<Hex> {
+export async function sendSponsored(args: { walletId: string; sender: string; chain: ChainKey; to: string; data: string; value?: string; codes?: string[] }): Promise<Hex> {
   const { walletId, chain } = args;
   const sender = args.sender as Hex;
   const chainId = CHAIN_IDS[chain];
@@ -146,7 +146,8 @@ export async function sendSponsored(args: { walletId: string; sender: string; ch
       evmClient(chain).readContract({ address: entryPoint07Address, abi: entryPoint07Abi, functionName: "getNonce", args: [sender, FALLBACK_NONCE_KEY] }),
       pimlico<{ fast: { maxFeePerGas: string; maxPriorityFeePerGas: string } }>(chainId, "pimlico_getUserOperationGasPrice", []),
     ]);
-    const callData = encodeFunctionData({ abi: ACCOUNT_ABI, functionName: "execute", args: [args.to as Hex, BigInt(args.value ?? 0), args.data as Hex] });
+    // ERC-8021 puts the Builder Code on the operation's callData, before it's signed, rather than on the bundler's transaction.
+    const callData = withBuilderCode(encodeFunctionData({ abi: ACCOUNT_ABI, functionName: "execute", args: [args.to as Hex, BigInt(args.value ?? 0), args.data as Hex] }), args.codes);
     const operation = {
       sender,
       nonce: `0x${sequence.toString(16)}`,

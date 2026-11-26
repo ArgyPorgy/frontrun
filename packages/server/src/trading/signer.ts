@@ -1,4 +1,4 @@
-import { CHAINS, D, fromBaseUnits, type ChainKey, type ExecStep, type StepResult } from "@frontrun/core";
+import { CHAINS, D, builderCodeSuffix, fromBaseUnits, withBuilderCode, type ChainKey, type ExecStep, type StepResult } from "@frontrun/core";
 import { PrivyClient } from "@privy-io/node";
 import { getBase58Decoder } from "@solana/kit";
 import { and, eq, gt } from "drizzle-orm";
@@ -11,6 +11,7 @@ import { logger } from "../logger";
 import { fetchTokens } from "../market/dexscreener";
 import { evmClient, sendSolanaLamports, solanaKeyAddress, solanaLamports, viemChain, waitForSolanaTx } from "../onchain";
 import { sendSponsored, sponsorshipConfigured } from "./sponsor";
+import { builderCodesFor } from "../builder-codes";
 
 let client: PrivyClient | undefined;
 
@@ -59,12 +60,12 @@ async function waitForEvmReceipt(chain: ChainKey, hash: Hex) {
   if (receipt.status === "reverted") throw new Error("The transaction reverted on-chain.");
 }
 
-async function signAndBroadcast(wallets: SigningWallets, step: Extract<ExecStep, { kind: "evm_tx" }>): Promise<Hex> {
+async function signAndBroadcast(wallets: SigningWallets, step: Extract<ExecStep, { kind: "evm_tx" }>, codes: string[]): Promise<Hex> {
   const chain = step.chain;
   const public_ = evmClient(chain);
   const from = wallets.evmAddress as Hex;
   const to = step.to as Hex;
-  const data = step.data as Hex;
+  const data = withBuilderCode(step.data, codes);
   const value = step.value ? BigInt(step.value) : 0n;
   const [nonce, fees, gas] = await Promise.all([
     public_.getTransactionCount({ address: from, blockTag: "pending" }),
@@ -129,7 +130,7 @@ export async function ensureGasForSetup(args: { chain: ChainKey; address: string
 
   const account = privateKeyToAccount(normalizePrivateKey(key));
   const wallet = createWalletClient({ account, chain: viemChain(chain), transport: http() });
-  const hash = await wallet.sendTransaction({ to: address as Hex, value: BigInt(topup) });
+  const hash = await wallet.sendTransaction({ to: address as Hex, value: BigInt(topup), data: builderCodeSuffix() });
   await public_.waitForTransactionReceipt({ hash, timeout: 60_000 });
 
   const price = await nativePriceUsd(chain).catch(() => "0");
@@ -230,7 +231,7 @@ export async function performServerStep(wallets: SigningWallets, step: ExecStep,
       if (!wallets.evmWalletId) throw new Error("This wallet can't be signed for server-side.");
       if (sponsorshipConfigured(step.chain)) {
         // This has already landed by the time it returns.
-        const hash = await sendSponsored({ walletId: wallets.evmWalletId, sender: wallets.evmAddress, chain: step.chain, to: step.to, data: step.data, value: step.value });
+        const hash = await sendSponsored({ walletId: wallets.evmWalletId, sender: wallets.evmAddress, chain: step.chain, to: step.to, data: step.data, value: step.value, codes: await builderCodesFor(ctx.userId) });
         return { id: step.id, txHash: hash };
       }
       if (step.chain !== "arc") {
@@ -241,7 +242,7 @@ export async function performServerStep(wallets: SigningWallets, step: ExecStep,
           throw new AppError(503, "gas_unavailable", `The first sell on ${CHAINS[step.chain].name} needs a little gas, and the app can't cover it right now. Your tokens are safe.`);
         }
       }
-      const hash = await signAndBroadcast(wallets, step);
+      const hash = await signAndBroadcast(wallets, step, await builderCodesFor(ctx.userId));
       if (step.waitForReceipt) await waitForEvmReceipt(step.chain, hash);
       return { id: step.id, txHash: hash };
     }

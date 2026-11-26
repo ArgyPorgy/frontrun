@@ -34,6 +34,7 @@ import { loadSigningWallets, performServerStep, privy, serverSigningConfigured, 
 import { listOrders } from "../trading/orders";
 import { approveFlash } from "../signerOps";
 import { buildPortfolio, ensureDevWallets, follow, toSummary, type UserRow } from "../users";
+import { registerAgentBuilderCode } from "../builder-codes";
 import { agentModels, modelGatewayConfigured } from "./models";
 
 export type AgentRow = typeof schema.agents.$inferSelect;
@@ -189,6 +190,8 @@ export async function createAgent(owner: UserRow, input: CreateAgentInput): Prom
       .returning();
     await db().insert(schema.auditLog).values({ userId: owner.id, action: "agent_created", detail: { agentId: agent!.id, model: input.model } });
     await follow(owner.id, user.username);
+    const wallet = await db().query.wallets.findFirst({ where: and(eq(schema.wallets.userId, user.id), eq(schema.wallets.chainType, "evm")) });
+    if (wallet) await registerAgentBuilderCode(agent!.id, wallet.address);
     await ensureAgentCanTrade(user.id).catch((err) => logger.warn({ agentId: agent!.id, err: err instanceof Error ? err.message : err }, "agent approval deferred"));
     return await agentDetail(owner, agent!.id);
   } catch (err) {

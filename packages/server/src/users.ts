@@ -19,6 +19,7 @@ import {
   type TraderResult,
   type UserSummary,
   type WalletView,
+  TERMS_VERSION,
 } from "@frontrun/core";
 import { and, desc, eq, inArray, isNotNull, isNull, sql, or } from "drizzle-orm";
 import { db, schema } from "./db/client";
@@ -112,7 +113,15 @@ export async function buildMe(user: UserRow): Promise<MeView> {
     signer,
     ...counts,
     paperBalanceUsd: isPaperMode() ? D(user.paperBalanceUsd).toFixed() : null,
+    termsAccepted: user.termsVersion === TERMS_VERSION,
   };
+}
+
+export async function acceptTerms(user: UserRow, version: string): Promise<UserRow> {
+  if (version !== TERMS_VERSION) throw conflict("terms_changed", "The terms have changed. Reload to read the current ones.");
+  const [updated] = await db().update(schema.users).set({ termsVersion: version, termsAcceptedAt: new Date() }).where(eq(schema.users.id, user.id)).returning();
+  await db().insert(schema.auditLog).values({ userId: user.id, action: "terms_accepted", detail: { version } });
+  return updated!;
 }
 
 export async function updateProfile(user: UserRow, patch: { username?: string; avatarUrl?: string | null }): Promise<UserRow> {

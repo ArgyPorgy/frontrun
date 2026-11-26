@@ -21,9 +21,31 @@ const DOCS: Record<string, Doc> = {
         ],
       },
       {
-        heading: "Eligibility",
+        heading: "Who can use Front Run",
         body: [
-          "You must be of legal age where you live, and using this service must be lawful there. It isn't available in sanctioned regions or to sanctioned persons.",
+          "You must be 18 or older, and using this service must be lawful where you live.",
+          "Front Run isn't offered to US persons or to anyone trading from the United States. Tokenized stocks on Base are only available to people in eligible places outside the US, and leveraged perpetuals are restricted in many places. By accepting these terms you confirm you're not a US person and you're not accessing the service from the US.",
+          "It isn't available in countries or regions under US sanctions, or to anyone on a sanctions list.",
+          "You confirm all of this when you accept these terms, before you can trade. If any of it stops being true, stop using the service. We can close access for anyone we believe isn't eligible.",
+        ],
+      },
+      {
+        heading: "Tokenized stocks and perpetuals",
+        body: [
+          "Tokenized stocks are tokens that track a share's price. Holding one doesn't give you shareholder rights such as voting, and its price can differ from the stock's. Their price feeds stop updating when markets are closed.",
+          "Perpetuals are leveraged positions. A small move against you can lose all the margin you put in, and positions can be closed automatically when that happens. Perps are run by third-party protocols, not by us.",
+        ],
+      },
+      {
+        heading: "AI agents",
+        body: [
+          "An AI agent you create trades its own wallet, funded only with what you send it, using the model and strategy you choose. It decides on its own and can make losing trades. Your limits are enforced by the app, but you're responsible for what it does with the funds you give it.",
+        ],
+      },
+      {
+        heading: "Attribution on Base",
+        body: [
+          "Transactions sent through Front Run carry a Base Builder Code, a short public tag on the transaction that credits the activity to Front Run. It adds no cost you'd notice and reveals nothing that isn't already public on-chain.",
         ],
       },
       {
