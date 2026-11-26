@@ -4,7 +4,7 @@
  *   pnpm test:live
  * Flash checks need FLASH_API_KEY in the environment and are skipped without it.
  */
-import { ARC_USDC, CHAINS, CHAIN_KEYS, D } from "@frontrun/core";
+import { ARC_USDC, CHAINS, CHAIN_KEYS, D, HOME_USDC } from "@frontrun/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.hoisted(() => {
@@ -133,7 +133,8 @@ describe("Uniswap v3 direct on Arc", () => {
 
 describe("LI.FI", () => {
   it("quotes Arc USDC to Base WETH with sane amounts", async () => {
-    const quote = await lifiProvider.quote(request({}));
+    // LI.FI only routes from another chain's USDC now that Base is home.
+    const quote = await lifiProvider.quote(request({ contra: { chain: "arc", asset: ARC_USDC, decimals: CHAINS.arc.usdcDecimals } }));
     expect(Number(quote.expectedOut)).toBeGreaterThan(0);
     expect(Number(quote.netOutputUsd)).toBeGreaterThan(2.5);
     expect(Number(quote.netOutputUsd)).toBeLessThan(5.5);
@@ -145,16 +146,16 @@ describe("LI.FI", () => {
 const flashKey = process.env.FLASH_API_KEY;
 
 describe.skipIf(!flashKey)("Flash", () => {
-  it("quotes a cross-chain buy and returns signing data we accept", async () => {
+  it("quotes a buy from Base USDC and returns signing data we accept", async () => {
     const quote = await flashProvider.quote(request({}));
     const raw = quote.raw as FlashQuoteRaw;
     expect(Number(quote.netOutputUsd)).toBeGreaterThan(2.5);
     const typed = JSON.parse(raw.evm!.orderTypedData!);
     expect(typed.primaryType).toBe("FlashOrder");
     expect(typed.domain.name).toBe("DefinitiveFlashAllowance");
-    expect(Number(typed.domain.chainId)).toBe(5042);
+    expect(Number(typed.domain.chainId)).toBe(CHAINS.base.chainId);
     expect(typed.message.swapper.toLowerCase()).toBe(BURN.toLowerCase());
-    expect(typed.message.fromToken.toLowerCase()).toBe(ARC_USDC);
+    expect(typed.message.fromToken.toLowerCase()).toBe(HOME_USDC.toLowerCase());
     expect(BigInt(typed.message.fromAmount)).toBe(5_000_000n);
   });
 

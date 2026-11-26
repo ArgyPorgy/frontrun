@@ -10,7 +10,7 @@
  * something a real trade needs, fails the run.
  */
 import { randomUUID } from "node:crypto";
-import { ARC_USDC, CHAINS, FLASH_ALLOWANCE_ARC, UNISWAP_ARC, type StepResult, FRONTRUN_BUILDER_CODE, withBuilderCode, HOME_USDC, UNISWAP_BASE } from "@frontrun/core";
+import { ARC_USDC, CHAINS, FLASH_ALLOWANCE_ARC, UNISWAP_ARC, type StepResult, FRONTRUN_BUILDER_CODE, withBuilderCode, HOME_USDC, UNISWAP_BASE, VERANTA_BASE } from "@frontrun/core";
 import { PrivyClient } from "@privy-io/node";
 import {
   appendTransactionMessageInstruction,
@@ -326,6 +326,14 @@ async function evmSuite() {
   // Base is home now: the one-tap approval and Uniswap's router there have to sign, with nothing else let through.
   await allowed("Base: approve Base USDC to Flash", () => signTx(wallet.id, { to: HOME_USDC, data: withBuilderCode(approveCall(FLASH_ALLOWANCE_ARC as Hex)), chainId: 8453 }));
   await allowed("Base: call Uniswap's Universal Router", () => signTx(wallet.id, { to: UNISWAP_BASE.universalRouter20, data: withBuilderCode("0x3593564c"), chainId: 8453 }));
+  // Perps on Veranta: USDC approved to its storage, orders to its router, take-profit and stop-loss signed for its router.
+  await allowed("Veranta: approve Base USDC to its trading storage", () => signOperation(withBuilderCode(execute(HOME_USDC as Hex, 0n, approveCall(VERANTA_BASE.tradingStorage)))));
+  await allowed("Veranta: send an order to its router", () => signOperation(withBuilderCode(execute(VERANTA_BASE.tradingRouter, 0n, "0x12345678"))));
+  const tpSl = (verifyingContract: string) =>
+    JSON.stringify({ domain: { name: "AvantisTrading", version: "1", chainId: 8453, verifyingContract }, types: { UpdateTpSlReq: [{ name: "pairIndex", type: "uint256" }, { name: "index", type: "uint256" }, { name: "tp", type: "uint256" }, { name: "sl", type: "uint256" }] }, primaryType: "UpdateTpSlReq", message: { pairIndex: "1", index: "0", tp: "0", sl: "0" } });
+  await allowed("Veranta: sign a take-profit change for its router", () => signTyped(wallet.id, tpSl(VERANTA_BASE.tradingRouter)));
+  await denied("Veranta: the same request for any other contract", () => signTyped(wallet.id, tpSl(ATTACKER)));
+  await denied("Veranta: approve USDC to its router instead of storage", () => signOperation(execute(HOME_USDC as Hex, 0n, approveCall(VERANTA_BASE.tradingRouter))));
   await denied("Base: send Base USDC to an unknown address", () => signTx(wallet.id, { to: HOME_USDC, data: stealCall, chainId: 8453 }));
   // Base Builder Codes ride on the end of calldata. The policy has to read past them, and still refuse what it should.
   await allowed("Builder Code: approve Flash with the code appended", () => signTx(wallet.id, { to: usdc, data: withBuilderCode(approveCall(FLASH_ALLOWANCE_ARC as Hex)) }));

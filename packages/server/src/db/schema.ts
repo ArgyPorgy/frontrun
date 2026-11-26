@@ -433,3 +433,36 @@ export const gasTopups = pgTable("gas_topups", {
   settledAt: ts("settled_at"),
   createdAt: ts("created_at").notNull().defaultNow(),
 }, (t) => [index("gas_topups_user").on(t.userId)]);
+
+/**
+ * A perpetual position on Veranta, live or paper. Live ones mirror what the venue holds for the wallet:
+ * `venueIndex` is the trade's index there once it opens, so closes and edits can name it.
+ */
+export const perpPositions = pgTable("perp_positions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  pairIndex: integer("pair_index").notNull(),
+  symbol: text("symbol").notNull(),
+  assetClass: text("asset_class").notNull(),
+  side: text("side", { enum: ["long", "short"] }).notNull(),
+  status: text("status", { enum: ["pending", "open", "closing", "closed", "liquidated", "cancelled", "failed"] }).notNull().default("pending"),
+  collateralUsd: usd("collateral_usd").notNull(),
+  leverage: real("leverage").notNull(),
+  entryPrice: usd("entry_price"),
+  liquidationPrice: usd("liquidation_price"),
+  takeProfit: usd("take_profit"),
+  stopLoss: usd("stop_loss"),
+  venueIndex: integer("venue_index"),
+  openTx: text("open_tx"),
+  closeTx: text("close_tx"),
+  closePrice: usd("close_price"),
+  realizedPnlUsd: usd("realized_pnl_usd"),
+  feesUsd: usd("fees_usd").notNull().default("0"),
+  isPaper: boolean("is_paper").notNull().default(false),
+  /** Set when an agent opened it, with the reasoning it gave. */
+  agentReason: text("agent_reason"),
+  error: text("error"),
+  createdAt: ts("created_at").notNull().defaultNow(),
+  openedAt: ts("opened_at"),
+  closedAt: ts("closed_at"),
+}, (t) => [index("perp_positions_user").on(t.userId, t.createdAt), index("perp_positions_status").on(t.status)]);

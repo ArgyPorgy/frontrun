@@ -14,7 +14,7 @@ import { Footer } from "./footer";
 import { ArcMoveBanner } from "./arc-move";
 import { TermsGate } from "./terms-gate";
 
-type IconName = "trending" | "search" | "portfolio" | "profile" | "bell" | "analytics" | "agents";
+type IconName = "trending" | "perps" | "search" | "portfolio" | "profile" | "bell" | "analytics" | "agents";
 
 function Icon({ name, active }: { name: IconName; active?: boolean }) {
   const common = { width: 22, height: 22, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: active ? 2.2 : 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
@@ -39,6 +39,13 @@ function Icon({ name, active }: { name: IconName; active?: boolean }) {
           <path d="M5 20v-7" />
           <path d="M12 20V5" />
           <path d="M19 20v-11" />
+        </svg>
+      );
+    case "perps":
+      return (
+        <svg {...common}>
+          <path d="M7 4v16M7 4l-3 3M7 4l3 3" />
+          <path d="M17 20V4M17 20l-3-3M17 20l3-3" />
         </svg>
       );
     case "search":
@@ -75,7 +82,7 @@ function Icon({ name, active }: { name: IconName; active?: boolean }) {
 
 const TABS: Array<{ href: string; label: string; icon: IconName; match: (p: string) => boolean }> = [
   { href: "/discovery", label: "Discover", icon: "trending", match: (p) => p === "/discovery" || p.startsWith("/token") || p.startsWith("/thesis") || p.startsWith("/leaderboard") },
-  { href: "/search", label: "Search", icon: "search", match: (p) => p.startsWith("/search") },
+  { href: "/perps", label: "Perps", icon: "perps", match: (p) => p.startsWith("/perps") },
   { href: "/portfolio", label: "Portfolio", icon: "portfolio", match: (p) => p.startsWith("/portfolio") || p.startsWith("/deposit") },
   { href: "/agents", label: "Agents", icon: "agents", match: (p) => p.startsWith("/agents") },
   { href: "/analytics", label: "Analytics", icon: "analytics", match: (p) => p.startsWith("/analytics") },
@@ -112,6 +119,7 @@ function TabBar() {
 
 const WIDE_NAV: Array<{ href: string; label: string; match: (p: string) => boolean }> = [
   { href: "/discovery", label: "Discover", match: (p) => p === "/discovery" || p.startsWith("/token") || p.startsWith("/thesis") },
+  { href: "/perps", label: "Perps", match: (p) => p.startsWith("/perps") },
   { href: "/portfolio", label: "Portfolio", match: (p) => p.startsWith("/portfolio") },
   { href: "/leaderboard", label: "Leaderboard", match: (p) => p.startsWith("/leaderboard") },
   { href: "/agents", label: "Agents", match: (p) => p.startsWith("/agents") },

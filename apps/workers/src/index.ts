@@ -53,6 +53,9 @@ import {
   schema,
   snapshotToTick,
   writeSnapshot,
+  openPerpMarkets,
+  refreshPerpPrices,
+  syncPerps,
 } from "@frontrun/server";
 import { and, eq, gt, inArray, isNull } from "drizzle-orm";
 
@@ -222,6 +225,9 @@ async function main() {
   every("orders-watch", 3_000, () => checkWatchedOrders(), { leaseMs: 2 * 60_000 });
   every("orders-flash", 15_000, () => pollFlashOrders(), { leaseMs: 2 * 60_000 });
   every("buy-alerts", 5_000, () => sendBuyAlerts());
+  // Perps: featured prices stay warm for the market list, and positions follow the venue.
+  every("perp-prices", 5_000, async () => refreshPerpPrices(await openPerpMarkets()), { leaseMs: 30_000 });
+  every("perp-sync", 5_000, () => syncPerps(), { leaseMs: 60_000 });
   // A long lease, since a batch of copies waits on signing and sending.
   every("copy-trades", 3_000, () => runCopyTrades(), { leaseMs: 2 * 60_000 });
   // A long lease, since one agent thinking can take a minute or two, and only one runs at a time.

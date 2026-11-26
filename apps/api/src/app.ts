@@ -11,6 +11,7 @@ import { registerMeRoutes } from "./routes/me";
 import { registerSignerRoutes } from "./routes/signer";
 import { registerSocialRoutes } from "./routes/social";
 import { registerThesisRoutes } from "./routes/theses";
+import { registerPerpRoutes } from "./routes/perps";
 import { registerTradingRoutes } from "./routes/trading";
 import { registerSystemRoutes } from "./routes/system";
 
@@ -93,6 +94,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registerMeRoutes(app);
   await registerMarketRoutes(app);
   await registerTradingRoutes(app);
+  await registerPerpRoutes(app);
   await registerAgentRoutes(app);
   await registerSignerRoutes(app);
   await registerThesisRoutes(app);

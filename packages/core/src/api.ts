@@ -1,6 +1,7 @@
 import type { ChainKey } from "./chains";
 import type { AgentDetailView, AgentMessageView, AgentModelView, AgentRunView, AgentsView } from "./agents";
 import type { OrderType } from "./routing";
+import type { PerpAssetClass, PerpMarketView, PerpOpenInput, PerpPositionView } from "./perps";
 import type { CreateAgentInput, UpdateAgentInput } from "./schemas";
 import type { CopySettingInput } from "./schemas";
 import type {
@@ -105,6 +106,14 @@ export class ApiClient {
   moveArcToBase = () => this.request<ArcMoveView>("POST", "/v1/me/arc-move");
   agentArcMove = (id: string) => this.request<ArcMoveView>("GET", `/v1/agents/${id}/arc-move`);
   moveAgentArcToBase = (id: string) => this.request<ArcMoveView>("POST", `/v1/agents/${id}/arc-move`);
+  perpMarkets = (query: { assetClass?: PerpAssetClass; q?: string } = {}) => this.request<{ items: PerpMarketView[] }>("GET", "/v1/perps/markets", { query });
+  perpMarket = (pairIndex: number) => this.request<PerpMarketView>("GET", `/v1/perps/markets/${pairIndex}`);
+  perpCandles = (pairIndex: number, tf: Timeframe) => this.request<{ items: Candle[] }>("GET", `/v1/perps/markets/${pairIndex}/candles`, { query: { tf } });
+  perpPositions = (status?: "open" | "closed") => this.request<{ items: PerpPositionView[] }>("GET", "/v1/perps/positions", { query: status ? { status } : {} });
+  openPerp = (body: PerpOpenInput) => this.request<PerpPositionView>("POST", "/v1/perps/positions", { body });
+  closePerp = (id: string, percent = 100) => this.request<PerpPositionView>("POST", `/v1/perps/positions/${id}/close`, { body: { percent } });
+  updatePerpTpSl = (id: string, body: { takeProfit?: number | null; stopLoss?: number | null }) => this.request<PerpPositionView>("PUT", `/v1/perps/positions/${id}/tpsl`, { body });
+  updatePerpMargin = (id: string, body: { action: "add" | "remove"; amountUsd: number }) => this.request<PerpPositionView>("POST", `/v1/perps/positions/${id}/margin`, { body });
   acceptTerms = (version: string) => this.request<MeView>("POST", "/v1/me/terms", { body: { version } });
 
   marketList = (query: { tab: "trending" | "new"; chain?: ChainKey }) =>
