@@ -282,6 +282,8 @@ export async function publishReputation(limit = 5): Promise<number> {
           isNull(schema.reputationScores.attestedScore),
           sql`${schema.reputationScores.attestedScore} <> ${schema.reputationScores.score}`,
           sql`${schema.reputationScores.attestedClosed} <> ${schema.reputationScores.closed}`,
+          // A score last written on another chain, like Arc before the move, is written again where readers now look.
+          sql`${schema.reputationScores.attestChain} <> ${PROOF_CHAIN}`,
         ),
       ),
     )
