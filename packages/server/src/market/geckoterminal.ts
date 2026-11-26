@@ -19,14 +19,41 @@ export const GECKO_ATTRIBUTION = "Data from GeckoTerminal";
  * A free CoinGecko Demo key allows 100 calls a minute on the same data, and paid plans go higher.
  * Over budget, a call fails at once instead of queueing, and callers serve what they have cached.
  */
-function geckoConfig() {
+interface GeckoConfig {
+  name: "keyless" | "demo" | "pro";
+  base: string;
+  headers: Record<string, string>;
+  perMinute: number;
+  backgroundPerMinute: number;
+  refreshMs: number;
+}
+
+const KEYLESS: GeckoConfig = { name: "keyless", base: "https://api.geckoterminal.com/api/v2", headers: {}, perMinute: 5, backgroundPerMinute: 3, refreshMs: 30_000 };
+
+function geckoConfig(): GeckoConfig {
   const e = env();
-  if (!e.COINGECKO_API_KEY) {
-    return { base: "https://api.geckoterminal.com/api/v2", headers: {} as Record<string, string>, perMinute: 5, backgroundPerMinute: 3, refreshMs: 30_000 };
-  }
+  if (!e.COINGECKO_API_KEY) return KEYLESS;
   return e.COINGECKO_PLAN === "pro"
-    ? { base: "https://pro-api.coingecko.com/api/v3/onchain", headers: { "x-cg-pro-api-key": e.COINGECKO_API_KEY }, perMinute: 400, backgroundPerMinute: 200, refreshMs: 1_500 }
-    : { base: "https://api.coingecko.com/api/v3/onchain", headers: { "x-cg-demo-api-key": e.COINGECKO_API_KEY }, perMinute: 80, backgroundPerMinute: 40, refreshMs: 3_000 };
+    ? { name: "pro", base: "https://pro-api.coingecko.com/api/v3/onchain", headers: { "x-cg-pro-api-key": e.COINGECKO_API_KEY }, perMinute: 400, backgroundPerMinute: 200, refreshMs: 1_500 }
+    : { name: "demo", base: "https://api.coingecko.com/api/v3/onchain", headers: { "x-cg-demo-api-key": e.COINGECKO_API_KEY }, perMinute: 80, backgroundPerMinute: 40, refreshMs: 3_000 };
+}
+
+/**
+ * Set when the CoinGecko key has used up its monthly calls. Until it clears, calls go to GeckoTerminal's
+ * public API instead: slower and tighter, but the lists and charts keep filling rather than going empty.
+ */
+const KEY_SPENT_KEY = "gecko:key-spent";
+const KEY_SPENT_SECONDS = 6 * 3600;
+
+async function activeConfig(): Promise<GeckoConfig> {
+  const config = geckoConfig();
+  if (config.name === "keyless") return config;
+  return (await redis().exists(KEY_SPENT_KEY)) ? KEYLESS : config;
+}
+
+/** CoinGecko's "monthly call limit reached" answer, as opposed to a brief per-minute 429. */
+export function isKeyQuotaSpent(err: unknown): boolean {
+  return err instanceof HttpError && err.status === 429 && /10006|calls limit/i.test(err.body);
 }
 
 export function geckoPlan(): "keyless" | "demo" | "pro" {
@@ -51,33 +78,37 @@ export class GeckoBusyError extends Error {
 
 export type GeckoPriority = "interactive" | "background";
 
-async function takeBudget(priority: GeckoPriority) {
+async function takeBudget(priority: GeckoPriority, config: GeckoConfig) {
   const r = redis();
-  if (await r.exists(COOLDOWN_KEY)) throw new GeckoBusyError();
-  const { perMinute, backgroundPerMinute } = geckoConfig();
-  const windowKey = `gecko:window:${Math.floor(Date.now() / 60_000)}`;
+  if (await r.exists(`${COOLDOWN_KEY}:${config.name}`)) throw new GeckoBusyError();
+  const windowKey = `gecko:window:${config.name}:${Math.floor(Date.now() / 60_000)}`;
   const used = await r.incr(windowKey);
   if (used === 1) await r.expire(windowKey, 120);
   // Background refreshes stop early, so a person opening a chart can still get through.
-  const limit = priority === "background" ? backgroundPerMinute : perMinute;
+  const limit = priority === "background" ? config.backgroundPerMinute : config.perMinute;
   if (used > limit) throw new GeckoBusyError();
 }
 
 export async function geckoSaturated(): Promise<boolean> {
   const r = redis();
-  if (await r.exists(COOLDOWN_KEY)) return true;
-  const used = Number((await r.get(`gecko:window:${Math.floor(Date.now() / 60_000)}`)) ?? 0);
-  return used >= geckoConfig().perMinute;
+  const config = await activeConfig();
+  if (await r.exists(`${COOLDOWN_KEY}:${config.name}`)) return true;
+  const used = Number((await r.get(`gecko:window:${config.name}:${Math.floor(Date.now() / 60_000)}`)) ?? 0);
+  return used >= config.perMinute;
 }
 
 async function gecko<T>(path: string, priority: GeckoPriority = "interactive"): Promise<T> {
-  await takeBudget(priority);
-  const { base, headers } = geckoConfig();
+  const config = await activeConfig();
+  await takeBudget(priority, config);
   try {
-    return await fetchJson<T>(`${base}${path}`, { headers, timeoutMs: 10_000 });
+    return await fetchJson<T>(`${config.base}${path}`, { headers: config.headers, timeoutMs: 10_000 });
   } catch (err) {
+    if (config.name !== "keyless" && isKeyQuotaSpent(err)) {
+      await redis().set(KEY_SPENT_KEY, "1", "EX", KEY_SPENT_SECONDS);
+      return gecko<T>(path, priority);
+    }
     if (err instanceof HttpError && err.status === 429) {
-      await redis().set(COOLDOWN_KEY, "1", "EX", COOLDOWN_SECONDS);
+      await redis().set(`${COOLDOWN_KEY}:${config.name}`, "1", "EX", COOLDOWN_SECONDS);
       throw new GeckoBusyError();
     }
     throw err;

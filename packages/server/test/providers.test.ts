@@ -802,3 +802,15 @@ describe("trackers", () => {
     expect(post!.body).not.toContain("<");
   });
 });
+
+describe("market data key", () => {
+  it("tells a spent monthly quota apart from a brief rate limit", async () => {
+    const { isKeyQuotaSpent } = await import("../src/market/geckoterminal");
+    const { HttpError } = await import("../src/http");
+    const spent = new HttpError(429, JSON.stringify({ status: { error_code: 10006, error_message: "You've reached 10,000 calls limit." } }), "https://api.coingecko.com/api/v3/onchain/x");
+    const busy = new HttpError(429, JSON.stringify({ status: { error_code: 429, error_message: "Throttled" } }), "https://api.coingecko.com/api/v3/onchain/x");
+    expect(isKeyQuotaSpent(spent)).toBe(true);
+    expect(isKeyQuotaSpent(busy)).toBe(false);
+    expect(isKeyQuotaSpent(new Error("network"))).toBe(false);
+  });
+});
