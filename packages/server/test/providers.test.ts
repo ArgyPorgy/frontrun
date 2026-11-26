@@ -814,3 +814,11 @@ describe("market data key", () => {
     expect(isKeyQuotaSpent(new Error("network"))).toBe(false);
   });
 });
+
+describe("moving USDC from Arc to Base", () => {
+  it("asks Flash for Base USDC paid from Arc USDC, landing in the same wallet, with no app fee", () => {
+    const p = buildFlashParams({ ...baseReq, chain: "base", address: HOME_USDC, decimals: 6, contra: { chain: "arc", asset: ARC_USDC, decimals: 6 } }, 0);
+    expect(p).toMatchObject({ targetChain: "base", targetAsset: HOME_USDC, contraChain: "arc", contraAsset: ARC_USDC, side: "buy", funderAddress: WALLET, recipientAddress: WALLET });
+    expect(p.flashIntegratorFeeBps).toBeUndefined();
+  });
+});

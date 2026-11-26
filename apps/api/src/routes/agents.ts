@@ -1,5 +1,6 @@
 import { agentMessageSchema, agentMoneySchema, createAgentSchema, updateAgentSchema } from "@frontrun/core";
 import {
+  agentArcMove,
   agentDetail,
   agentModels,
   createAgent,
@@ -59,6 +60,10 @@ export async function registerAgentRoutes(app: FastifyInstance) {
     const user = await requireTrader(req);
     return runAgentNow(user, idParam.parse(req.params).id);
   });
+
+  app.get("/v1/agents/:id/arc-move", async (req) => agentArcMove(await requireUser(req), idParam.parse(req.params).id, false));
+
+  app.post("/v1/agents/:id/arc-move", { config: { rateLimit: { max: 5, timeWindow: "1 hour" } } }, async (req) => agentArcMove(await requireUser(req), idParam.parse(req.params).id, true));
 
   app.post("/v1/agents/:id/withdraw", { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } }, async (req) => {
     const user = await requireUser(req);

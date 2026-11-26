@@ -26,6 +26,7 @@ export * from "./trading/sponsor";
 export * from "./trading/orders";
 export * from "./trading/copy";
 export * from "./trading/policy";
+export * from "./trading/move";
 export * from "./agents/service";
 export * from "./agents/runner";
 export * from "./agents/models";

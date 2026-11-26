@@ -230,6 +230,13 @@ function legFeeBps(leg: RouteRequest): number {
 }
 
 /** Quotes one step, and keeps its fee so the order that follows signs for the same one. */
+/** A quote for moving someone's own USDC between chains, which carries no app fee. */
+export async function quoteTransfer(req: RouteRequest): Promise<ProviderQuote> {
+  const started = Date.now();
+  const raw = { ...(await requestQuote(req, 0)), feeBps: 0 };
+  return quoteToProvider(raw, req, Date.now() - started);
+}
+
 export async function quoteLeg(leg: RouteRequest, signal?: AbortSignal): Promise<FlashQuoteRaw> {
   const feeBps = legFeeBps(leg);
   return { ...(await requestQuote(leg, feeBps, signal)), feeBps };

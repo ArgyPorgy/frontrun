@@ -12,6 +12,7 @@ import {
   modelShortName,
   toBaseUnits,
   type AgentDetailView,
+  type ArcMoveView,
   type AgentMessageView,
   type AgentRunView,
   type AgentsView,
@@ -34,6 +35,7 @@ import { listOrders } from "../trading/orders";
 import { approveFlash } from "../signerOps";
 import { buildPortfolio, ensureDevWallets, follow, toSummary, type UserRow } from "../users";
 import { registerAgentBuilderCode } from "../builder-codes";
+import { arcMoveStatus, moveArcUsdcToBase } from "../trading/move";
 import { agentModels, modelGatewayConfigured } from "./models";
 
 export type AgentRow = typeof schema.agents.$inferSelect;
@@ -255,6 +257,12 @@ export async function sendAgentMessage(owner: { id: string }, id: string, body: 
   if (!modelGatewayConfigured()) throw conflict("agents_unavailable", "AI models aren't connected on this server yet.");
   await db().insert(schema.agentMessages).values({ agentId: id, role: "owner", body });
   return listAgentMessages(owner, id);
+}
+
+/** An agent's wallet can hold Arc USDC from before the move. Its owner moves it to Base the same way. */
+export async function agentArcMove(owner: { id: string }, id: string, move: boolean): Promise<ArcMoveView> {
+  const { user } = await ownedAgent(owner, id);
+  return move ? moveArcUsdcToBase(user.id) : arcMoveStatus(user.id);
 }
 
 export async function runAgentNow(owner: { id: string }, id: string): Promise<AgentDetailView> {

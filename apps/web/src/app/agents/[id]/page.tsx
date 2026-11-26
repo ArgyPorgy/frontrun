@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { AgentBadge, AgentForm, thinkLabel, type AgentFormValues } from "@/components/agents";
+import { AgentArcMove } from "@/components/arc-move";
 import { Avatar, Button, EmptyState, Pct, RowSkeletons, Segmented, Sheet, Stat, TokenIcon } from "@/components/ui";
 import { api, errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -228,6 +229,7 @@ export default function AgentPage() {
           <Stat label="In positions" value={formatUsd(invested.toFixed())} />
           <Stat label="Score" value={a.score ?? "—"} sub={`${formatUsd(a.spentTodayUsd)} of ${formatUsd(a.dailyLimitUsd)} today`} />
         </div>
+        <AgentArcMove agentId={a.id} />
         {waitingForFunds && <p className="mt-2 rounded-xl border border-warn/40 bg-warn/10 px-3 py-2 text-sm">It won't think until it has at least $1 to trade with. Send it some USDC to start.</p>}
         <div className="mt-3 grid grid-cols-2 gap-2">
           <Button onClick={() => setMoney("fund")}>Send USDC</Button>

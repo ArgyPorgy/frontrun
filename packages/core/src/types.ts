@@ -133,6 +133,12 @@ export interface MeView extends UserSummary {
   termsAccepted: boolean;
 }
 
+/** USDC still on Arc from before Base became home, and any move of it that's under way. */
+export interface ArcMoveView {
+  arcUsdc: string;
+  pending: { amountUsd: string; status: TradeStatus; startedAt: string } | null;
+}
+
 export interface BalanceView {
   usdc: string;
   /** What a trade can use. */

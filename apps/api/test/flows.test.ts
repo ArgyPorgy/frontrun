@@ -1657,3 +1657,11 @@ describe("analytics", () => {
     }
   });
 });
+
+describe("moving Arc USDC to Base", () => {
+  it("has nothing to move in paper mode, where balances already live on Base", async () => {
+    const { client } = await loginFunded("arcmover");
+    expect(await client.arcMove()).toEqual({ arcUsdc: "0", pending: null });
+    await expectApiError(client.moveArcToBase(), "not_live");
+  });
+});

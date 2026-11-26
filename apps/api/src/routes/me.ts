@@ -19,7 +19,7 @@ import {
   paperWithdraw,
   schema,
   updateProfile,
-  usdcBalance, ensureGasForWithdrawal } from "@frontrun/server";
+  usdcBalance, ensureGasForWithdrawal, arcMoveStatus, moveArcUsdcToBase } from "@frontrun/server";
 import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -68,6 +68,10 @@ export async function registerMeRoutes(app: FastifyInstance) {
     const user = await requireUser(req);
     return { sent: isPaperMode() ? false : await ensureGasForWithdrawal(user.id) };
   });
+
+  app.get("/v1/me/arc-move", async (req) => arcMoveStatus((await requireUser(req)).id));
+
+  app.post("/v1/me/arc-move", { config: { rateLimit: { max: 5, timeWindow: "1 hour" } } }, async (req) => moveArcUsdcToBase((await requireUser(req)).id));
 
   app.get("/v1/me/balance", async (req) => {
     const user = await requireUser(req);

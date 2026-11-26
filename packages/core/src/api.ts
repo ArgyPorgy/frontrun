@@ -5,6 +5,7 @@ import type { CreateAgentInput, UpdateAgentInput } from "./schemas";
 import type { CopySettingInput } from "./schemas";
 import type {
   ApiErrorBody,
+  ArcMoveView,
   BalanceView,
   Candle,
   BasketToken,
@@ -100,6 +101,10 @@ export class ApiClient {
   updateMe = (body: { username?: string; avatarUrl?: string | null }) => this.request<MeView>("PATCH", "/v1/me", { body });
   balance = () => this.request<BalanceView>("GET", "/v1/me/balance");
   prepareWithdrawal = () => this.request<{ sent: boolean }>("POST", "/v1/me/withdraw/gas");
+  arcMove = () => this.request<ArcMoveView>("GET", "/v1/me/arc-move");
+  moveArcToBase = () => this.request<ArcMoveView>("POST", "/v1/me/arc-move");
+  agentArcMove = (id: string) => this.request<ArcMoveView>("GET", `/v1/agents/${id}/arc-move`);
+  moveAgentArcToBase = (id: string) => this.request<ArcMoveView>("POST", `/v1/agents/${id}/arc-move`);
   acceptTerms = (version: string) => this.request<MeView>("POST", "/v1/me/terms", { body: { version } });
 
   marketList = (query: { tab: "trending" | "new"; chain?: ChainKey }) =>

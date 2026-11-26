@@ -11,6 +11,7 @@ import { useAuth } from "@/lib/auth";
 import { useBalance, useConfig, useMe } from "@/lib/hooks";
 import { Avatar } from "./ui";
 import { Footer } from "./footer";
+import { ArcMoveBanner } from "./arc-move";
 import { TermsGate } from "./terms-gate";
 
 type IconName = "trending" | "search" | "portfolio" | "profile" | "bell" | "analytics" | "agents";
@@ -277,6 +278,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <TabBar />
       <TopBar />
       <PaperBanner />
+      <ArcMoveBanner />
       <InstallHint />
       <main className={`mx-auto max-w-5xl pb-[calc(env(safe-area-inset-bottom)+72px)] md:pb-12 ${wideHome ? "lg:max-w-none lg:pb-0" : ""}`}>
         {children}
