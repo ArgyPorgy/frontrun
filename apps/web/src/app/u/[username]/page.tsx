@@ -7,6 +7,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import { AgentBadge } from "@/components/agents";
 import { CopySheet, useCopySettings } from "@/components/copy-trade";
+import { LendingActionRow, PositionCard } from "@/components/lending";
 import { PerpPositionRow } from "@/components/perps";
 import { ReputationCard } from "@/components/reputation";
 import { ThesisCard } from "@/components/thesis-card";
@@ -41,7 +42,7 @@ export default function ProfilePage() {
   const { status, login } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [tab, setTab] = useState<"theses" | "positions" | "perps">("theses");
+  const [tab, setTab] = useState<"theses" | "positions" | "perps" | "lending">("theses");
   const [menu, setMenu] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
   const copy = useCopySettings();
@@ -50,6 +51,7 @@ export default function ProfilePage() {
   const theses = useQuery({ queryKey: ["theses", "user", username], queryFn: () => api.theses({ username, limit: 50 }) });
   const positions = useQuery({ queryKey: ["user-positions", username], queryFn: () => api.userPositions(username), enabled: tab === "positions" });
   const perps = useQuery({ queryKey: ["user-perps", username], queryFn: () => api.userPerps(username), enabled: tab === "perps" });
+  const lending = useQuery({ queryKey: ["user-lending", username], queryFn: () => api.userLending(username), enabled: tab === "lending" });
 
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["profile", username] });
   const follow = useMutation({
@@ -149,6 +151,7 @@ export default function ProfilePage() {
           { value: "theses", label: `Thesis ${p.stats.theses}` },
           { value: "positions", label: "Positions" },
           { value: "perps", label: "Perps" },
+          { value: "lending", label: "Lending" },
         ]}
       />
       {tab === "theses" ? (
@@ -162,6 +165,25 @@ export default function ProfilePage() {
           </div>
         ) : (
           <EmptyState title="No thesis posts yet" />
+        )
+      ) : tab === "lending" ? (
+        lending.isLoading ? (
+          <RowSkeletons count={3} />
+        ) : lending.data && (lending.data.positions.length || lending.data.actions.length) ? (
+          <div className="px-4">
+            <div className="space-y-2 pt-2">
+              {lending.data.positions.map((p) => (
+                <PositionCard key={p.market.id} p={p} />
+              ))}
+            </div>
+            <div className="divide-y divide-line/60">
+              {lending.data.actions.map((a) => (
+                <LendingActionRow key={a.id} a={a} />
+              ))}
+            </div>
+          </div>
+        ) : (
+          <EmptyState title="No lending yet" />
         )
       ) : tab === "perps" ? (
         perps.isLoading ? (

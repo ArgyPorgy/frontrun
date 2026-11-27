@@ -113,6 +113,13 @@
       "when": 1795725457588,
       "tag": "0015_perp_positions",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1795765173635,
+      "tag": "0016_lending_actions",
+      "breakpoints": true
     }
   ]
 }

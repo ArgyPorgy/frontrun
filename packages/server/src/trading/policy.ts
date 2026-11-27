@@ -1,4 +1,4 @@
-import { ARC_USDC, FLASH_ALLOWANCE, HOME_USDC, PERMIT2, UNISWAP_ARC, UNISWAP_BASE, VERANTA_BASE } from "@frontrun/core";
+import { AAVE_BASE, ARC_USDC, FLASH_ALLOWANCE, HOME_USDC, MORPHO_BASE, MORPHO_USDC_VAULTS, PERMIT2, UNISWAP_ARC, UNISWAP_BASE, VERANTA_BASE } from "@frontrun/core";
 import { SMART_ACCOUNT_IMPLEMENTATION } from "./sponsor";
 
 /** LI.FI's contract on Arc, read from a live quote. Add others here if the route's contract changes. */
@@ -7,8 +7,10 @@ const LIFI_ARC = "0xA4072583658Fae592A3506A42431cb6316a8d40b";
 /** Privy's docs don't say how addresses are compared, so both spellings are listed. */
 const anyCase = (addresses: string[]) => [...new Set(addresses.flatMap((a) => [a, a.toLowerCase()]))];
 
-const ROUTERS = anyCase([VERANTA_BASE.tradingRouter, UNISWAP_BASE.universalRouter20, UNISWAP_ARC.universalRouter212, UNISWAP_ARC.v3SwapRouter02, LIFI_ARC]);
-const APPROVABLE_SPENDERS = anyCase([VERANTA_BASE.tradingStorage, FLASH_ALLOWANCE, PERMIT2, UNISWAP_ARC.v3SwapRouter02, LIFI_ARC]);
+/** Lending on Base: Aave's pool, Morpho itself, and the curated Morpho vaults the app offers. */
+const LENDING = [AAVE_BASE.pool, MORPHO_BASE.blue, ...MORPHO_USDC_VAULTS.map((v) => v.address)];
+const ROUTERS = anyCase([VERANTA_BASE.tradingRouter, UNISWAP_BASE.universalRouter20, UNISWAP_ARC.universalRouter212, UNISWAP_ARC.v3SwapRouter02, LIFI_ARC, ...LENDING]);
+const APPROVABLE_SPENDERS = anyCase([VERANTA_BASE.tradingStorage, FLASH_ALLOWANCE, PERMIT2, UNISWAP_ARC.v3SwapRouter02, LIFI_ARC, ...LENDING]);
 
 const APPROVE_ABI = [
   {

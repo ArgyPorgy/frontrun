@@ -11,6 +11,7 @@ import { createQuote, executeTrade, isPaperMode, pollActiveTrades, signerStatus,
 import { gaslessEnabled } from "../trading/sponsor";
 import { buildPortfolio, type UserRow } from "../users";
 import type { ToolSpec } from "./models";
+import { LENDING_TOOLS, isLendingTool, runLendingTool } from "./lending-tools";
 import { PERP_TOOLS, agentPerps, isPerpTool, runPerpTool } from "./perp-tools";
 import { ensureAgentCanTrade, type AgentRow } from "./service";
 
@@ -162,6 +163,7 @@ export const AGENT_TOOLS: ToolSpec[] = [
     },
   },
   ...PERP_TOOLS,
+  ...LENDING_TOOLS,
 ];
 
 function toChain(value: unknown): ChainKey {
@@ -464,6 +466,7 @@ export async function runTool(name: string, rawArgs: string, ctx: ToolContext): 
         return await thesis(ctx, args);
       default:
         if (isPerpTool(name)) return await runPerpTool(name, args, ctx);
+        if (isLendingTool(name)) return await runLendingTool(name, args, ctx);
         return { result: { error: `There's no tool called ${name}.` }, summary: `Asked for a tool that doesn't exist: ${plain(name)}`, ok: false, acted: false };
     }
   } catch (err) {

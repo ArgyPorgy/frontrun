@@ -4,6 +4,7 @@ import { formatPrice, type PerpAssetClass } from "@frontrun/core";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
+import { DesksSwitch } from "@/components/lending";
 import {
   ASSET_LABELS,
   MarketHours,
@@ -50,6 +51,7 @@ export default function PerpsPage() {
     <div>
       <PageTitle>Perps</PageTitle>
       <div className="px-4 pb-8">
+        <DesksSwitch current="perps" />
         <p className="mb-4 text-sm text-muted">
           Long or short stocks, crypto, FX and metals with leverage. Settled in
           USDC on Base through Veranta.

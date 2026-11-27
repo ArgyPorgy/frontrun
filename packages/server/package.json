@@ -20,7 +20,8 @@
     "registry:deploy": "tsx scripts/deploy-registry.ts",
     "registry:smoke": "tsx scripts/registry-smoke.ts",
     "live:test": "tsx scripts/test-live-pipeline.ts",
-    "sponsor:test": "tsx scripts/test-sponsorship.ts"
+    "sponsor:test": "tsx scripts/test-sponsorship.ts",
+    "lending:markets": "tsx scripts/create-stock-markets.ts"
   },
   "dependencies": {
     "@frontrun/core": "workspace:*",

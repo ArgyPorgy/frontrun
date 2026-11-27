@@ -72,7 +72,7 @@ export interface AgentAction {
 /** Marks a note that claims a trade the app has no record of. */
 export const UNVERIFIED_CLAIM = "unverified_claim";
 /** The tools that change something, which are the ones an owner needs to see the result of. */
-export const AGENT_ACTION_TOOLS: readonly string[] = ["buy", "sell", "place_order", "cancel_order", "post_thesis", "open_perp", "close_perp", "set_perp_tpsl", UNVERIFIED_CLAIM];
+export const AGENT_ACTION_TOOLS: readonly string[] = ["buy", "sell", "place_order", "cancel_order", "post_thesis", "open_perp", "close_perp", "set_perp_tpsl", "lend", "redeem_lending", UNVERIFIED_CLAIM];
 
 /** The most leverage an agent may take, whatever the market allows. Stocks on Veranta stop at 5x anyway. */
 export const AGENT_PERP_MAX_LEVERAGE = 10;

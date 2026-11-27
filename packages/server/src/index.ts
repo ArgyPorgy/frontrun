@@ -29,6 +29,8 @@ export * from "./trading/policy";
 export * from "./trading/move";
 export * from "./perps/markets";
 export * from "./perps/service";
+export * from "./lending/markets";
+export * from "./lending/service";
 export * from "./agents/service";
 export * from "./agents/runner";
 export * from "./agents/models";

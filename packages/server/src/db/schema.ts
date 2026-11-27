@@ -466,3 +466,21 @@ export const perpPositions = pgTable("perp_positions", {
   openedAt: ts("opened_at"),
   closedAt: ts("closed_at"),
 }, (t) => [index("perp_positions_user").on(t.userId, t.createdAt), index("perp_positions_status").on(t.status)]);
+
+/** Every lending move: supplying and withdrawing USDC, posting and taking back collateral, borrowing and repaying. */
+export const lendingActions = pgTable("lending_actions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  venue: text("venue", { enum: ["aave", "morpho_vault", "morpho_market"] }).notNull(),
+  marketId: text("market_id").notNull(),
+  marketName: text("market_name").notNull(),
+  action: text("action", { enum: ["supply", "withdraw", "supply_collateral", "withdraw_collateral", "borrow", "repay"] }).notNull(),
+  asset: text("asset").notNull(),
+  amount: usd("amount").notNull(),
+  status: text("status", { enum: ["pending", "done", "failed"] }).notNull().default("pending"),
+  txHash: text("tx_hash"),
+  /** Set when an agent did it, with the reasoning it gave. */
+  agentReason: text("agent_reason"),
+  error: text("error"),
+  createdAt: ts("created_at").notNull().defaultNow(),
+}, (t) => [index("lending_actions_user").on(t.userId, t.createdAt)]);

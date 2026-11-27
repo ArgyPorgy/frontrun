@@ -1,6 +1,7 @@
 import type { ChainKey } from "./chains";
 import type { AgentDetailView, AgentMessageView, AgentModelView, AgentRunView, AgentsView } from "./agents";
 import type { OrderType } from "./routing";
+import type { LendingActionInput, LendingActionView, LendingMarketView, LendingPositionView, LendingSummaryView } from "./lending";
 import type { PerpAssetClass, PerpMarketView, PerpOpenInput, PerpPositionView } from "./perps";
 import type { CreateAgentInput, UpdateAgentInput } from "./schemas";
 import type { CopySettingInput } from "./schemas";
@@ -114,6 +115,13 @@ export class ApiClient {
   closePerp = (id: string, percent = 100) => this.request<PerpPositionView>("POST", `/v1/perps/positions/${id}/close`, { body: { percent } });
   updatePerpTpSl = (id: string, body: { takeProfit?: number | null; stopLoss?: number | null }) => this.request<PerpPositionView>("PUT", `/v1/perps/positions/${id}/tpsl`, { body });
   updatePerpMargin = (id: string, body: { action: "add" | "remove"; amountUsd: number }) => this.request<PerpPositionView>("POST", `/v1/perps/positions/${id}/margin`, { body });
+  lendingMarkets = () => this.request<{ items: LendingMarketView[] }>("GET", "/v1/lending/markets");
+  lendingMe = () => this.request<LendingSummaryView>("GET", "/v1/lending/me");
+  lendingActions = () => this.request<{ items: LendingActionView[] }>("GET", "/v1/lending/actions");
+  previewLending = (body: LendingActionInput) => this.request<{ asset: string; amount: string; steps: string[] }>("POST", "/v1/lending/preview", { body });
+  lend = (body: LendingActionInput) => this.request<LendingActionView>("POST", "/v1/lending/actions", { body });
+  userLending = (username: string) =>
+    this.request<{ positions: LendingPositionView[]; totalSuppliedUsd: string; totalBorrowedUsd: string; actions: LendingActionView[] }>("GET", `/v1/users/${username}/lending`);
   acceptTerms = (version: string) => this.request<MeView>("POST", "/v1/me/terms", { body: { version } });
 
   marketList = (query: { tab: "trending" | "new"; chain?: ChainKey }) =>
