@@ -30,12 +30,13 @@ export function HealthBadge({ value }: { value: number | null }) {
   return <span className={`num text-xs font-medium ${tone}`}>Health {value >= 100 ? "99+" : value.toFixed(2)}</span>;
 }
 
-/** Perps and lending sit side by side, so each page links to the other. */
-export function DesksSwitch({ current }: { current: "perps" | "lend" }) {
+/** Stocks, perps and lending sit side by side, so each page links to the others. */
+export function DesksSwitch({ current }: { current: "stocks" | "perps" | "lend" }) {
   return (
     <div className="mb-4 flex gap-1" role="navigation" aria-label="Desks">
       {(
         [
+          ["stocks", "/stocks", "Stocks"],
           ["perps", "/perps", "Perps"],
           ["lend", "/lend", "Lend & borrow"],
         ] as const

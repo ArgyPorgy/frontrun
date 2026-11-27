@@ -11,6 +11,7 @@ export * from "./notifications";
 export * from "./users";
 export * from "./theses";
 export * from "./stats";
+export * from "./stocks";
 export * from "./trackers";
 export * from "./reconcile";
 export * from "./anchoring";

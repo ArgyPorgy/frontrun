@@ -82,7 +82,7 @@ function Icon({ name, active }: { name: IconName; active?: boolean }) {
 
 const TABS: Array<{ href: string; label: string; icon: IconName; match: (p: string) => boolean }> = [
   { href: "/discovery", label: "Discover", icon: "trending", match: (p) => p === "/discovery" || p.startsWith("/token") || p.startsWith("/thesis") || p.startsWith("/leaderboard") },
-  { href: "/perps", label: "Perps", icon: "perps", match: (p) => p.startsWith("/perps") || p.startsWith("/lend") },
+  { href: "/stocks", label: "Stocks", icon: "perps", match: (p) => p.startsWith("/stocks") || p.startsWith("/perps") || p.startsWith("/lend") },
   { href: "/portfolio", label: "Portfolio", icon: "portfolio", match: (p) => p.startsWith("/portfolio") || p.startsWith("/deposit") },
   { href: "/agents", label: "Agents", icon: "agents", match: (p) => p.startsWith("/agents") },
   { href: "/analytics", label: "Analytics", icon: "analytics", match: (p) => p.startsWith("/analytics") },
@@ -119,6 +119,7 @@ function TabBar() {
 
 const WIDE_NAV: Array<{ href: string; label: string; match: (p: string) => boolean }> = [
   { href: "/discovery", label: "Discover", match: (p) => p === "/discovery" || p.startsWith("/token") || p.startsWith("/thesis") },
+  { href: "/stocks", label: "Stocks", match: (p) => p.startsWith("/stocks") },
   { href: "/perps", label: "Perps", match: (p) => p.startsWith("/perps") },
   { href: "/lend", label: "Lend", match: (p) => p.startsWith("/lend") },
   { href: "/portfolio", label: "Portfolio", match: (p) => p.startsWith("/portfolio") },

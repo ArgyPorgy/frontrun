@@ -115,12 +115,21 @@ export async function raceQuotes(req: RouteRequest, opts: { liquidityUsd: string
   return { winner, alternatives };
 }
 
+/** What the quote pays or gets per token, in USDC. */
+export function tradePrice(req: RouteRequest, quote: ProviderQuote): string | null {
+  const out = D(quote.expectedOut || 0);
+  if (out.lte(0)) return null;
+  if (req.side === "buy") return req.usdcIn ? D(req.usdcIn).div(out).toFixed() : null;
+  return req.qtyIn && D(req.qtyIn).gt(0) ? out.div(req.qtyIn).toFixed() : null;
+}
+
 export function applyGuardrails(
   req: RouteRequest,
   quote: ProviderQuote,
-  token: { liquidityUsd: string | null; riskFlagged: boolean; denylisted: boolean },
+  token: { liquidityUsd: string | null; riskFlagged: boolean; denylisted: boolean; sharePriceUsd?: string | null; marketOpen?: boolean },
 ): GuardrailResult {
   return evaluateGuardrails({
+    stock: token.sharePriceUsd !== undefined ? { sharePriceUsd: token.sharePriceUsd, tradePriceUsd: tradePrice(req, quote), marketOpen: token.marketOpen ?? true } : null,
     side: req.side,
     notionalUsd: req.notionalUsd,
     priceImpact: quote.priceImpact,

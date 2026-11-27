@@ -58,7 +58,8 @@ import {
 import { CHANNELS, KEYS, publish, redis } from "../redis";
 import { statsChanged } from "../stats";
 import { applyGuardrails, raceQuotes, withinTolerance, type RaceAlternative } from "../routing/engine";
-import { FLASH_ALLOWANCE, HOME_CHAIN, HOME_USDC, HOME_USDC_DECIMALS } from "@frontrun/core";
+import { FLASH_ALLOWANCE, HOME_CHAIN, HOME_USDC, HOME_USDC_DECIMALS, stockMarketStatus, stockToken } from "@frontrun/core";
+import { sharePriceFor } from "../stocks";
 import { loadSigningWallets, performServerStep, serverSigningConfigured, solanaSigningConfigured, type SigningWallets } from "./signer";
 import { gaslessEnabled } from "./sponsor";
 
@@ -83,7 +84,7 @@ export interface QuoteRecord {
   alternatives: RaceAlternative[];
   guardrails: GuardrailResult;
   token: TokenRef;
-  tokenSafety: { liquidityUsd: string | null; riskFlagged: boolean; denylisted: boolean };
+  tokenSafety: { liquidityUsd: string | null; riskFlagged: boolean; denylisted: boolean; sharePriceUsd?: string | null; marketOpen?: boolean };
   copy: QuoteView["copy"];
   slippage: number;
   createdAt: number;
@@ -336,10 +337,13 @@ export async function createQuote(userId: string, input: QuoteRequest): Promise<
     const message = D(notionalUsd).lt(1) ? "No route can take an amount this small. Try a larger one." : "No route is available for this trade right now.";
     throw unprocessable("no_route", message, { alternatives });
   }
-  const tokenSafety = {
+  // A tokenized stock is also checked against Chainlink's share price.
+  const share = stockToken(address) && chain === HOME_CHAIN ? await sharePriceFor(chain, address) : undefined;
+  const tokenSafety: QuoteRecord["tokenSafety"] = {
     liquidityUsd: detail.liquidityUsd,
     riskFlagged: detail.riskFlagged,
     denylisted: false,
+    ...(share !== undefined ? { sharePriceUsd: share?.priceUsd ?? null, marketOpen: stockMarketStatus().open } : {}),
   };
   const token: TokenRef = { chain, address, symbol: detail.symbol, name: detail.name, imageUrl: detail.imageUrl };
   const now = Date.now();

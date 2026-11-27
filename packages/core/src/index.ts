@@ -10,6 +10,7 @@ export * from "./builder";
 export * from "./terms";
 export * from "./perps";
 export * from "./lending";
+export * from "./stocks";
 export * from "./indicators";
 export * from "./risk";
 export * from "./format";

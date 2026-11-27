@@ -16,6 +16,7 @@ import {
   notFound,
   positionForToken,
   searchTokens,
+  stocksView,
 } from "@frontrun/server";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -53,6 +54,9 @@ export async function registerMarketRoutes(app: FastifyInstance) {
   });
 
   app.get("/v1/stats", async () => getPublicStats());
+
+  // Coinbase's tokenized stocks on Base, with Chainlink's share price next to the pool price.
+  app.get("/v1/stocks", async () => stocksView());
 
   app.get("/v1/tokens/:chain/:address", async (req) => {
     const { chain, address } = parseToken(req.params);

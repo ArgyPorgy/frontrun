@@ -1,4 +1,5 @@
 import { D, type Numeric } from "./money";
+import { STOCK_ORACLE_GAP, stockPriceGap } from "./stocks";
 
 export type ProviderId = "flash" | "uniswap" | "uniswap_direct" | "lifi" | "paper";
 
@@ -62,12 +63,17 @@ export interface GuardrailInput {
   poolLiquidityUsd: Numeric | null;
   riskFlagged: boolean;
   denylisted: boolean;
+  /** Set for Coinbase's tokenized stocks, whose price can be checked against the share price. */
+  stock?: { sharePriceUsd: string | null; tradePriceUsd: string | null; marketOpen: boolean } | null;
 }
 
 export type GuardrailCode =
   | "price_impact_high"
   | "price_impact_warn"
   | "size_over_pool_share"
+  | "stock_price_gap"
+  | "stock_price_gap_warn"
+  | "stock_market_closed"
   | "risk_flagged"
   | "token_denied";
 
@@ -96,6 +102,20 @@ const SMALL_TRADE_USD = 10;
 export function evaluateGuardrails(input: GuardrailInput): GuardrailResult {
   const result: GuardrailResult = { blocked: [], confirm: [], warnings: [] };
   const hard = input.side === "buy" ? result.blocked : result.confirm;
+
+  if (input.stock?.sharePriceUsd && input.stock.tradePriceUsd) {
+    const gap = stockPriceGap(input.side, input.stock.tradePriceUsd, input.stock.sharePriceUsd);
+    const pct = (gap * 100).toFixed(1);
+    const versus = input.side === "buy" ? "more than" : "less than";
+    if (gap > STOCK_ORACLE_GAP.block) {
+      hard.push({ code: "stock_price_gap", message: `This price is ${pct}% ${versus} the share price, so the pool is out of line with the stock.`, attended: true });
+    } else if (gap > STOCK_ORACLE_GAP.warn) {
+      result.warnings.push({ code: "stock_price_gap_warn", message: `This price is ${pct}% ${versus} the share price.` });
+    }
+  }
+  if (input.stock && !input.stock.marketOpen) {
+    result.warnings.push({ code: "stock_market_closed", message: "The stock market is closed until Sunday evening, New York time. The token still trades, but its price can drift from the share price until it reopens." });
+  }
 
   if (input.denylisted) {
     (input.side === "buy" ? result.blocked : result.confirm).push({

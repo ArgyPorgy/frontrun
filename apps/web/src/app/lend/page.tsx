@@ -2,6 +2,7 @@
 
 import { formatUsd, type LendingAction, type LendingMarketView } from "@frontrun/core";
 import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import { useState } from "react";
 import { DesksSwitch, LendingActionRow, LendingSheet, MarketRow, PositionCard } from "@/components/lending";
 import { EmptyState, PageTitle, RowSkeletons, Segmented, Stat } from "@/components/ui";
@@ -90,7 +91,11 @@ export default function LendPage() {
         )}
         {tab === "borrow" && (
           <p className="mt-4 text-xs leading-snug text-faint">
-            Front Run created the TSLA, AMZN and MSFT markets on Morpho, using Morpho's own oracle factory and Chainlink's Coinbase price feeds, the same setup as Morpho's listed stock markets. New markets start with little USDC to borrow until people lend into them.
+            Need collateral?{" "}
+            <Link href="/stocks" className="font-medium text-signal">
+              Buy stock tokens
+            </Link>{" "}
+            first. Front Run created the TSLA, AMZN and MSFT markets on Morpho, using Morpho's own oracle factory and Chainlink's Coinbase price feeds, the same setup as Morpho's listed stock markets. New markets start with little USDC to borrow until people lend into them.
           </p>
         )}
       </div>

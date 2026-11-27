@@ -12,6 +12,7 @@ import { gaslessEnabled } from "../trading/sponsor";
 import { buildPortfolio, type UserRow } from "../users";
 import type { ToolSpec } from "./models";
 import { LENDING_TOOLS, isLendingTool, runLendingTool } from "./lending-tools";
+import { stocksView } from "../stocks";
 import { PERP_TOOLS, agentPerps, isPerpTool, runPerpTool } from "./perp-tools";
 import { ensureAgentCanTrade, type AgentRow } from "./service";
 
@@ -65,8 +66,9 @@ export const AGENT_TOOLS: ToolSpec[] = [
     type: "function",
     function: {
       name: "list_tokens",
-      description: "Tokens that are trending or newly listed right now, with price, liquidity, market cap, volume and recent price change. New pools are far riskier.",
-      parameters: { type: "object", properties: { list: { type: "string", enum: ["trending", "new"] }, chain: chainProp }, required: ["list"] },
+      description:
+        "Tokens that are trending or newly listed right now, with price, liquidity, market cap, volume and recent price change. New pools are far riskier. list \"stocks\" gives Coinbase's tokenized stocks on Base (NVDA, TSLA, AAPL and others): one token tracks one share, with Chainlink's share price next to the token's own price, and whether the stock market is open.",
+      parameters: { type: "object", properties: { list: { type: "string", enum: ["trending", "new", "stocks"] }, chain: chainProp }, required: ["list"] },
     },
   },
   {
@@ -316,7 +318,32 @@ async function portfolio(ctx: ToolContext): Promise<ToolOutcome> {
   };
 }
 
+async function stocks(): Promise<ToolOutcome> {
+  const view = await stocksView();
+  return {
+    result: {
+      stockMarket: view.market.open ? `open until ${view.market.nextChange}` : `closed until ${view.market.nextChange}; the tokens still trade, but can drift from the share price`,
+      stocks: view.stocks.map((s) => ({
+        ticker: s.ticker,
+        symbol: s.symbol,
+        name: s.name,
+        chain: "base",
+        address: s.address,
+        sharePriceUsd: s.sharePriceUsd,
+        tokenPriceUsd: s.priceUsd,
+        change24hPct: s.priceChange24hPct,
+        liquidityUsd: s.liquidityUsd,
+        volume24hUsd: s.volume24hUsd,
+      })),
+    },
+    summary: "Looked at tokenized stocks",
+    ok: true,
+    acted: false,
+  };
+}
+
 async function tokens(args: Record<string, unknown>): Promise<ToolOutcome> {
+  if (args.list === "stocks") return stocks();
   const list = args.list === "new" ? "new" : "trending";
   const chain = args.chain ? toChain(args.chain) : undefined;
   const items = await marketList(list, chain);

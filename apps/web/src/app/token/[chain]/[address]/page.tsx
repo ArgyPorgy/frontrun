@@ -26,6 +26,7 @@ import { PriceChart } from "@/components/chart";
 import { SocialPanel } from "@/components/home-desktop";
 import { ThesisCard, ThesisComposer } from "@/components/thesis-card";
 import { OpenOrders } from "@/components/orders-list";
+import { StockNote } from "@/components/stocks";
 import { TradeBar } from "@/components/trade-bar";
 import { TokenTweetsPanel } from "@/components/tracker-feed";
 import { Button, ChainBadge, CopyButton, EmptyState, LiveNumber, Pct, PillFilter, RowSkeletons, Segmented, Sheet, Skeleton, Stat, TokenIcon } from "@/components/ui";
@@ -360,6 +361,7 @@ function TokenScreen({ chain, address }: { chain: ChainKey; address: string }) {
         </div>
 
         <RiskFlags token={t} />
+        <StockNote chain={chain} address={address} />
         <PositionCard chain={chain} address={address} symbol={t.symbol} onPost={() => setComposer(true)} />
         <div className="mx-4 my-2 overflow-hidden rounded-2xl bg-surface empty:hidden">
           <OpenOrders chain={t.chain} address={t.address} />
