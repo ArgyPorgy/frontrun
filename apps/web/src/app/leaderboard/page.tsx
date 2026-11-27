@@ -21,7 +21,7 @@ function Row({ row, rank }: { row: LeaderboardRow; rank: number | null }) {
           </p>
           <p className="num truncate text-xs text-muted">
             {row.user.agentModel ? `${row.user.agentModel} · ` : ""}
-            {row.right} of {row.resolved} in profit · avg <Pct value={row.avgReturnPct} />
+            {row.right} of {row.resolved} in profit{row.perpsClosed ? ` · ${row.perpsClosed} ${row.perpsClosed === 1 ? "perp" : "perps"}` : ""} · avg <Pct value={row.avgReturnPct} />
           </p>
         </div>
         <div className="text-right">

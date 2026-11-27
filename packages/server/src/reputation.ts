@@ -4,6 +4,7 @@ import {
   PROOF_CHAIN,
   REPUTATION_REGISTRY_ARC,
   REPUTATION_REGISTRY_BASE,
+  perpPositionStats,
   reputationScore,
   type ClosedPositionStats,
   type LeaderboardGroup,
@@ -16,12 +17,13 @@ import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizz
 import { parseAbi, type Address } from "viem";
 import { isThesisSpecificFailure, relayerEnabled, relayerWrite } from "./anchoring";
 import { db, schema } from "./db/client";
+import { env } from "./env";
 import { logger } from "./logger";
 import { isPaperMode } from "./trading/service";
 import { toSummary } from "./users";
 
 /**
- * Turns closed positions into one score, and writes it to Arc per wallet, so any other app or contract can
+ * Turns closed positions, spot and perps, into one score, and writes it to Arc per wallet, so any other app or contract can
  * read a trader's record without asking us.
  */
 export const REPUTATION_REGISTRY_ABI = parseAbi([
@@ -122,10 +124,81 @@ async function closedPositions(userId?: string): Promise<Map<string, ClosedPosit
   return byUser;
 }
 
+/**
+ * Every closed perp, as one record entry each. Perps are public from the moment they open, so they count without
+ * a thesis. A partial close is booked as its own closed slice with the same open time, so slices are put back
+ * together first: one position, one entry. Paper perps only count on a paper copy of the app.
+ */
+async function closedPerps(userId?: string): Promise<Map<string, ClosedPositionStats[]>> {
+  const p = schema.perpPositions;
+  const rows = await db()
+    .select({
+      userId: p.userId,
+      pairIndex: p.pairIndex,
+      side: p.side,
+      status: p.status,
+      collateralUsd: p.collateralUsd,
+      leverage: p.leverage,
+      entryPrice: p.entryPrice,
+      stopLoss: p.stopLoss,
+      realizedPnlUsd: p.realizedPnlUsd,
+      feesUsd: p.feesUsd,
+      openedAt: p.openedAt,
+      closedAt: p.closedAt,
+    })
+    .from(p)
+    .innerJoin(schema.users, eq(schema.users.id, p.userId))
+    .where(
+      and(
+        inArray(p.status, ["closed", "liquidated"]),
+        eq(p.isPaper, env().TRADING_MODE === "paper"),
+        eq(schema.users.isBanned, false),
+        sql`${p.openedAt} is not null and ${p.closedAt} is not null`,
+        userId ? eq(p.userId, userId) : undefined,
+      ),
+    );
+  type Merged = { userId: string; side: "long" | "short"; collateral: number; leverage: number; entry: number | null; stop: number | null; pnl: number; fees: number; openedAt: Date; closedAt: Date; liquidated: boolean };
+  const merged = new Map<string, Merged>();
+  for (const r of rows) {
+    const key = `${r.userId}:${r.pairIndex}:${r.openedAt!.getTime()}`;
+    const m = merged.get(key);
+    const collateral = Number(r.collateralUsd);
+    if (!m) {
+      merged.set(key, {
+        userId: r.userId,
+        side: r.side,
+        collateral,
+        leverage: r.leverage,
+        entry: r.entryPrice === null ? null : Number(r.entryPrice),
+        stop: r.stopLoss === null ? null : Number(r.stopLoss),
+        pnl: Number(r.realizedPnlUsd ?? 0),
+        fees: Number(r.feesUsd),
+        openedAt: r.openedAt!,
+        closedAt: r.closedAt!,
+        liquidated: r.status === "liquidated",
+      });
+      continue;
+    }
+    m.collateral += collateral;
+    m.pnl += Number(r.realizedPnlUsd ?? 0);
+    m.fees += Number(r.feesUsd);
+    if (r.closedAt! > m.closedAt) m.closedAt = r.closedAt!;
+    m.stop ??= r.stopLoss === null ? null : Number(r.stopLoss);
+    m.liquidated ||= r.status === "liquidated";
+  }
+  const byUser = new Map<string, ClosedPositionStats[]>();
+  for (const m of merged.values()) {
+    const stats = perpPositionStats({ side: m.side, collateralUsd: m.collateral, leverage: m.leverage, entryPrice: m.entry, stopLoss: m.stop, realizedPnlUsd: m.pnl, feesUsd: m.fees, openedAt: m.openedAt, closedAt: m.closedAt, liquidated: m.liquidated });
+    byUser.set(m.userId, [...(byUser.get(m.userId) ?? []), stats]);
+  }
+  return byUser;
+}
+
 function scoreValues(r: Reputation) {
   return {
     score: r.score,
     closed: r.closed,
+    perpsClosed: r.perpsClosed,
     wins: r.wins,
     winRatePct: r.winRatePct,
     avgReturnPct: r.avgReturnPct,
@@ -139,7 +212,9 @@ function scoreValues(r: Reputation) {
 
 /** Recomputes scores. Runs after every sale for that seller, and for everyone on a timer. */
 export async function refreshReputation(opts: { userId?: string } = {}): Promise<number> {
-  const byUser = await closedPositions(opts.userId);
+  const [spot, perps] = await Promise.all([closedPositions(opts.userId), closedPerps(opts.userId)]);
+  const byUser = new Map(spot);
+  for (const [userId, list] of perps) byUser.set(userId, [...(byUser.get(userId) ?? []), ...list]);
   for (const [userId, positions] of byUser) {
     const reputation = reputationScore(positions);
     if (!reputation) continue;
@@ -157,6 +232,7 @@ function toReputation(row: ScoreRow): Reputation {
     score: row.score,
     provisional: row.closed < LEADERBOARD_MIN_RESOLVED,
     closed: row.closed,
+    perpsClosed: row.perpsClosed,
     wins: row.wins,
     winRatePct: row.winRatePct,
     avgReturnPct: row.avgReturnPct,
@@ -225,7 +301,15 @@ export async function leaderboard(limit = 50): Promise<{ items: LeaderboardRow[]
         .where(inArray(schema.positions.userId, ids))
         .groupBy(schema.positions.userId)
     : [];
-  const pnl = new Map(realized.map((r) => [r.userId, r.total]));
+  const perpRealized = ids.length
+    ? await db()
+        .select({ userId: schema.perpPositions.userId, total: sql<string>`sum(${schema.perpPositions.realizedPnlUsd})` })
+        .from(schema.perpPositions)
+        .where(and(inArray(schema.perpPositions.userId, ids), eq(schema.perpPositions.isPaper, env().TRADING_MODE === "paper")))
+        .groupBy(schema.perpPositions.userId)
+    : [];
+  const pnl = new Map(realized.map((r) => [r.userId, D(r.total ?? 0)]));
+  for (const r of perpRealized) pnl.set(r.userId, (pnl.get(r.userId) ?? D(0)).add(r.total ?? 0));
   const toRow = ({ score, user }: (typeof rows)[number], index: number): LeaderboardRow => ({
     rank: index + 1,
     user: toSummary(user),
@@ -236,6 +320,7 @@ export async function leaderboard(limit = 50): Promise<{ items: LeaderboardRow[]
     avgHoldSeconds: score.avgHoldSeconds,
     accuracy: score.winRatePct,
     resolved: score.closed,
+    perpsClosed: score.perpsClosed,
     right: score.wins,
     avgReturnPct: score.avgReturnPct,
     realizedPnlUsd: D(pnl.get(user.id) ?? 0).toFixed(),

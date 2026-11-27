@@ -120,6 +120,13 @@
       "when": 1795765173635,
       "tag": "0016_lending_actions",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1795766829770,
+      "tag": "0017_perps_in_reputation",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "reputation_scores" ADD COLUMN "perps_closed" integer DEFAULT 0 NOT NULL;

@@ -263,6 +263,8 @@ export interface LeaderboardRow {
   avgHoldSeconds: number;
   accuracy: number;
   resolved: number;
+  /** How many of the resolved positions were perps. */
+  perpsClosed: number;
   right: number;
   avgReturnPct: number;
   realizedPnlUsd: string;
@@ -449,6 +451,30 @@ export interface StatsView {
   daily: StatsBucket[];
   byChain: Array<{ chain: ChainKey; volumeUsd: string; revenueUsd: string; trades: number }>;
   recent: Array<{ id: string; side: "buy" | "sell"; amountUsd: string; filledAt: string; token: TokenRef }>;
+  perps: PerpStats;
+  lending: LendingStats;
+  /** What AI agents did, next to everyone. */
+  agents: { traders: number; spotTrades: number; perpsOpened: number; lendingMoves: number };
+}
+
+/** Perps opened through the app. Volume is position size, collateral times leverage, counted once when opened. */
+export interface PerpStats {
+  allTime: { volumeUsd: string; positions: number; traders: number; realizedPnlUsd: string };
+  last24h: { volumeUsd: string; positions: number };
+  openInterestUsd: string;
+  openPositions: number;
+  longPct: number | null;
+  markets: Array<{ symbol: string; volumeUsd: string; positions: number }>;
+  daily: Array<{ at: string; volumeUsd: string; positions: number }>;
+}
+
+/** Lending moves made through the app. Net figures are deposits minus withdrawals, without interest. */
+export interface LendingStats {
+  netSuppliedUsd: string;
+  netBorrowedUsd: string;
+  moves: number;
+  users: number;
+  markets: Array<{ name: string; venue: string; netSuppliedUsd: string; netBorrowedUsd: string; moves: number }>;
 }
 
 export interface OrderView {

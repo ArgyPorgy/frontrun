@@ -147,6 +147,106 @@ function PeriodTable({ buckets, hourly }: { buckets: StatsBucket[]; hourly: bool
   );
 }
 
+function Section({ title, note, children }: { title: string; note: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-3 pt-4">
+      <div>
+        <h2 className="text-lg font-semibold">{title}</h2>
+        <p className="text-xs text-muted">{note}</p>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function BarList({ title, rows }: { title: string; rows: Array<{ label: string; value: string; detail: string }> }) {
+  const top = Math.max(0, ...rows.map((r) => Number(r.value)));
+  return (
+    <section className="rounded-2xl border border-line bg-surface p-4">
+      <h3 className="text-sm font-medium text-muted">{title}</h3>
+      {rows.length ? (
+        <ul className="mt-3 space-y-3.5">
+          {rows.map((r) => (
+            <li key={r.label}>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="min-w-0 flex-1 truncate font-medium">{r.label}</span>
+                <span className="num font-medium">{formatUsd(r.value)}</span>
+              </div>
+              <div className="mt-1.5 h-1.5">
+                <div className="h-full rounded-r bg-signal" style={{ width: `${top > 0 ? Math.max((Number(r.value) / top) * 100, 1) : 0}%` }} />
+              </div>
+              <p className="num mt-1 text-xs text-muted">{r.detail}</p>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-xs text-faint">Nothing yet.</p>
+      )}
+    </section>
+  );
+}
+
+function PerpsSection({ stats }: { stats: StatsView }) {
+  const p = stats.perps;
+  const buckets: StatsBucket[] = p.daily.map((d) => ({ at: d.at, volumeUsd: d.volumeUsd, revenueUsd: "0", trades: d.positions }));
+  return (
+    <Section title="Perps" note="Positions opened on Veranta through Front Run. Volume is position size, collateral times leverage, counted once when a position opens.">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Tile label="Perps volume" value={formatUsd(p.allTime.volumeUsd)} />
+        <Tile label="Perps volume, 24h" value={formatUsd(p.last24h.volumeUsd)} />
+        <Tile label="Open interest" value={formatUsd(p.openInterestUsd)} />
+        <Tile label="Long / short" value={p.longPct === null ? "-" : `${Math.round(p.longPct)}% / ${Math.round(100 - p.longPct)}%`} />
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <ColumnChart title="Perps volume, 30 days" total={formatUsd(sum(buckets, "volumeUsd"))} buckets={buckets} field="volumeUsd" hourly={false} />
+        <BarList
+          title="Top markets"
+          rows={p.markets.map((m) => ({ label: m.symbol, value: m.volumeUsd, detail: `${m.positions} ${m.positions === 1 ? "position" : "positions"}` }))}
+        />
+      </div>
+      <p className="text-xs text-muted">
+        {p.allTime.positions.toLocaleString("en-US")} positions by {p.allTime.traders.toLocaleString("en-US")} traders, {formatUsd(p.allTime.realizedPnlUsd, { sign: true })} realized between them. {p.openPositions} open now.
+      </p>
+    </Section>
+  );
+}
+
+function LendingSection({ stats }: { stats: StatsView }) {
+  const l = stats.lending;
+  return (
+    <Section title="Lending" note="Moves made through Front Run on Aave and Morpho. Net is what went in minus what came out, before interest.">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Tile label="Net lent" value={formatUsd(l.netSuppliedUsd)} />
+        <Tile label="Net borrowed" value={formatUsd(l.netBorrowedUsd)} />
+        <Tile label="Lending moves" value={l.moves.toLocaleString("en-US")} />
+        <Tile label="People lending" value={l.users.toLocaleString("en-US")} />
+      </div>
+      <BarList
+        title="By market"
+        rows={l.markets.map((m) => ({
+          label: m.name,
+          value: m.netSuppliedUsd,
+          detail: `${m.moves} ${m.moves === 1 ? "move" : "moves"}${Number(m.netBorrowedUsd) > 0 ? ` · ${formatUsd(m.netBorrowedUsd)} borrowed` : ""}`,
+        }))}
+      />
+    </Section>
+  );
+}
+
+function AgentsSection({ stats }: { stats: StatsView }) {
+  const a = stats.agents;
+  return (
+    <Section title="AI agents" note="What agents did on their own, with their owners' limits. Every agent's moves and reasons are public on its profile.">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Tile label="Active agents" value={a.traders.toLocaleString("en-US")} />
+        <Tile label="Agent trades" value={a.spotTrades.toLocaleString("en-US")} />
+        <Tile label="Agent perps" value={a.perpsOpened.toLocaleString("en-US")} />
+        <Tile label="Agent lending moves" value={a.lendingMoves.toLocaleString("en-US")} />
+      </div>
+    </Section>
+  );
+}
+
 /** Public, so anyone can see how the app is doing. A fill anywhere refreshes it straight away; the timer is a backstop. */
 export default function AnalyticsPage() {
   const [range, setRange] = useState<Range>("7d");
@@ -171,7 +271,7 @@ export default function AnalyticsPage() {
             <Tile label="Trades" value={stats.allTime.trades.toLocaleString("en-US")} />
             <Tile label="Traders" value={stats.allTime.traders.toLocaleString("en-US")} />
           </div>
-          <p className="text-xs text-muted">Volume is every completed buy and sell. Revenue is the app's own fee on those trades. Days are in UTC.</p>
+          <p className="text-xs text-muted">Volume is every completed spot buy and sell; perps and lending have their own sections below. Revenue is the app's own fee on those trades. Days are in UTC.</p>
           <Segmented
             value={range}
             onChange={setRange}
@@ -193,6 +293,9 @@ export default function AnalyticsPage() {
               <RecentTrades stats={stats} />
             </div>
           )}
+          <PerpsSection stats={stats} />
+          <LendingSection stats={stats} />
+          <AgentsSection stats={stats} />
         </div>
       )}
     </div>

@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 const PARTS: Array<{ key: keyof ReputationComponents; label: string; detail: (r: ReputationView) => string }> = [
   { key: "win", label: "Win rate", detail: (r) => `${r.wins} of ${r.closed} closed in profit` },
   { key: "return", label: "Return", detail: (r) => `${formatPct(r.avgReturnPct)} average` },
-  { key: "risk", label: "Risk taken", detail: (r) => `${formatPct(r.avgDrawdownPct, { sign: false })} average dip` },
+  { key: "risk", label: "Risk taken", detail: (r) => `${formatPct(r.avgDrawdownPct, { sign: false })} ${r.perpsClosed ? "average dip or stake at risk" : "average dip"}` },
   { key: "hold", label: "Holding time", detail: (r) => holdLabel(r.avgHoldSeconds) },
   { key: "fees", label: "Fees", detail: (r) => `${formatPct(r.feePct, { sign: false })} of volume` },
 ];
@@ -88,7 +88,8 @@ export function ReputationCard({ reputation: r }: { reputation: ReputationView }
             {r.provisional && <span className="ml-1.5 rounded-md bg-raised px-1.5 py-0.5 text-[10px] font-semibold text-muted">Provisional</span>}
           </h2>
           <p className="text-xs text-muted">
-            From {r.closed} closed {r.closed === 1 ? "position" : "positions"} with a verified thesis. {r.provisional ? "A short record is pulled toward the middle." : ""}
+            From {r.closed} closed {r.closed === 1 ? "position" : "positions"}
+            {r.perpsClosed ? `: ${r.closed - r.perpsClosed} with a verified thesis and ${r.perpsClosed} ${r.perpsClosed === 1 ? "perp" : "perps"}` : " with a verified thesis"}. {r.provisional ? "A short record is pulled toward the middle." : ""}
           </p>
           {r.attestTx ? (
             <a href={explorerTxUrl(r.attestChain, r.attestTx)} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-signal underline underline-offset-2">

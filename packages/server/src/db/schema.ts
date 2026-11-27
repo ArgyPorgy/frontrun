@@ -253,6 +253,7 @@ export const reputationScores = pgTable("reputation_scores", {
   userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
   score: integer("score").notNull(),
   closed: integer("closed").notNull(),
+  perpsClosed: integer("perps_closed").notNull().default(0),
   wins: integer("wins").notNull(),
   winRatePct: real("win_rate_pct").notNull(),
   avgReturnPct: real("avg_return_pct").notNull(),

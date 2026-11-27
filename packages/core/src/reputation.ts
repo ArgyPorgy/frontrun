@@ -11,6 +11,47 @@ export interface ClosedPositionStats {
   holdSeconds: number;
   /** What the trades cost, as a share of the money that moved through them. */
   feePct: number;
+  /** A perp rather than a token bought with a thesis. Spot is the default. */
+  kind?: "spot" | "perp";
+}
+
+/** The most of its collateral a perp can lose before the venue closes it. */
+const PERP_MAX_LOSS_PCT = 90;
+
+/**
+ * One closed perp as a record entry. Return is on the collateral put up, so leverage shows in it. Perps have no
+ * tracked low, so "risk taken" is how much of the collateral was on the line: the distance to the stop-loss
+ * times leverage, or the liquidation point with no stop, and never less than what was actually lost.
+ */
+export function perpPositionStats(p: {
+  side: "long" | "short";
+  collateralUsd: number;
+  leverage: number;
+  entryPrice: number | null;
+  stopLoss: number | null;
+  realizedPnlUsd: number;
+  feesUsd: number;
+  openedAt: Date;
+  closedAt: Date;
+  liquidated: boolean;
+}): ClosedPositionStats {
+  const returnPct = p.collateralUsd > 0 ? (p.realizedPnlUsd / p.collateralUsd) * 100 : 0;
+  let atRisk = PERP_MAX_LOSS_PCT;
+  if (p.stopLoss && p.entryPrice) {
+    const move = p.side === "long" ? (p.entryPrice - p.stopLoss) / p.entryPrice : (p.stopLoss - p.entryPrice) / p.entryPrice;
+    if (move > 0) atRisk = Math.min(move * p.leverage * 100, PERP_MAX_LOSS_PCT);
+  }
+  const lost = p.liquidated ? 100 : Math.max(-returnPct, 0);
+  // Money that moved: the position's size going in and again coming out.
+  const moved = p.collateralUsd * p.leverage * 2;
+  return {
+    won: p.realizedPnlUsd > 0,
+    returnPct,
+    drawdownPct: Math.max(atRisk, lost),
+    holdSeconds: Math.max(Math.round((p.closedAt.getTime() - p.openedAt.getTime()) / 1000), 0),
+    feePct: moved > 0 ? (p.feesUsd / moved) * 100 : 0,
+    kind: "perp",
+  };
 }
 
 /** Points out of 100. These add up to the score. */
@@ -21,6 +62,8 @@ export interface Reputation {
   score: number;
   provisional: boolean;
   closed: number;
+  /** How many of the closed positions were perps. */
+  perpsClosed: number;
   wins: number;
   winRatePct: number;
   avgReturnPct: number;
@@ -86,6 +129,7 @@ export function reputationScore(positions: ClosedPositionStats[]): Reputation | 
     score: clamp(score, 0, 100),
     provisional: closed < LEADERBOARD_MIN_RESOLVED,
     closed,
+    perpsClosed: positions.filter((p) => p.kind === "perp").length,
     wins,
     winRatePct: (wins / closed) * 100,
     avgReturnPct,

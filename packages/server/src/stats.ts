@@ -1,4 +1,4 @@
-import { D, type ChainKey, type StatsBucket, type StatsTotals, type StatsView } from "@frontrun/core";
+import { D, type ChainKey, type LendingStats, type PerpStats, type StatsBucket, type StatsTotals, type StatsView } from "@frontrun/core";
 import { and, desc, eq, gte, sql, type SQL } from "drizzle-orm";
 import { db, schema } from "./db/client";
 import { env } from "./env";
@@ -54,11 +54,118 @@ async function buckets(format: string, extra?: SQL): Promise<StatsBucket[]> {
   return db().select({ at, volumeUsd: sumAmount, revenueUsd: sumRevenue, trades: tradeCount }).from(t).where(completed(extra)).groupBy(at);
 }
 
+const pp = schema.perpPositions;
+/** Size at open. Partial closes split a position into slices that share its open time, and together they add back up. */
+const perpSize = sql`${pp.collateralUsd} * ${pp.leverage}`;
+function perpsCounted(extra?: SQL) {
+  return and(sql`${pp.openedAt} is not null`, sql`${pp.status} not in ('failed', 'cancelled', 'pending')`, eq(pp.isPaper, env().TRADING_MODE === "paper"), extra);
+}
+const perpPositions = sql<number>`count(distinct (${pp.userId}, ${pp.pairIndex}, ${pp.openedAt}))::int`;
+
+async function perpStats(now: number): Promise<PerpStats> {
+  const dayEnd = Math.floor(now / DAY_MS) * DAY_MS;
+  const dayStart = dayEnd - (MIN_DAYS - 1) * DAY_MS;
+  const day = sql<string>`to_char(${pp.openedAt} at time zone 'UTC', 'YYYY-MM-DD"T00:00:00Z"')`;
+  const [[all], [recent], [open], markets, daily] = await Promise.all([
+    db()
+      .select({
+        volumeUsd: sql<string>`coalesce(sum(${perpSize}), 0)::text`,
+        positions: perpPositions,
+        traders: sql<number>`count(distinct ${pp.userId})::int`,
+        realizedPnlUsd: sql<string>`coalesce(sum(${pp.realizedPnlUsd}), 0)::text`,
+      })
+      .from(pp)
+      .where(perpsCounted()),
+    db()
+      .select({ volumeUsd: sql<string>`coalesce(sum(${perpSize}), 0)::text`, positions: perpPositions })
+      .from(pp)
+      .where(perpsCounted(gte(pp.openedAt, new Date(now - DAY_MS)))),
+    db()
+      .select({
+        openInterestUsd: sql<string>`coalesce(sum(${perpSize}), 0)::text`,
+        longUsd: sql<string>`coalesce(sum(case when ${pp.side} = 'long' then ${perpSize} else 0 end), 0)::text`,
+        positions: sql<number>`count(*)::int`,
+      })
+      .from(pp)
+      .where(perpsCounted(sql`${pp.status} in ('open', 'closing')`)),
+    db()
+      .select({ symbol: pp.symbol, volumeUsd: sql<string>`coalesce(sum(${perpSize}), 0)::text`, positions: perpPositions })
+      .from(pp)
+      .where(perpsCounted())
+      .groupBy(pp.symbol)
+      .orderBy(sql`sum(${perpSize}) desc`)
+      .limit(8),
+    db()
+      .select({ at: day, volumeUsd: sql<string>`coalesce(sum(${perpSize}), 0)::text`, positions: perpPositions })
+      .from(pp)
+      .where(perpsCounted(gte(pp.openedAt, new Date(dayStart))))
+      .groupBy(day),
+  ]);
+  const byDay = new Map(daily.map((d) => [new Date(d.at).getTime(), d]));
+  const days: PerpStats["daily"] = [];
+  for (let at = dayStart; at <= dayEnd; at += DAY_MS) {
+    const d = byDay.get(at);
+    days.push({ at: new Date(at).toISOString(), volumeUsd: d ? D(d.volumeUsd).toFixed(2) : "0", positions: d?.positions ?? 0 });
+  }
+  const oi = D(open!.openInterestUsd);
+  return {
+    allTime: { volumeUsd: D(all!.volumeUsd).toFixed(2), positions: all!.positions, traders: all!.traders, realizedPnlUsd: D(all!.realizedPnlUsd).toFixed(2) },
+    last24h: { volumeUsd: D(recent!.volumeUsd).toFixed(2), positions: recent!.positions },
+    openInterestUsd: oi.toFixed(2),
+    openPositions: open!.positions,
+    longPct: oi.gt(0) ? D(open!.longUsd).div(oi).mul(100).toNumber() : null,
+    markets: markets.map((m) => ({ symbol: m.symbol, volumeUsd: D(m.volumeUsd).toFixed(2), positions: m.positions })),
+    daily: days,
+  };
+}
+
+const la = schema.lendingActions;
+const signed = (plus: string, minus: string) => sql<string>`coalesce(sum(case when ${la.action} = ${plus} then ${la.amount} when ${la.action} = ${minus} then -${la.amount} else 0 end), 0)::text`;
+
+async function lendingStats(): Promise<LendingStats> {
+  const done = eq(la.status, "done");
+  const [[all], markets] = await Promise.all([
+    db().select({ moves: sql<number>`count(*)::int`, users: sql<number>`count(distinct ${la.userId})::int` }).from(la).where(done),
+    db()
+      .select({ name: la.marketName, venue: la.venue, supplied: signed("supply", "withdraw"), borrowed: signed("borrow", "repay"), moves: sql<number>`count(*)::int` })
+      .from(la)
+      .where(done)
+      .groupBy(la.marketName, la.venue)
+      .orderBy(sql`count(*) desc`),
+  ]);
+  // A full withdrawal includes the interest earned, so a market can net below zero. That shows as nothing left, not a negative.
+  const rows = markets.map((m) => ({ name: m.name, venue: m.venue, netSuppliedUsd: (D(m.supplied).gt(0) ? D(m.supplied) : D(0)).toFixed(2), netBorrowedUsd: (D(m.borrowed).gt(0) ? D(m.borrowed) : D(0)).toFixed(2), moves: m.moves }));
+  return {
+    netSuppliedUsd: rows.reduce((a, m) => a.add(m.netSuppliedUsd), D(0)).toFixed(2),
+    netBorrowedUsd: rows.reduce((a, m) => a.add(m.netBorrowedUsd), D(0)).toFixed(2),
+    moves: all!.moves,
+    users: all!.users,
+    markets: rows,
+  };
+}
+
+async function agentStats(): Promise<StatsView["agents"]> {
+  const isAgent = sql`exists (select 1 from users u where u.id = user_id and u.agent_owner_id is not null)`;
+  const [[spot], [perps], [lending], [traders]] = await Promise.all([
+    db().select({ n: sql<number>`count(*)::int` }).from(t).where(completed(isAgent)),
+    db().select({ n: perpPositions }).from(pp).where(perpsCounted(isAgent)),
+    db().select({ n: sql<number>`count(*)::int` }).from(la).where(and(eq(la.status, "done"), isAgent)),
+    db().execute<{ n: number }>(sql`
+      select count(distinct user_id)::int as n from (
+        select user_id from trades where status = 'filled' union
+        select user_id from perp_positions where opened_at is not null union
+        select user_id from lending_actions where status = 'done'
+      ) a join users u on u.id = a.user_id where u.agent_owner_id is not null
+    `).then((r) => r.rows),
+  ]);
+  return { traders: traders?.n ?? 0, spotTrades: spot!.n, perpsOpened: perps!.n, lendingMoves: lending!.n };
+}
+
 async function computeStats(now: number): Promise<StatsView> {
   const hourEnd = Math.floor(now / HOUR_MS) * HOUR_MS;
   const hourStart = hourEnd - 23 * HOUR_MS;
   const dayEnd = Math.floor(now / DAY_MS) * DAY_MS;
-  const [allTime, last24h, hourlyRows, dailyRows, byChain, recent] = await Promise.all([
+  const [allTime, last24h, hourlyRows, dailyRows, byChain, recent, perps, lending, agents] = await Promise.all([
     totals(),
     totals(gte(t.filledAt, new Date(now - DAY_MS))),
     buckets('YYYY-MM-DD"T"HH24":00:00Z"', gte(t.filledAt, new Date(hourStart))),
@@ -86,6 +193,9 @@ async function computeStats(now: number): Promise<StatsView> {
       .where(completed())
       .orderBy(desc(t.filledAt))
       .limit(RECENT_TRADES),
+    perpStats(now),
+    lendingStats(),
+    agentStats(),
   ]);
   const { firstAt, ...allTimeTotals } = allTime;
   const { firstAt: _unused, ...last24hTotals } = last24h;
@@ -107,6 +217,9 @@ async function computeStats(now: number): Promise<StatsView> {
       filledAt: r.filledAt!.toISOString(),
       token: { chain: r.chain as ChainKey, address: r.address, symbol: r.symbol ?? "?", name: r.name ?? "Unknown", imageUrl: r.imageUrl ?? null },
     })),
+    perps,
+    lending,
+    agents,
   };
 }
 
