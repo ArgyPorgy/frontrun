@@ -12,12 +12,14 @@ import {
   type Timeframe,
   type TokenDetail,
   type TokenListItem,
-  type TokenSnapshot, HOME_CHAIN } from "@frontrun/core";
+  type TokenSnapshot, HOME_CHAIN, STOCK_TOKENS } from "@frontrun/core";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db, schema } from "../db/client";
 import { flashAsset, flashSearch, type FlashSearchHit } from "../providers/flash";
 import { KEYS, redis } from "../redis";
 import { fetchBoosts, fetchTokens, searchPairs } from "./dexscreener";
+import { llamaPrices } from "./defillama";
+import { liveCandles, mergeCandles } from "./live-candles";
 import {
   GECKO_ATTRIBUTION,
   fetchCandles,
@@ -46,7 +48,10 @@ export async function activeTokenKeys(limit: number): Promise<string[]> {
   const r = redis();
   const cutoff = Date.now() - ACTIVE_WINDOW_MS;
   await r.zremrangebyscore(KEYS.activeTokens, 0, cutoff);
-  return r.zrevrange(KEYS.activeTokens, 0, limit - 1);
+  const watched = await r.zrevrange(KEYS.activeTokens, 0, limit - 1);
+  // The stock tokens are always followed, so their charts keep a live edge even before anyone opens them.
+  const stocks = STOCK_TOKENS.map((t) => tokenKey(HOME_CHAIN, normalizeAddress(HOME_CHAIN, t.address)));
+  return [...new Set([...stocks, ...watched])];
 }
 
 export async function writeSnapshot(snap: TokenSnapshot) {
@@ -128,6 +133,16 @@ export async function getPricesFilled(keys: string[]): Promise<Map<string, strin
       }
     }),
   );
+  const stillMissing = keys.filter((k) => !prices.has(k));
+  if (stillMissing.length) {
+    const llama = await llamaPrices(stillMissing).catch(() => new Map<string, string>());
+    const pipeline = redis().pipeline();
+    for (const [k, price] of llama) {
+      prices.set(k, price);
+      pipeline.set(KEYS.price(k), price, "EX", 600);
+    }
+    if (llama.size) await pipeline.exec();
+  }
   return prices;
 }
 
@@ -162,8 +177,8 @@ async function tokenInfo(chain: ChainKey, address: string, pool: string | null):
     pool ? fetchPoolMakers(chain, pool).catch(() => null) : null,
   ]);
   const info = { gecko, flash, makers };
-  // A miss from a busy provider is only remembered briefly, so holder data shows up soon after.
-  await redis().set(key, JSON.stringify(info), "EX", gecko ? 600 : 45);
+  // Holders move slowly, so a hit lasts two hours. A miss from a busy provider is retried after ten minutes.
+  await redis().set(key, JSON.stringify(info), "EX", gecko ? 2 * 3600 : 600);
   return info;
 }
 
@@ -228,22 +243,34 @@ export async function getTokenDetail(chain: ChainKey, address: string, opts: { a
   };
 }
 
-/** Serves candles with a stale fallback, so a rate-limited provider degrades instead of failing. */
+/** How long GeckoTerminal history counts as fresh: short when it's all we have, long when our own candles keep the edge live. */
+const HISTORY_TTL: Record<Timeframe, { alone: number; withLive: number }> = {
+  "1m": { alone: 30, withLive: 600 },
+  "5m": { alone: 60, withLive: 900 },
+  "15m": { alone: 90, withLive: 1800 },
+  "1h": { alone: 120, withLive: 3600 },
+  "4h": { alone: 300, withLive: 3 * 3600 },
+  "1d": { alone: 600, withLive: 6 * 3600 },
+};
+
+/**
+ * GeckoTerminal's history, with our own live candles over its newest end. The free API allows only a few calls a
+ * minute, so history is fetched rarely and kept for two days, and a busy or failing provider still leaves a chart.
+ */
 export async function getCandles(chain: ChainKey, pool: string, tf: Timeframe): Promise<Candle[]> {
   const r = redis();
   const key = KEYS.candles(`${chain}:${pool}`, tf);
-  const ttl: Record<Timeframe, number> = { "1m": 15, "5m": 30, "15m": 45, "1h": 60, "4h": 60, "1d": 60 };
   const freshKey = `${key}:fresh`;
-  const [cached, fresh] = await r.mget(key, freshKey);
-  if (cached && fresh) return JSON.parse(cached) as Candle[];
-  if (cached && (await geckoSaturated())) return JSON.parse(cached) as Candle[];
+  const [[cached, fresh], live] = await Promise.all([r.mget(key, freshKey), liveCandles(chain, pool, tf).catch(() => [] as Candle[])]);
+  const history = cached ? (JSON.parse(cached) as Candle[]) : null;
+  if (history && (fresh || (await geckoSaturated()))) return mergeCandles(history, live);
   try {
     const candles = await fetchCandles(chain, pool, tf);
-    await r.set(key, JSON.stringify(candles), "EX", 3600);
-    await r.set(freshKey, "1", "EX", ttl[tf]);
-    return candles;
+    await r.set(key, JSON.stringify(candles), "EX", 2 * 86_400);
+    await r.set(freshKey, "1", "EX", live.length ? HISTORY_TTL[tf].withLive : HISTORY_TTL[tf].alone);
+    return mergeCandles(candles, live);
   } catch (err) {
-    if (cached) return JSON.parse(cached) as Candle[];
+    if (history || live.length) return mergeCandles(history ?? [], live);
     throw err;
   }
 }
@@ -258,7 +285,7 @@ export async function getTape(chain: ChainKey, pool: string): Promise<TapeTrade[
   try {
     const tape = await fetchTape(chain, pool);
     await r.set(key, JSON.stringify(tape), "EX", 600);
-    await r.set(freshKey, "1", "EX", 15);
+    await r.set(freshKey, "1", "EX", 30);
     return tape;
   } catch (err) {
     if (cached) return JSON.parse(cached) as TapeTrade[];

@@ -37,5 +37,7 @@ export * from "./agents/runner";
 export * from "./agents/models";
 export * from "./market/service";
 export * from "./market/basket";
+export { recordTick, liveCandles, mergeCandles, rollUp } from "./market/live-candles";
+export { llamaPrices } from "./market/defillama";
 export { DEX_BACKGROUND_PER_MINUTE, DEX_BATCH_SIZE, DexBusyError, fetchTokens } from "./market/dexscreener";
 export { GeckoBusyError, geckoRefreshMs, fetchCandles, fetchTape, fetchTokenInfo, trendingPools, newPools } from "./market/geckoterminal";

@@ -56,6 +56,7 @@ import {
   openPerpMarkets,
   refreshPerpPrices,
   syncPerps,
+  recordTick,
 } from "@frontrun/server";
 import { and, eq, gt, inArray, isNull } from "drizzle-orm";
 
@@ -117,6 +118,7 @@ async function priceFeed() {
     const ticks: PriceTick[] = [];
     for (const snap of snaps.values()) {
       await writeSnapshot(snap);
+      await recordTick(snap).catch(() => undefined);
       const tick = snapshotToTick(snap);
       if (tick) ticks.push(tick);
     }
@@ -128,7 +130,10 @@ async function priceFeed() {
 /** Refreshes trending and new lists one at a time, so a list refresh never crowds out candle calls. */
 function marketRotation() {
   // Trending on every chain first, since it's what people land on. New pools fill in after.
-  const jobs = (["trending", "new"] as const).flatMap((tab) => CHAIN_KEYS.map((chain) => ({ tab, chain })));
+  // GeckoTerminal's free API allows only a few calls a minute, so the home chain's trending list, the one most
+  // people see, takes every other turn and the rest share the others.
+  const others = (["trending", "new"] as const).flatMap((tab) => CHAIN_KEYS.map((chain) => ({ tab, chain }))).filter((j) => !(j.tab === "trending" && j.chain === HOME_CHAIN));
+  const jobs = others.flatMap((j) => [{ tab: "trending" as const, chain: HOME_CHAIN }, j]);
   let index = 0;
   return async () => {
     const job = jobs[index % jobs.length]!;
