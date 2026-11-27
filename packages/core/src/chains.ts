@@ -54,6 +54,12 @@ export const HOME_USDC = BASE_USDC;
 export const HOME_USDC_DECIMALS = 6;
 /** Uniswap's Universal Router on Base, as the Trading API names it when quoting with router version 2.0. */
 export const UNISWAP_BASE = { universalRouter20: "0x6fF5693b99212Da76ad316178A184AB56D299b43" } as const;
+/** Aero's concentrated-liquidity contracts on Base, from dromos-labs/metadex-slipstream-public (deployment-addresses/cl-base.json). */
+export const AERO_BASE = {
+  clFactory: "0x9CB220581b91b0C83223012FE69688b92aD07a76",
+  swapRouter: "0x9Ee35Bf1bd69a03c6F0393582030fCe8Bb93D418",
+  metaquoter: "0x1dDfeC5058180C207F55BB77D95AcDd0d8227868",
+} as const;
 export const EVM_NATIVE_SENTINEL = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
 /** Where a thesis's position history and a wallet's reputation score live. Public, so they're kept here. */
 export const POSITION_LEDGER_ARC = "0xf64eed5e5706a29381123a6ec70b07947446070a";

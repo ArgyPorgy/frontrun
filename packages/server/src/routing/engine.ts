@@ -66,6 +66,17 @@ export function pickWinner(best: ProviderQuote[], lifiCollectsFee: boolean): Pro
   return best.find((q) => q.provider !== "lifi") ?? best[0] ?? null;
 }
 
+/**
+ * Every route values its output its own way: Flash at its own token price, Uniswap and Aero at ours. On a
+ * same-chain trade that would let a route win on a kinder price rather than more tokens, so every quote is
+ * valued alike: what it delivers at the market price, less any gas the user pays.
+ */
+export function comparableNetUsd(req: RouteRequest, quote: ProviderQuote): string {
+  if (req.contra || quote.crossChain || !quote.expectedOut || D(quote.expectedOut).lte(0)) return quote.netOutputUsd;
+  const value = req.side === "buy" ? D(quote.expectedOut).mul(req.priceUsd) : D(quote.expectedOut);
+  return value.sub(quote.gasUsd || 0).toFixed();
+}
+
 export async function raceQuotes(req: RouteRequest, opts: { liquidityUsd: string | null }): Promise<RaceResult> {
   const providers = providersFor(req);
   const rates = await failureRates().catch(() => ({} as Record<string, number>));
@@ -87,6 +98,7 @@ export async function raceQuotes(req: RouteRequest, opts: { liquidityUsd: string
     const provider = providers[i]!;
     if (result.status === "fulfilled") {
       const quote = result.value;
+      quote.netOutputUsd = comparableNetUsd(req, quote);
       const score = scoreQuote({
         netOutputUsd: quote.netOutputUsd,
         notionalUsd: req.notionalUsd,

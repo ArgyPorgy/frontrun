@@ -1,7 +1,7 @@
 import { D, type Numeric } from "./money";
 import { STOCK_ORACLE_GAP, stockPriceGap } from "./stocks";
 
-export type ProviderId = "flash" | "uniswap" | "uniswap_direct" | "lifi" | "paper";
+export type ProviderId = "flash" | "uniswap" | "uniswap_direct" | "aero" | "lifi" | "paper";
 
 /** Once any quote is in, stop waiting for slower ones after this long. */
 export const QUOTE_RACE_TIMEOUT_MS = 1500;

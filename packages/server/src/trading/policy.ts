@@ -1,4 +1,4 @@
-import { AAVE_BASE, ARC_USDC, FLASH_ALLOWANCE, HOME_USDC, MORPHO_BASE, MORPHO_USDC_VAULTS, PERMIT2, UNISWAP_ARC, UNISWAP_BASE, VERANTA_BASE } from "@frontrun/core";
+import { AERO_BASE, AAVE_BASE, ARC_USDC, FLASH_ALLOWANCE, HOME_USDC, MORPHO_BASE, MORPHO_USDC_VAULTS, PERMIT2, UNISWAP_ARC, UNISWAP_BASE, VERANTA_BASE } from "@frontrun/core";
 import { SMART_ACCOUNT_IMPLEMENTATION } from "./sponsor";
 
 /** LI.FI's contract on Arc, read from a live quote. Add others here if the route's contract changes. */
@@ -9,8 +9,8 @@ const anyCase = (addresses: string[]) => [...new Set(addresses.flatMap((a) => [a
 
 /** Lending on Base: Aave's pool, Morpho itself, and the curated Morpho vaults the app offers. */
 const LENDING = [AAVE_BASE.pool, MORPHO_BASE.blue, ...MORPHO_USDC_VAULTS.map((v) => v.address)];
-const ROUTERS = anyCase([VERANTA_BASE.tradingRouter, UNISWAP_BASE.universalRouter20, UNISWAP_ARC.universalRouter212, UNISWAP_ARC.v3SwapRouter02, LIFI_ARC, ...LENDING]);
-const APPROVABLE_SPENDERS = anyCase([VERANTA_BASE.tradingStorage, FLASH_ALLOWANCE, PERMIT2, UNISWAP_ARC.v3SwapRouter02, LIFI_ARC, ...LENDING]);
+const ROUTERS = anyCase([VERANTA_BASE.tradingRouter, UNISWAP_BASE.universalRouter20, AERO_BASE.swapRouter, UNISWAP_ARC.universalRouter212, UNISWAP_ARC.v3SwapRouter02, LIFI_ARC, ...LENDING]);
+const APPROVABLE_SPENDERS = anyCase([VERANTA_BASE.tradingStorage, FLASH_ALLOWANCE, PERMIT2, AERO_BASE.swapRouter, UNISWAP_ARC.v3SwapRouter02, LIFI_ARC, ...LENDING]);
 
 const APPROVE_ABI = [
   {
